@@ -12,7 +12,7 @@ prints what sending it to a model would cost:
 
 ```bash
 cd python
-uv run askkit estimate email.txt --model claude-haiku-5-5 --output-tokens 40 --calls 36000
+uv run askkit estimate email.txt -m claude-haiku-5-5 --output 40 --calls 36000
 ```
 
 The token count is an estimate worked out from the number of characters.

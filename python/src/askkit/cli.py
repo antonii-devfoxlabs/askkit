@@ -14,17 +14,17 @@ def main(arguments: list[str] | None = None) -> None:
     )
     estimate.add_argument("file", type=Path)
     estimate.add_argument(
-        "--model", choices=sorted(PRICES), default="claude-haiku-5-5"
+        "-m", "--model", choices=sorted(PRICES), default="claude-haiku-5-5"
     )
-    estimate.add_argument("--output-tokens", type=int, default=500)
+    estimate.add_argument("--output", type=int, default=500)
     estimate.add_argument("--calls", type=int, default=1)
     options = parser.parse_args(arguments)
 
     text = options.file.read_text(encoding="utf-8")
     input_tokens = estimate_tokens(text)
-    one_call = call_cost(options.model, input_tokens, options.output_tokens)
+    one_call = call_cost(options.model, input_tokens, options.output)
     print(f"Model:         {options.model}")
     print(f"Input tokens:  {input_tokens:,} (from {len(text):,} characters)")
-    print(f"Output tokens: {options.output_tokens:,} (your guess)")
+    print(f"Output tokens: {options.output:,} (your guess)")
     print(f"One call:      ${one_call:.6f}")
     print(f"{options.calls:,} calls: ${one_call * options.calls:,.2f}")

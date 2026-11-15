@@ -14,9 +14,9 @@ def test_estimate_prints_tokens_and_costs(
         [
             "estimate",
             str(email),
-            "--model",
+            "-m",
             "claude-sonnet-5-5",
-            "--output-tokens",
+            "--output",
             "200",
             "--calls",
             "1000",
