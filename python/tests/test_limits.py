@@ -11,13 +11,13 @@ def test_every_priced_model_has_limits() -> None:
     assert sorted(LIMITS) == sorted(PRICES)
 
 
-def test_estimate_prints_the_context_used(
+def test_estimate_prints_the_window_used(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     email = tmp_path / "email.txt"
     email.write_text("a" * 270, encoding="utf-8")
     main(["estimate", str(email), "--output", "40"])
-    assert "Context:       140 of 1,000,000 tokens" in (
+    assert "Window:        140 of 1,000,000 tokens" in (
         capsys.readouterr().out.splitlines()
     )
 
@@ -43,7 +43,7 @@ def test_text_and_answer_that_just_fit_are_estimated(
     book = tmp_path / "book.txt"
     book.write_text("a" * 2_699_730, encoding="utf-8")
     main(["estimate", str(book), "--output", "100"])
-    assert "Context:       1,000,000 of 1,000,000 tokens" in (
+    assert "Window:        1,000,000 of 1,000,000 tokens" in (
         capsys.readouterr().out.splitlines()
     )
 

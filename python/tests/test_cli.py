@@ -26,7 +26,7 @@ def test_estimate_prints_tokens_and_costs(
         "Model:         claude-sonnet-5-5",
         "Input tokens:  500 (from 1,350 characters)",
         "Output tokens: 200 (your guess)",
-        "Context:       700 of 1,000,000 tokens",
+        "Window:        700 of 1,000,000 tokens",
         "One call:      $0.003000",
         "1,000 calls: $3.00",
     ]
@@ -42,7 +42,7 @@ def test_one_call_prints_no_total(
         "Model:         claude-haiku-5-5",
         "Input tokens:  10 (from 27 characters)",
         "Output tokens: 10 (your guess)",
-        "Context:       20 of 1,000,000 tokens",
+        "Window:        20 of 1,000,000 tokens",
         "One call:      $0.000006",
     ]
 
