@@ -15,9 +15,13 @@ cd python
 uv run askkit estimate email.txt -m claude-haiku-5-5 --output 40 --calls 36000
 ```
 
+It also checks that the text and the answer fit in the model's context
+window, and that the answer is no longer than the model can write in one
+call; if not, it says so and exits with status 1.
+
 The token count is an estimate worked out from the number of characters.
-Prices live in `python/src/askkit/prices.py`, with the date they were
-checked.
+Prices live in `python/src/askkit/prices.py` and the limits in
+`python/src/askkit/limits.py`, each with the date it was checked.
 
 ## Layout
 
