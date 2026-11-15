@@ -27,4 +27,5 @@ def main(arguments: list[str] | None = None) -> None:
     print(f"Input tokens:  {input_tokens:,} (from {len(text):,} characters)")
     print(f"Output tokens: {options.output:,} (your guess)")
     print(f"One call:      ${one_call:.6f}")
-    print(f"{options.calls:,} calls: ${one_call * options.calls:,.2f}")
+    if options.calls > 1:
+        print(f"{options.calls:,} calls: ${one_call * options.calls:,.2f}")

@@ -31,6 +31,20 @@ def test_estimate_prints_tokens_and_costs(
     ]
 
 
+def test_one_call_prints_no_total(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    email = tmp_path / "email.txt"
+    email.write_text("a" * 27, encoding="utf-8")
+    main(["estimate", str(email), "--output", "10"])
+    assert capsys.readouterr().out.splitlines() == [
+        "Model:         claude-haiku-5-5",
+        "Input tokens:  10 (from 27 characters)",
+        "Output tokens: 10 (your guess)",
+        "One call:      $0.000006",
+    ]
+
+
 def test_unknown_model_is_refused(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
