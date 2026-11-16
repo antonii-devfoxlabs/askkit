@@ -163,7 +163,14 @@ def test_a_model_with_a_published_tokenizer_is_counted(
 
 
 @pytest.mark.parametrize(
-    "model", ["claude-haiku-5-5", "gemini-3.5-flash-lite", "gpt-6-luna"]
+    "model",
+    [
+        "claude-fable-5-2",
+        "gemini-4-hydrogen",
+        "gemini-3.5-flash-lite",
+        "gpt-6-astra",
+        "gpt-6-luna",
+    ],
 )
 def test_every_provider_can_be_estimated(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], model: str

@@ -28,17 +28,18 @@ cd python
 uv run askkit estimate email.txt --output 5 --calls 36000 --error-rate 0.03 --cost-per-error 0.50
 ```
 
-`askkit compare` prices the same file on every model AskKit knows, most
-capable first, so the trade-off between the models is one command:
+`askkit compare` prices the same file on every model AskKit knows, each
+provider's lineup from the highest output price down, so the trade-off
+between the models is one command:
 
 ```bash
 cd python
 uv run askkit compare email.txt --output 40 --calls 36000
 ```
 
-AskKit knows one comparable model from each of four providers
-(Anthropic, Google, OpenAI and Qwen, an open-weight family) and the rest
-of Anthropic's current line-up. Every model counts tokens its own way: a
+AskKit knows the current lineups of four providers: Anthropic, Google,
+OpenAI and Qwen, an open-weight family (its models priced on Qwen Cloud).
+Every model counts tokens its own way: a
 model whose tokenizer is published (Qwen) is counted exactly, on this
 machine, with Hugging Face's `tokenizers`; the first count downloads the
 tokenizer into `~/.cache/askkit/`. Every other model gets an estimate
