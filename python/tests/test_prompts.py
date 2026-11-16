@@ -16,6 +16,9 @@ RELEASED = {
     "ask_system.v2.txt": (
         "70bbce54f01c9a82d943f0875bfee892ef480a276516ac0ad0d1349ce8719761"
     ),
+    "extract_ticket.v1.txt": (
+        "9c52494b304b836c87ed89cf78160ae10d6128d372911b6bf21574eb7a3635f1"
+    ),
     "quote_request.v1.txt": (
         "754bbdfd562c8534f7eb354092da4ddf3c0c43c85f62c7ea7c5937986364d903"
     ),

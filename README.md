@@ -101,6 +101,24 @@ nothing, such as one whose quotes are in a tag the request did not ask
 for, exits the same way, unless it is "I don't know": there would be
 nothing to check it against.
 
+`askkit extract` turns a customer's email into a support ticket, as
+JSON. It sends the email with the template `extract_ticket` as the
+system prompt and `TICKET_SCHEMA` (in `python/src/askkit/extract.py`), a
+JSON Schema the API holds the answer to while the model writes it:
+
+```bash
+cd python
+uv run askkit extract email.txt
+```
+
+It prints the ticket, its three fields `order` (a whole number, or
+`null` when the email gives none), `problem` and `wish` (`replacement`,
+`refund` or `not stated`), then the same lines as `ask`. It reads the
+stop reason before the JSON: an answer cut off at `--max-tokens` (1000
+by default) or declined may not match the schema, so it is not parsed,
+and `extract` says why and exits with exit code 1. The ticket's values
+are not checked yet: Module 4 adds that.
+
 ## Prompts
 
 Every prompt AskKit sends is a template file in

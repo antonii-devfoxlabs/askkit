@@ -31,3 +31,13 @@ the request to quote, then `$question` last.
   applies was quoted, an exception to a rule included. With v1 the model
   quoted the general rule and missed the exception that overrode it, and
   every quote still passed the check.
+
+## extract_ticket
+
+The system prompt of `askkit extract`: what each field of the ticket
+means and which value says the email does not give it. The shape itself
+is `TICKET_SCHEMA` in `../extract.py`, sent beside the prompt.
+
+- v1: the three fields, `order`, `problem` and `wish`, each with its
+  meaning, and the way out of each: `null` for no order number, `not
+  stated` for no wish.

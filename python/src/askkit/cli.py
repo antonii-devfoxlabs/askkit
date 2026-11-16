@@ -1,8 +1,10 @@
 import argparse
+import json
 import sys
 from pathlib import Path
 
 from anthropic import Anthropic, APIError
+from anthropic.types import Message
 
 from askkit.ask import (
     EFFORTS,
@@ -22,6 +24,7 @@ from askkit.documents import (
     with_documents,
 )
 from askkit.errors import error_message
+from askkit.extract import extract_ticket
 from askkit.limits import LIMITS
 from askkit.prices import PRICES
 from askkit.prompts import ASK_SYSTEM
@@ -36,6 +39,19 @@ def require_api_key() -> str:
             " and put your key after the ="
         )
     return key
+
+
+def print_call(response: Message, model: str) -> None:
+    usage = response.usage
+    cost = call_cost(model, usage.input_tokens, usage.output_tokens)
+    print(f"Model:         {response.model}")
+    tokens = f"{usage.input_tokens:,} in, {usage.output_tokens:,} out"
+    thinking = thinking_tokens(response)
+    if thinking is not None:
+        tokens += f" ({thinking:,} thinking)"
+    print(f"Tokens:        {tokens}")
+    print(f"Cost:          ${cost:.6f}")
+    print(f"Stop reason:   {response.stop_reason}")
 
 
 def main(arguments: list[str] | None = None) -> None:
@@ -70,10 +86,39 @@ def main(arguments: list[str] | None = None) -> None:
     ask_command.add_argument(
         "--document", type=Path, action="append", default=[]
     )
+    extract = commands.add_parser(
+        "extract", help="turn an email into a ticket, as JSON"
+    )
+    extract.add_argument("file", type=Path)
+    extract.add_argument(
+        "-m", "--model", choices=MODELS, default="claude-haiku-5-5"
+    )
+    extract.add_argument("--max-tokens", type=int, default=1000)
     options = parser.parse_args(arguments)
 
     if options.command == "key":
         print(f"API key: {masked(require_api_key())}")
+        return
+
+    if options.command == "extract":
+        email = options.file.read_text(encoding="utf-8")
+        client = Anthropic(api_key=require_api_key())
+        try:
+            response = extract_ticket(
+                client, email, options.model, options.max_tokens
+            )
+        except APIError as error:
+            sys.exit(f"askkit: {error_message(error)}")
+        # A cut-off or declined answer may not match the schema, so the
+        # stop reason is read before the JSON is.
+        warning = stop_warning(response)
+        if warning is None:
+            ticket = json.loads(answer_text(response))
+            print(json.dumps(ticket, indent=2))
+            print()
+        print_call(response, options.model)
+        if warning is not None:
+            sys.exit(f"askkit: {warning}")
         return
 
     if options.command == "ask":
@@ -98,23 +143,12 @@ def main(arguments: list[str] | None = None) -> None:
             )
         except APIError as error:
             sys.exit(f"askkit: {error_message(error)}")
-        usage = response.usage
-        cost = call_cost(
-            options.model, usage.input_tokens, usage.output_tokens
-        )
         text = answer_text(response)
         # Anthropic advises discarding the part of a declined answer.
         if response.stop_reason != "refusal":
             print(text)
             print()
-        print(f"Model:         {response.model}")
-        tokens = f"{usage.input_tokens:,} in, {usage.output_tokens:,} out"
-        thinking = thinking_tokens(response)
-        if thinking is not None:
-            tokens += f" ({thinking:,} thinking)"
-        print(f"Tokens:        {tokens}")
-        print(f"Cost:          ${cost:.6f}")
-        print(f"Stop reason:   {response.stop_reason}")
+        print_call(response, options.model)
         warning = stop_warning(response)
         if warning is not None:
             sys.exit(f"askkit: {warning}")
