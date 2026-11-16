@@ -3,6 +3,7 @@ import sys
 from pathlib import Path
 
 from askkit.compare import compare_models
+from askkit.config import KEY_NAME, load_api_key, masked
 from askkit.cost import call_cost, error_cost
 from askkit.limits import LIMITS
 from askkit.prices import PRICES
@@ -29,7 +30,18 @@ def main(arguments: list[str] | None = None) -> None:
     compare.add_argument("file", type=Path)
     compare.add_argument("--output", type=int, default=500)
     compare.add_argument("--calls", type=int, default=1)
+    commands.add_parser("key", help="check that AskKit finds your API key")
     options = parser.parse_args(arguments)
+
+    if options.command == "key":
+        key = load_api_key()
+        if key is None:
+            sys.exit(
+                f"askkit: {KEY_NAME} is not set; copy .env.example to .env"
+                " and put your key after the ="
+            )
+        print(f"API key: {masked(key)}")
+        return
 
     text = options.file.read_text(encoding="utf-8")
     if options.command == "compare":

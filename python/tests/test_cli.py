@@ -174,3 +174,29 @@ def test_every_provider_can_be_estimated(
     lines = capsys.readouterr().out.splitlines()
     assert lines[0] == f"Model:         {model}"
     assert lines[1].endswith("(estimated from 40 characters)")
+
+
+def test_key_prints_the_key_masked(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-api03-a-test-key-Ab12")
+    main(["key"])
+    assert capsys.readouterr().out.splitlines() == [
+        "API key: sk-ant...Ab12",
+    ]
+
+
+def test_key_without_a_key_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "")
+    with pytest.raises(SystemExit) as stopped:
+        main(["key"])
+    assert stopped.value.code == (
+        "askkit: ANTHROPIC_API_KEY is not set; copy .env.example to .env"
+        " and put your key after the ="
+    )

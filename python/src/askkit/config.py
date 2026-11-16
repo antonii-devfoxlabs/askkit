@@ -1,0 +1,20 @@
+import os
+
+from dotenv import find_dotenv, load_dotenv
+
+KEY_NAME = "ANTHROPIC_API_KEY"
+
+
+def load_api_key() -> str | None:
+    # Finds .env in this folder or the nearest one above it. A key that
+    # is already in the environment wins: load_dotenv never replaces it.
+    load_dotenv(find_dotenv(usecwd=True))
+    key = os.environ.get(KEY_NAME, "").strip()
+    return key or None
+
+
+def masked(key: str) -> str:
+    # Enough to tell two keys apart, never enough to use one.
+    if len(key) < 20:
+        return "*" * len(key)
+    return f"{key[:6]}...{key[-4:]}"
