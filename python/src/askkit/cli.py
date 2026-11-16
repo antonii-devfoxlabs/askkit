@@ -4,7 +4,7 @@ from pathlib import Path
 
 from anthropic import Anthropic
 
-from askkit.ask import MODELS, answer_text, ask
+from askkit.ask import MODELS, answer_text, ask, stop_warning
 from askkit.compare import compare_models
 from askkit.config import KEY_NAME, load_api_key, masked
 from askkit.cost import call_cost, error_cost
@@ -82,6 +82,10 @@ def main(arguments: list[str] | None = None) -> None:
             f" {usage.output_tokens:,} out"
         )
         print(f"Cost:          ${cost:.6f}")
+        print(f"Stop reason:   {response.stop_reason}")
+        warning = stop_warning(response)
+        if warning is not None:
+            sys.exit(f"askkit: {warning}")
         return
 
     text = options.file.read_text(encoding="utf-8")

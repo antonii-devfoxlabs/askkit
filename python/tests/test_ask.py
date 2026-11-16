@@ -5,7 +5,7 @@ import httpx2
 import pytest
 from anthropic import Anthropic
 
-from askkit.ask import answer_text, ask
+from askkit.ask import answer_text, ask, stop_warning
 from askkit.cli import main
 from askkit.prompts import ASK_SYSTEM
 
@@ -79,10 +79,12 @@ def test_answer_text_joins_every_text_block() -> None:
 
 
 def use_fake_client(
-    monkeypatch: pytest.MonkeyPatch, sent: list[dict[str, Any]]
+    monkeypatch: pytest.MonkeyPatch,
+    sent: list[dict[str, Any]],
+    body: dict[str, Any] = RECORDED,
 ) -> None:
     def make(**options: Any) -> Anthropic:
-        return fake_client(sent)
+        return fake_client(sent, body)
 
     monkeypatch.setattr("askkit.cli.Anthropic", make)
 
@@ -103,6 +105,7 @@ def test_ask_prints_the_answer_and_its_cost(
         "Model:         claude-haiku-5-5",
         "Tokens:        118 in, 27 out",
         "Cost:          $0.000025",
+        "Stop reason:   end_turn",
     ]
     assert sent[0]["max_tokens"] == 1000
     assert sent[0]["system"] == ASK_SYSTEM
@@ -130,7 +133,7 @@ def test_ask_takes_the_model_and_max_tokens(
     assert sent[0]["model"] == "claude-haiku-5-5"
     assert sent[0]["max_tokens"] == 200
     lines = capsys.readouterr().out.splitlines()
-    assert lines[-1] == "Cost:          $0.000025"
+    assert lines[-2] == "Cost:          $0.000025"
 
 
 @pytest.mark.parametrize(
@@ -195,3 +198,70 @@ def test_the_system_prompt_sets_the_job_and_the_rules() -> None:
     assert "plain text" in ASK_SYSTEM
     assert "120 words" in ASK_SYSTEM
     assert ASK_SYSTEM.endswith("write exactly: I don't know.")
+
+
+def stopped_with(reason: str) -> dict[str, Any]:
+    body = dict(RECORDED)
+    body["stop_reason"] = reason
+    body["usage"] = {"input_tokens": 118, "output_tokens": 60}
+    return body
+
+
+@pytest.mark.parametrize("reason", ["end_turn", "stop_sequence"])
+def test_a_finished_answer_has_no_warning(reason: str) -> None:
+    response = ask(
+        fake_client([], stopped_with(reason)),
+        "Hi",
+        "claude-haiku-5-5",
+        60,
+        "Be brief.",
+    )
+    assert stop_warning(response) is None
+
+
+@pytest.mark.parametrize(
+    ("reason", "warning"),
+    [
+        (
+            "max_tokens",
+            "the answer was cut off at 60 tokens;"
+            " run again with a larger --max-tokens",
+        ),
+        (
+            "model_context_window_exceeded",
+            "the answer was cut off at the end of the context window",
+        ),
+        ("refusal", "the model declined to answer this question"),
+        ("pause_turn", "the answer stopped early: pause_turn"),
+    ],
+)
+def test_an_answer_that_is_not_whole_has_a_warning(
+    reason: str, warning: str
+) -> None:
+    response = ask(
+        fake_client([], stopped_with(reason)),
+        "Hi",
+        "claude-haiku-5-5",
+        60,
+        "Be brief.",
+    )
+    assert stop_warning(response) == warning
+
+
+def test_ask_stops_with_a_warning_when_the_answer_is_cut_off(
+    tmp_path: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-api03-a-test-key-Ab12")
+    use_fake_client(monkeypatch, [], stopped_with("max_tokens"))
+    with pytest.raises(SystemExit) as stopped:
+        main(["ask", "Hi", "--max-tokens", "60"])
+    assert stopped.value.code == (
+        "askkit: the answer was cut off at 60 tokens;"
+        " run again with a larger --max-tokens"
+    )
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[0] == "Order 4417: a replacement mug."
+    assert lines[-1] == "Stop reason:   max_tokens"

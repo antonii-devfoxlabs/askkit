@@ -58,6 +58,10 @@ uv run askkit ask "In one sentence, what is a context window?"
 default) and `--max-tokens` the room for the answer (1000 by default). Every question goes with
 AskKit's system prompt, `ASK_SYSTEM` in `python/src/askkit/prompts.py`;
 `--system-file ticket.txt` sends the prompt in that file instead.
+Under the cost, `ask` prints the stop reason, the API's word for why
+the answer ended. When the answer is not whole (cut off at
+`--max-tokens` or at the end of the context window, or declined),
+`ask` says so and exits with status 1.
 
 Prices live in `python/src/askkit/prices.py` and the limits in
 `python/src/askkit/limits.py`, each with its sources and the date they
