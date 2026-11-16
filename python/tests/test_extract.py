@@ -561,7 +561,7 @@ def test_a_valid_but_wrong_order_is_asked_for_again(
     use_fake_answers(
         monkeypatch, sent, [with_answer(SWAPPED, "end_turn"), second]
     )
-    main(["extract", str(maria)])
+    main(["extract", str(maria), "--orders", "orders.json"])
     assert capsys.readouterr().out.splitlines() == [
         "{",
         '  "order": 4417,',
