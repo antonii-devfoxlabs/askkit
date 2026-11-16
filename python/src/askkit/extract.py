@@ -24,9 +24,8 @@ class Ticket(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     order: int | None
-    # "Two or three words" in the prompt, held here as a length the code
-    # can check. The API cannot hold a length: transform_schema moves it
-    # into the field's description, so only this class enforces it.
+    # The prompt's "two or three words" as a length code can check. Only
+    # this class holds it: the API cannot hold a length.
     problem: str = Field(max_length=40)
     wish: Wish
 
@@ -58,10 +57,9 @@ def retry_ticket(
     model: str,
     max_tokens: int,
 ) -> Message:
-    # The same request, plus the answer that failed and what was wrong
-    # with it, so the model knows what to change. The conversation ends
-    # with a user message: an assistant message last is a prefill, which
-    # the API refuses.
+    # The same request, plus the failed answer and its faults, so the
+    # model knows what to change. It ends on the user turn: an assistant
+    # turn last is a prefill, which the API refuses.
     return client.messages.create(
         model=model,
         max_tokens=max_tokens,
@@ -118,16 +116,16 @@ def check_ticket(text: str) -> tuple[Ticket, str | None]:
 def ticket_faults(error: ValidationError) -> str:
     # One part per field that broke the contract, so the message says
     # what came back as well as what Ticket allows. Ticket has no fields
-    # inside fields, so a problem's place ("loc") is one field name, or
+    # inside fields, so a fault's place ("loc") is one field name, or
     # empty when the whole answer is not a ticket.
     faults: list[str] = []
-    for problem in error.errors():
+    for fault in error.errors():
         field = "answer"
-        if problem["loc"]:
-            field = str(problem["loc"][0])
-        line = f"{field}: {problem['msg']}"
-        if problem["type"] != "missing":
-            line += f", not {problem['input']!r}"
+        if fault["loc"]:
+            field = str(fault["loc"][0])
+        line = f"{field}: {fault['msg']}"
+        if fault["type"] != "missing":
+            line += f", not {fault['input']!r}"
         faults.append(line)
     return "; ".join(faults)
 

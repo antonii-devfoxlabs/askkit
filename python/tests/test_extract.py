@@ -477,7 +477,10 @@ def test_a_ticket_broken_twice_goes_to_a_person(
     # until one happens to pass.
     sent: list[dict[str, Any]] = []
     broken = with_answer(TOO_LONG, "end_turn")
-    use_fake_answers(monkeypatch, sent, [broken, broken, broken])
+    # The retry sends the first answer and its faults too: more input.
+    broken_again = with_answer(TOO_LONG, "end_turn")
+    broken_again["usage"] = {"input_tokens": 312, "output_tokens": 31}
+    use_fake_answers(monkeypatch, sent, [broken, broken_again, broken])
     with pytest.raises(SystemExit) as stopped:
         main(["extract", str(email_file)])
     assert stopped.value.code == (
@@ -486,8 +489,8 @@ def test_a_ticket_broken_twice_goes_to_a_person(
     assert len(sent) == 2
     assert capsys.readouterr().out.splitlines() == [
         "Model:         claude-haiku-5-5",
-        "Tokens:        472 in, 62 out",
-        "Cost:          $0.000078",
+        "Tokens:        548 in, 62 out",
+        "Cost:          $0.000086",
         "Stop reason:   end_turn",
         f"Asked again:   {TOO_LONG_FAULT}",
     ]
