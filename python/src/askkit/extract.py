@@ -132,3 +132,16 @@ def ticket_faults(error: ValidationError) -> str:
 
 def ticket_error(error: ValidationError) -> str:
     return "the ticket does not match its model: " + ticket_faults(error)
+
+
+def not_stated(ticket: Ticket) -> list[str]:
+    # The fields that hold a way out: the email does not give them. The
+    # ticket is right as it is, but whoever acts on it has to ask the
+    # customer for these, so AskKit names them instead of leaving a null
+    # for someone to notice.
+    fields: list[str] = []
+    if ticket.order is None:
+        fields.append("order")
+    if ticket.wish == "not stated":
+        fields.append("wish")
+    return fields

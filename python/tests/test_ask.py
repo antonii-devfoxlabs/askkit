@@ -338,6 +338,36 @@ def test_a_refusal_names_its_category() -> None:
     )
 
 
+def test_a_refusal_shows_the_apis_explanation() -> None:
+    # The explanation is the API's own words for the person who picks the
+    # question up; it is shown as it came, never parsed.
+    body = stopped_with("refusal")
+    body["stop_details"] = {
+        "type": "refusal",
+        "category": "cyber",
+        "explanation": (
+            "This request was declined because it could enable cyber harm."
+        ),
+    }
+    response = ask(
+        fake_client([], body), "Hi", "claude-haiku-5-5", 60, "Be brief."
+    )
+    assert stop_warning(response) == (
+        "the model declined to answer this question (category: cyber)."
+        " This request was declined because it could enable cyber harm."
+    )
+
+
+def test_a_refusal_names_what_was_declined() -> None:
+    body = stopped_with("refusal")
+    response = ask(
+        fake_client([], body), "Hi", "claude-haiku-5-5", 60, "Be brief."
+    )
+    assert stop_warning(response, "sort this email into a queue") == (
+        "the model declined to sort this email into a queue"
+    )
+
+
 def test_ask_prints_no_part_of_a_declined_answer(
     tmp_path: Any,
     monkeypatch: pytest.MonkeyPatch,

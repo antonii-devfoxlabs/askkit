@@ -33,6 +33,7 @@ from askkit.errors import error_message
 from askkit.extract import (
     check_ticket,
     extract_ticket,
+    not_stated,
     retry_ticket,
     ticket_error,
     ticket_faults,
@@ -176,7 +177,7 @@ def main(arguments: list[str] | None = None) -> None:
             # A cut-off or declined answer may not match the schema, so the
             # stop reason is read before the JSON is. Neither is asked for
             # again: the same room or the same email gives the same stop.
-            warning = stop_warning(response)
+            warning = stop_warning(response, "turn this email into a ticket")
             if warning is not None:
                 print_calls(responses, options.model)
                 sys.exit(f"askkit: {warning}")
@@ -213,6 +214,9 @@ def main(arguments: list[str] | None = None) -> None:
                     )
             if change is not None:
                 notes.append(f"Repaired:      {change}")
+            missing = not_stated(ticket)
+            if missing:
+                notes.append(f"Not stated:    {', '.join(missing)}")
             print(ticket.model_dump_json(indent=2))
             print()
             print_calls(responses, options.model)
@@ -239,7 +243,7 @@ def main(arguments: list[str] | None = None) -> None:
             )
         except APIError as error:
             sys.exit(f"askkit: {error_message(error)}")
-        warning = stop_warning(response)
+        warning = stop_warning(response, "sort this email into a queue")
         if warning is not None:
             print_calls([response], options.model)
             sys.exit(f"askkit: {warning}")

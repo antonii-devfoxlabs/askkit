@@ -157,6 +157,19 @@ uv run askkit extract email.txt --orders orders.json
 A ticket with no order number (`null`) has nothing for either rule to
 check.
 
+A field that holds its way out, an order of `null` or a wish of
+`not stated`, is a true answer: the email does not give it. The ticket
+is printed, and a `Not stated:` line names those fields, so whoever acts
+on the ticket knows what to ask the customer.
+
+A declined answer (`stop_reason: refusal`) is never read, not even the
+part of a ticket written before the decline. `extract` and `classify`
+say what was declined ("the model declined to turn this email into a
+ticket"), with the refusal's category and the API's explanation when it
+gives them, and exit with exit code 1. The same email is not sent to the
+same model again: it would most likely be declined again. A person reads
+it, or runs it again with another model (`-m`).
+
 Before any of this, `extract` cleans the email
 (`python/src/askkit/clean.py`): lines quoted from an earlier email, which
 start with `>`, and the "On …, … wrote:" line right above them are left
@@ -237,6 +250,11 @@ test, as the thinking count of `ask` did.
 - `m03`, end of Module 3 (Prompt Engineering): `ask --document` with
   quotes checked against the documents, `ask --effort`, and every prompt
   in a versioned template file.
+- `m04`, end of Module 4 (Structured Output): `extract` and `classify`,
+  which return objects checked against a Pydantic model and the shop's
+  rules, repair or ask again where one right reading or a reread can
+  fix them, and say what a person must do with a declined, cut-off or
+  partly stated answer.
 
 ## Layout
 

@@ -221,6 +221,28 @@ def test_a_cut_off_answer_is_not_read(
     )
 
 
+def test_a_declined_email_names_what_was_declined(
+    email_file: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    body = with_answer("", "refusal")
+    body["stop_details"] = {
+        "type": "refusal",
+        "category": None,
+        "explanation": None,
+    }
+    use_fake_client(monkeypatch, [], body)
+    with pytest.raises(SystemExit) as stopped:
+        main(["classify", str(email_file)])
+    assert stopped.value.code == (
+        "askkit: the model declined to sort this email into a queue"
+    )
+    assert capsys.readouterr().out.splitlines()[-1] == (
+        "Stop reason:   refusal"
+    )
+
+
 def test_a_queue_not_on_the_list_goes_to_a_person(
     email_file: Path,
     monkeypatch: pytest.MonkeyPatch,

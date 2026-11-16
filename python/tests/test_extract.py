@@ -14,6 +14,7 @@ from askkit.extract import (
     Ticket,
     check_ticket,
     extract_ticket,
+    not_stated,
     repair_ticket,
     retry_ticket,
     ticket_error,
@@ -274,9 +275,80 @@ def test_a_declined_answer_is_not_parsed(
     with pytest.raises(SystemExit) as stopped:
         main(["extract", str(email_file)])
     assert stopped.value.code == (
-        "askkit: the model declined to answer this question"
+        "askkit: the model declined to turn this email into a ticket"
     )
-    assert "I can't" not in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "I can't" not in out
+    assert out.splitlines()[-1] == "Stop reason:   refusal"
+
+
+def test_a_declined_ticket_says_why_in_the_apis_words(
+    email_file: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # A refusal can come after part of the answer. That part is never
+    # read, however much of a ticket it looks like: the person gets the
+    # category and the explanation instead.
+    body = with_answer('{"order":5120,"problem":"account', "refusal")
+    body["stop_details"] = {
+        "type": "refusal",
+        "category": "cyber",
+        "explanation": (
+            "This request was declined because it could enable cyber harm."
+        ),
+    }
+    sent: list[dict[str, Any]] = []
+    use_fake_client(monkeypatch, sent, body)
+    with pytest.raises(SystemExit) as stopped:
+        main(["extract", str(email_file)])
+    assert stopped.value.code == (
+        "askkit: the model declined to turn this email into a ticket"
+        " (category: cyber). This request was declined because it could"
+        " enable cyber harm."
+    )
+    assert "5120" not in capsys.readouterr().out
+    # The same email to the same model is declined again: no retry.
+    assert len(sent) == 1
+
+
+def test_not_stated_lists_the_fields_the_email_does_not_give() -> None:
+    assert not_stated(
+        Ticket(order=None, problem="lamp flickers", wish="not stated")
+    ) == ["order", "wish"]
+    assert not_stated(
+        Ticket(order=6083, problem="shade wrong colour", wish="not stated")
+    ) == ["wish"]
+    assert (
+        not_stated(Ticket(order=4417, problem="mug broken", wish="refund"))
+        == []
+    )
+
+
+def test_a_ticket_with_a_way_out_says_what_to_ask_for(
+    email_file: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # A null order or "not stated" is a true answer, the email does not
+    # say, so the ticket is printed; the note tells the person who acts on
+    # it what to ask the customer.
+    text = '{"order":null,"problem":"lamp flickers","wish":"not stated"}'
+    use_fake_client(monkeypatch, [], with_answer(text, "end_turn"))
+    main(["extract", str(email_file)])
+    assert capsys.readouterr().out.splitlines()[-1] == (
+        "Not stated:    order, wish"
+    )
+
+
+def test_a_whole_ticket_has_no_not_stated_note(
+    email_file: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    use_fake_client(monkeypatch, [])
+    main(["extract", str(email_file)])
+    assert "Not stated:" not in capsys.readouterr().out
 
 
 def test_extract_takes_max_tokens(
@@ -313,6 +385,7 @@ def test_a_wish_in_other_capitals_is_repaired(
         "Cost:          $0.000039",
         "Stop reason:   end_turn",
         "Repaired:      wish 'not Stated' to 'not stated'",
+        "Not stated:    order, wish",
     ]
     assert len(sent) == 1
 
@@ -460,6 +533,7 @@ def test_a_broken_ticket_is_asked_for_again_with_its_faults(
         "Cost:          $0.000085",
         "Stop reason:   end_turn",
         f"Asked again:   {TOO_LONG_FAULT}",
+        "Not stated:    order, wish",
     ]
     assert len(sent) == 2
     assert sent[1]["messages"][1] == {

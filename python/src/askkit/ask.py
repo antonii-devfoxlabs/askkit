@@ -58,7 +58,11 @@ def thinking_tokens(response: Message) -> int | None:
 FINISHED = ("end_turn", "stop_sequence")
 
 
-def stop_warning(response: Message) -> str | None:
+def stop_warning(
+    response: Message, task: str = "answer this question"
+) -> str | None:
+    # task says what the model was asked to do, so a declined email reads
+    # as one: "declined to turn this email into a ticket".
     reason = response.stop_reason
     if reason in FINISHED:
         return None
@@ -70,9 +74,14 @@ def stop_warning(response: Message) -> str | None:
     if reason == "model_context_window_exceeded":
         return "the answer was cut off at the end of the context window"
     if reason == "refusal":
-        warning = "the model declined to answer this question"
+        # No part of a declined answer is used. The person who picks it up
+        # gets the category and the API's explanation, shown as they came:
+        # the explanation's words may change, so code never reads them.
+        warning = f"the model declined to {task}"
         details = response.stop_details
         if details is not None and details.category is not None:
             warning += f" (category: {details.category})"
+        if details is not None and details.explanation is not None:
+            warning += f". {details.explanation}"
         return warning
     return f"the answer stopped early: {reason}"
