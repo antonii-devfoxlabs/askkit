@@ -20,12 +20,12 @@ window, and that the answer is no longer than the model can write in one
 call; if not, it says so and exits with status 1.
 
 A wrong answer has a price too. Give `estimate` the share of calls you
-expect to come back wrong and what one costs you, and it adds the errors
-to the bill:
+expect to come back wrong and what one costs you, and for more than one
+call it adds the errors to the bill:
 
 ```bash
 cd python
-uv run askkit estimate email.txt --output 5 --calls 36000 --error-rate 0.03 --error-cost 0.50
+uv run askkit estimate email.txt --output 5 --calls 36000 --error-rate 0.03 --cost-per-error 0.50
 ```
 
 `askkit compare` prices the same file on every model AskKit knows, most

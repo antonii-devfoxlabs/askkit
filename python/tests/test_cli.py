@@ -73,7 +73,7 @@ def test_estimate_adds_what_the_errors_cost(
             "36000",
             "--error-rate",
             "0.03",
-            "--error-cost",
+            "--cost-per-error",
             "0.50",
         ]
     )
@@ -111,3 +111,37 @@ def test_compare_takes_no_error_options(
     with pytest.raises(SystemExit) as exit_info:
         main(["compare", str(email), "--error-rate", "0.03"])
     assert exit_info.value.code == 2
+
+
+def test_a_negative_cost_per_error_is_refused(tmp_path: Path) -> None:
+    email = tmp_path / "email.txt"
+    email.write_text("hi", encoding="utf-8")
+    with pytest.raises(SystemExit) as exit_info:
+        main(["estimate", str(email), "--cost-per-error", "-1"])
+    assert exit_info.value.code == (
+        "askkit: --cost-per-error -1 is below zero; a wrong answer costs"
+        " something or nothing"
+    )
+
+
+def test_one_call_prints_no_errors(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # A share of one call is not a count: errors are priced per month,
+    # like the total.
+    email = tmp_path / "email.txt"
+    email.write_text("a" * 27, encoding="utf-8")
+    main(
+        [
+            "estimate",
+            str(email),
+            "--output",
+            "10",
+            "--error-rate",
+            "0.03",
+            "--cost-per-error",
+            "0.50",
+        ]
+    )
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[-1] == "One call:      $0.000006"
