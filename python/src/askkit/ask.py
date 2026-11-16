@@ -34,6 +34,14 @@ def answer_text(response: Message) -> str:
     return "".join(parts)
 
 
+def thinking_tokens(response: Message) -> int | None:
+    # How many output tokens were thinking, when the API sends the split.
+    details = response.usage.output_tokens_details
+    if details is None:
+        return None
+    return details.thinking_tokens
+
+
 # The stop reasons of an answer that is whole.
 FINISHED = ("end_turn", "stop_sequence")
 

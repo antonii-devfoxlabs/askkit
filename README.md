@@ -47,7 +47,8 @@ from the number of characters, at the rate its provider's docs give.
 `askkit key` checks that AskKit finds your API key in `python/.env`
 (copy `python/.env.example` and put the key after the `=`), and shows it
 masked. `askkit ask` sends a question to a model with Anthropic's SDK and
-prints the answer, the tokens the call used and what it cost:
+prints the answer, the tokens the call used (and how many of the output
+tokens were thinking, when the API says) and what it cost:
 
 ```bash
 cd python
@@ -70,6 +71,26 @@ from `python/src/askkit/errors.py` saying what happened and what to do,
 instead of a traceback, and exits with exit code 1. The SDK has already
 sent a busy or failed request twice more by then.
 
+## Exploring in a notebook
+
+`python/notebooks/explore.ipynb` is a Jupyter notebook for trying a call
+and reading its response object piece by piece. It imports AskKit's own
+functions, so what you find there is one step from the package. Start
+JupyterLab inside the project, without adding it to AskKit's
+dependencies:
+
+```bash
+cd python
+uv run --with jupyter jupyter lab
+```
+
+Every run of the cell that calls `ask` is a real, billed call. A
+notebook saves its outputs in the file, a key or a paid answer
+included, so clear them before you commit (**Edit**, then **Clear
+Outputs of All Cells**, then save); a test fails on any notebook saved
+with outputs. What a notebook settles moves into `src/askkit/` with a
+test, as the thinking count of `ask` did.
+
 Prices live in `python/src/askkit/prices.py` and the limits in
 `python/src/askkit/limits.py`, each with its sources and the date they
 were checked.
@@ -78,11 +99,16 @@ were checked.
 
 - `m01`, end of Module 1 (How LLMs Work, for Engineers): `estimate` and
   `compare`, with no call to a model yet.
+- `m02`, end of Module 2 (Your First API Calls): `key` and `ask`, which
+  sends a question with AskKit's system prompt and prints the answer,
+  its tokens, its cost and its stop reason, or one line saying what
+  failed; and the exploring notebook.
 
 ## Layout
 
 - `python/`: the Python app, a uv project (Python 3.14).
   - `src/askkit/`: the package.
+  - `notebooks/`: notebooks for exploring, saved without outputs.
   - `tests/`: pytest tests. They never call a model's API: the calls go
     to a fake transport that answers with a recorded response.
 

@@ -4,7 +4,7 @@ from pathlib import Path
 
 from anthropic import Anthropic, APIError
 
-from askkit.ask import MODELS, answer_text, ask, stop_warning
+from askkit.ask import MODELS, answer_text, ask, stop_warning, thinking_tokens
 from askkit.compare import compare_models
 from askkit.config import KEY_NAME, load_api_key, masked
 from askkit.cost import call_cost, error_cost
@@ -83,10 +83,11 @@ def main(arguments: list[str] | None = None) -> None:
             print(answer_text(response))
             print()
         print(f"Model:         {response.model}")
-        print(
-            f"Tokens:        {usage.input_tokens:,} in,"
-            f" {usage.output_tokens:,} out"
-        )
+        tokens = f"{usage.input_tokens:,} in, {usage.output_tokens:,} out"
+        thinking = thinking_tokens(response)
+        if thinking is not None:
+            tokens += f" ({thinking:,} thinking)"
+        print(f"Tokens:        {tokens}")
         print(f"Cost:          ${cost:.6f}")
         print(f"Stop reason:   {response.stop_reason}")
         warning = stop_warning(response)

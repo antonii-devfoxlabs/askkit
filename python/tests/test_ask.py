@@ -5,7 +5,7 @@ import httpx2
 import pytest
 from anthropic import Anthropic
 
-from askkit.ask import answer_text, ask, stop_warning
+from askkit.ask import answer_text, ask, stop_warning, thinking_tokens
 from askkit.cli import main
 from askkit.prompts import ASK_SYSTEM
 
@@ -302,3 +302,45 @@ def test_ask_prints_no_part_of_a_declined_answer(
         "Cost:          $0.000042",
         "Stop reason:   refusal",
     ]
+
+
+def with_thinking(thinking: int, output: int) -> dict[str, Any]:
+    body = dict(RECORDED)
+    usage: dict[str, Any] = {
+        "input_tokens": 118,
+        "output_tokens": output,
+        "output_tokens_details": {"thinking_tokens": thinking},
+    }
+    body["usage"] = usage
+    return body
+
+
+def test_thinking_tokens_reads_the_split_of_the_output() -> None:
+    response = ask(
+        fake_client([], with_thinking(180, 230)),
+        "Hi",
+        "claude-haiku-5-5",
+        1000,
+        "Be brief.",
+    )
+    assert thinking_tokens(response) == 180
+
+
+def test_thinking_tokens_is_none_when_the_api_sends_no_split() -> None:
+    response = ask(
+        fake_client([]), "Hi", "claude-haiku-5-5", 1000, "Be brief."
+    )
+    assert thinking_tokens(response) is None
+
+
+def test_ask_prints_how_many_output_tokens_were_thinking(
+    tmp_path: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-api03-a-test-key-Ab12")
+    use_fake_client(monkeypatch, [], with_thinking(180, 230))
+    main(["ask", "Where is my order?"])
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[3] == "Tokens:        118 in, 230 out (180 thinking)"
