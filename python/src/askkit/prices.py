@@ -4,7 +4,6 @@
 # Google: https://aistudio.google.com/docs/pricing
 # OpenAI: https://developers.openai.com/api/docs/pricing
 # Qwen: https://www.qwencloud.com/models/qwen3.8-27b
-# One comparable model from each provider, the high-volume tier.
 # When prices change, change this file only.
 PRICES: dict[str, dict[str, float]] = {
     "claude-haiku-5-5": {"input": 0.10, "output": 0.50},
