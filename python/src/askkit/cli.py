@@ -37,10 +37,10 @@ def main(arguments: list[str] | None = None) -> None:
         )
         print(f"Output tokens: {options.output:,} (your guess)")
         print(f"Calls:         {options.calls:,}")
-        for line in compare_models(
+        for row in compare_models(
             input_tokens, options.output, options.calls
         ):
-            print(line)
+            print(row)
         return
 
     window = LIMITS[options.model]["context_window"]

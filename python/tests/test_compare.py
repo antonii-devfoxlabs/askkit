@@ -8,8 +8,8 @@ from askkit.prices import PRICES
 
 
 def test_every_model_is_compared_most_capable_first() -> None:
-    lines = compare_models(101, 40, 36_000)
-    assert [line.split()[0] for line in lines] == [
+    rows = compare_models(101, 40, 36_000)
+    assert [row.split()[0] for row in rows] == [
         "claude-fable-5-2",
         "claude-opus-5-5",
         "claude-sonnet-5-5",
@@ -27,8 +27,8 @@ def test_each_model_shows_one_call_and_all_calls() -> None:
 
 
 def test_a_call_that_does_not_fit_is_not_priced() -> None:
-    lines = compare_models(999_990, 40, 1)
-    assert lines == [f"{model:<18} does not fit" for model in PRICES]
+    rows = compare_models(999_990, 40, 1)
+    assert rows == [f"{model:<18} does not fit" for model in PRICES]
 
 
 def test_compare_command_prints_the_tokens_then_every_model(
