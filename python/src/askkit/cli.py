@@ -10,6 +10,7 @@ from askkit.config import KEY_NAME, load_api_key, masked
 from askkit.cost import call_cost, error_cost
 from askkit.limits import LIMITS
 from askkit.prices import PRICES
+from askkit.prompts import ASK_SYSTEM
 from askkit.tokens import count_tokens
 
 
@@ -50,6 +51,7 @@ def main(arguments: list[str] | None = None) -> None:
         "-m", "--model", choices=MODELS, default="claude-haiku-5-5"
     )
     ask_command.add_argument("--max-tokens", type=int, default=1000)
+    ask_command.add_argument("--system-file", type=Path)
     options = parser.parse_args(arguments)
 
     if options.command == "key":
@@ -57,9 +59,16 @@ def main(arguments: list[str] | None = None) -> None:
         return
 
     if options.command == "ask":
+        system = ASK_SYSTEM
+        if options.system_file is not None:
+            system = options.system_file.read_text(encoding="utf-8").strip()
         client = Anthropic(api_key=require_api_key())
         response = ask(
-            client, options.question, options.model, options.max_tokens
+            client,
+            options.question,
+            options.model,
+            options.max_tokens,
+            system,
         )
         usage = response.usage
         cost = call_cost(

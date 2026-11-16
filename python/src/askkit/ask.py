@@ -11,11 +11,16 @@ for name in sorted(PRICES):
 
 
 def ask(
-    client: Anthropic, question: str, model: str, max_tokens: int
+    client: Anthropic,
+    question: str,
+    model: str,
+    max_tokens: int,
+    system: str,
 ) -> Message:
     return client.messages.create(
         model=model,
         max_tokens=max_tokens,
+        system=system,
         messages=[{"role": "user", "content": question}],
     )
 

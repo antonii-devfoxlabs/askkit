@@ -54,8 +54,10 @@ cd python
 uv run askkit ask "In one sentence, what is a context window?"
 ```
 
-`-m` picks one of the Anthropic models AskKit prices (Claude Haiku 5.5 by default) and `--max-tokens`
-the room for the answer (1000 by default).
+`-m` picks one of the Anthropic models AskKit prices (Claude Haiku 5.5 by
+default) and `--max-tokens` the room for the answer (1000 by default). Every question goes with
+AskKit's system prompt, `ASK_SYSTEM` in `python/src/askkit/prompts.py`;
+`--system-file ticket.txt` sends the prompt in that file instead.
 
 Prices live in `python/src/askkit/prices.py` and the limits in
 `python/src/askkit/limits.py`, each with its sources and the date they

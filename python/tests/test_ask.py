@@ -7,6 +7,7 @@ from anthropic import Anthropic
 
 from askkit.ask import answer_text, ask
 from askkit.cli import main
+from askkit.prompts import ASK_SYSTEM
 
 # A response shaped like the Messages API's, recorded for the tests:
 # Haiku 5.5 may think first, so the text is not always the first block.
@@ -39,20 +40,29 @@ def fake_client(
     )
 
 
-def test_ask_sends_the_question_as_the_one_user_message() -> None:
+def test_ask_sends_the_system_prompt_and_the_question() -> None:
     sent: list[dict[str, Any]] = []
-    ask(fake_client(sent), "Where is my order?", "claude-haiku-5-5", 1000)
+    ask(
+        fake_client(sent),
+        "Where is my order?",
+        "claude-haiku-5-5",
+        1000,
+        "Answer in one sentence.",
+    )
     assert sent == [
         {
             "model": "claude-haiku-5-5",
             "max_tokens": 1000,
+            "system": "Answer in one sentence.",
             "messages": [{"role": "user", "content": "Where is my order?"}],
         }
     ]
 
 
 def test_answer_text_skips_the_thinking_block() -> None:
-    response = ask(fake_client([]), "Hi", "claude-haiku-5-5", 1000)
+    response = ask(
+        fake_client([]), "Hi", "claude-haiku-5-5", 1000, "Be brief."
+    )
     assert answer_text(response) == "Order 4417: a replacement mug."
 
 
@@ -62,7 +72,9 @@ def test_answer_text_joins_every_text_block() -> None:
         {"type": "text", "text": "Order 4417: "},
         {"type": "text", "text": "a replacement mug."},
     ]
-    response = ask(fake_client([], body), "Hi", "claude-haiku-5-5", 1000)
+    response = ask(
+        fake_client([], body), "Hi", "claude-haiku-5-5", 1000, "Be brief."
+    )
     assert answer_text(response) == "Order 4417: a replacement mug."
 
 
@@ -93,6 +105,7 @@ def test_ask_prints_the_answer_and_its_cost(
         "Cost:          $0.000025",
     ]
     assert sent[0]["max_tokens"] == 1000
+    assert sent[0]["system"] == ASK_SYSTEM
 
 
 def test_ask_takes_the_model_and_max_tokens(
@@ -153,3 +166,32 @@ def test_ask_without_a_key_is_refused_before_any_call(
         " and put your key after the ="
     )
     assert sent == []
+
+
+def test_ask_reads_the_system_prompt_from_a_file(
+    tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-api03-a-test-key-Ab12")
+    (tmp_path / "ticket.txt").write_text(
+        "You turn a customer's messages into a support ticket. Be brief.\n"
+        "If the messages give no order number, write: no order number.\n",
+        encoding="utf-8",
+    )
+    sent: list[dict[str, Any]] = []
+    use_fake_client(monkeypatch, sent)
+    main(["ask", "My lamp flickers.", "--system-file", "ticket.txt"])
+    assert sent[0]["system"] == (
+        "You turn a customer's messages into a support ticket. Be brief.\n"
+        "If the messages give no order number, write: no order number."
+    )
+    assert sent[0]["messages"] == [
+        {"role": "user", "content": "My lamp flickers."}
+    ]
+
+
+def test_the_system_prompt_sets_the_job_and_the_rules() -> None:
+    assert ASK_SYSTEM.startswith("You answer questions for AskKit")
+    assert "plain text" in ASK_SYSTEM
+    assert "120 words" in ASK_SYSTEM
+    assert ASK_SYSTEM.endswith("write exactly: I don't know.")
