@@ -66,7 +66,7 @@ room for the answer (1000 by default), the model's thinking included;
 `--effort` sets how much work the model puts into the answer (`low`,
 `medium`, `high`, `xhigh` or `max`), and without it the model's own
 default holds, `medium` on Claude Haiku 5.5. Every question goes with
-AskKit's system prompt, `ASK_SYSTEM` in `python/src/askkit/prompts.py`;
+AskKit's system prompt, the template `ask_system` (see "Prompts" below);
 `--system-file ticket.txt` sends the prompt in that file instead.
 Under the cost, `ask` prints the stop reason, the API's word for why
 the answer ended. When the answer is not whole (cut off at
@@ -83,9 +83,8 @@ sent a busy or failed request twice more by then.
 `--document FILE` sends a long text with the question: a policy, a
 contract, a manual. Give it once per file, as many times as you need.
 Each file goes into the user message in `<documents>` tags, numbered and
-named after its path, then a request to quote first
-(`QUOTE_REQUEST` in `python/src/askkit/prompts.py`), then the question,
-last:
+named after its path, then a request to quote first, then the
+question, last; the template `quote_request` holds that layout:
 
 ```bash
 cd python
@@ -98,6 +97,25 @@ included, before it answers. Under the stop reason, `ask` prints how many of tho
 quotes it found in the documents (line breaks and runs of spaces do not
 count), and when one is not there it names it and exits with exit code
 1, so the answer goes to a person instead of on.
+
+## Prompts
+
+Every prompt AskKit sends is a template file in
+`python/src/askkit/templates/`, named `<name>.v<version>.txt`: the
+words, with a `$name` placeholder where the code fills in a value on
+each call (`$documents` and `$question` in `quote_request`). `IN_USE` in
+`python/src/askkit/prompts.py` says which version of each is sent, and
+`render(name, values)` fills one in, stopping with a `ValueError` when
+the values and the placeholders do not match.
+
+A version that has been sent is never edited. To change a prompt, copy
+its file to the next version number, change the copy, write in
+`templates/CHANGES.md` what changed and why, add its fingerprint to the
+test, run the labelled examples on both versions, and then move `IN_USE`
+to it. The old file stays, so an answer can be traced to the words that
+made it, and the two versions can be compared. A test fails when a sent
+version changes by one byte. A `$` meant as a dollar sign is written
+`$$`.
 
 ## Exploring in a notebook
 
@@ -127,11 +145,15 @@ test, as the thinking count of `ask` did.
   sends a question with AskKit's system prompt and prints the answer,
   its tokens, its cost and its stop reason, or one line saying what
   failed; and the exploring notebook.
+- `m03`, end of Module 3 (Prompt Engineering): `ask --document` with
+  quotes checked against the documents, `ask --effort`, and every prompt
+  in a versioned template file.
 
 ## Layout
 
 - `python/`: the Python app, a uv project (Python 3.14).
   - `src/askkit/`: the package.
+  - `src/askkit/templates/`: the prompts, one file per version.
   - `notebooks/`: notebooks for exploring, saved without outputs.
   - `tests/`: pytest tests. They never call a model's API: the calls go
     to a fake transport that answers with a recorded response.

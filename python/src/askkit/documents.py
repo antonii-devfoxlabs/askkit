@@ -1,4 +1,4 @@
-from askkit.prompts import QUOTE_REQUEST
+from askkit.prompts import render
 
 
 def documents_block(documents: dict[str, str]) -> str:
@@ -18,11 +18,8 @@ def documents_block(documents: dict[str, str]) -> str:
 
 
 def with_documents(question: str, documents: dict[str, str]) -> str:
-    # The long text first, the question last.
-    return (
-        f"{documents_block(documents)}\n\n{QUOTE_REQUEST}\n\n"
-        f"<question>\n{question}\n</question>"
-    )
+    values = {"documents": documents_block(documents), "question": question}
+    return render("quote_request", values)
 
 
 def flat(text: str) -> str:

@@ -13,7 +13,9 @@ from askkit.documents import (
     quotes_in,
     with_documents,
 )
-from askkit.prompts import QUOTE_REQUEST
+from askkit.prompts import template_path
+
+REQUEST = template_path("quote_request", 2).read_text(encoding="utf-8")
 
 # Lesson 3.4's returns policy, as the file breaks its lines.
 POLICY = """Returns policy
@@ -63,23 +65,35 @@ def test_with_documents_puts_the_documents_first_and_the_question_last() -> (
     None
 ):
     message = with_documents("Who pays?", {"returns-policy.txt": POLICY})
+    request = message.index("Answer the question below")
     assert message.startswith("<documents>\n")
+    assert message.index("</documents>") < request
+    assert request < message.index("<question>")
     assert message.endswith("<question>\nWho pays?\n</question>")
-    assert message.index("</documents>") < message.index(QUOTE_REQUEST)
-    assert message.index(QUOTE_REQUEST) < message.index("<question>")
+
+
+def test_with_documents_sends_what_it_sent_before_the_templates() -> None:
+    # The message as an f-string built it before quote_request moved into
+    # a template file: the move must not change one character.
+    documents = {"returns-policy.txt": POLICY}
+    request = REQUEST.split("\n\n")[1]
+    assert with_documents("Who pays?", documents) == (
+        f"{documents_block(documents)}\n\n{request}\n\n"
+        "<question>\nWho pays?\n</question>"
+    )
 
 
 def test_the_request_asks_for_quotes_first_and_a_way_out() -> None:
-    assert "<quote></quote>" in QUOTE_REQUEST
-    assert "<answer></answer>" in QUOTE_REQUEST
-    assert QUOTE_REQUEST.endswith("write exactly: I don't know.")
+    assert "<quote></quote>" in REQUEST
+    assert "<answer></answer>" in REQUEST
+    assert "write exactly: I don't know.\n\n<question>" in REQUEST
 
 
 def test_the_request_asks_for_a_check_before_the_answer() -> None:
-    check = QUOTE_REQUEST.index("Before you write the")
-    assert QUOTE_REQUEST.index("<quote></quote>") < check
-    assert check < QUOTE_REQUEST.index("<answer></answer>")
-    assert "exception" in QUOTE_REQUEST
+    check = REQUEST.index("Before you write the")
+    assert REQUEST.index("<quote></quote>") < check
+    assert check < REQUEST.index("<answer></answer>")
+    assert "exception" in REQUEST
 
 
 def test_quotes_in_finds_every_quote() -> None:

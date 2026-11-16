@@ -7,7 +7,7 @@ from anthropic import Anthropic
 
 from askkit.ask import answer_text, ask, stop_warning, thinking_tokens
 from askkit.cli import main
-from askkit.prompts import ASK_SYSTEM, QUOTE_REQUEST
+from askkit.prompts import ASK_SYSTEM, render
 
 # A response shaped like the Messages API's, recorded for the tests:
 # Haiku 5.5 may think first, so the text is not always the first block.
@@ -243,14 +243,16 @@ def test_the_system_prompt_sets_the_job_and_the_rules() -> None:
 def test_the_word_limit_leaves_copied_sentences_out() -> None:
     # The quote request asks for every sentence that applies; a limit that
     # counted them would leave the model a choice between the two rules.
+    request = render("quote_request", {"documents": "", "question": ""})
     assert "Sentences you copy from documents do not count" in ASK_SYSTEM
-    assert "word\nfor word" in QUOTE_REQUEST
+    assert "word\nfor word" in request
 
 
 def test_both_prompts_end_on_the_same_way_out() -> None:
     way_out = "write exactly: I don't know."
+    request = render("quote_request", {"documents": "", "question": ""})
     assert ASK_SYSTEM.endswith(way_out)
-    assert QUOTE_REQUEST.endswith(way_out)
+    assert f"{way_out}\n\n<question>" in request
 
 
 def stopped_with(reason: str) -> dict[str, Any]:

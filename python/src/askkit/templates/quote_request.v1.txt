@@ -1,0 +1,11 @@
+$documents
+
+Answer the question below from the documents above.
+First copy the sentences of the documents that your answer rests on, word
+for word, each inside its own <quote></quote> tags. Then write the answer
+inside <answer></answer> tags. If the documents do not answer the
+question, write exactly: I don't know.
+
+<question>
+$question
+</question>
