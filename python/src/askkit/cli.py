@@ -2,12 +2,25 @@ import argparse
 import sys
 from pathlib import Path
 
+from anthropic import Anthropic
+
+from askkit.ask import MODELS, answer_text, ask
 from askkit.compare import compare_models
 from askkit.config import KEY_NAME, load_api_key, masked
 from askkit.cost import call_cost, error_cost
 from askkit.limits import LIMITS
 from askkit.prices import PRICES
 from askkit.tokens import count_tokens
+
+
+def require_api_key() -> str:
+    key = load_api_key()
+    if key is None:
+        sys.exit(
+            f"askkit: {KEY_NAME} is not set; copy .env.example to .env"
+            " and put your key after the ="
+        )
+    return key
 
 
 def main(arguments: list[str] | None = None) -> None:
@@ -31,16 +44,35 @@ def main(arguments: list[str] | None = None) -> None:
     compare.add_argument("--output", type=int, default=500)
     compare.add_argument("--calls", type=int, default=1)
     commands.add_parser("key", help="check that AskKit finds your API key")
+    ask_command = commands.add_parser("ask", help="ask a model a question")
+    ask_command.add_argument("question")
+    ask_command.add_argument(
+        "-m", "--model", choices=MODELS, default="claude-haiku-5-5"
+    )
+    ask_command.add_argument("--max-tokens", type=int, default=1000)
     options = parser.parse_args(arguments)
 
     if options.command == "key":
-        key = load_api_key()
-        if key is None:
-            sys.exit(
-                f"askkit: {KEY_NAME} is not set; copy .env.example to .env"
-                " and put your key after the ="
-            )
-        print(f"API key: {masked(key)}")
+        print(f"API key: {masked(require_api_key())}")
+        return
+
+    if options.command == "ask":
+        client = Anthropic(api_key=require_api_key())
+        response = ask(
+            client, options.question, options.model, options.max_tokens
+        )
+        usage = response.usage
+        cost = call_cost(
+            options.model, usage.input_tokens, usage.output_tokens
+        )
+        print(answer_text(response))
+        print()
+        print(f"Model:         {response.model}")
+        print(
+            f"Tokens:        {usage.input_tokens:,} in,"
+            f" {usage.output_tokens:,} out"
+        )
+        print(f"Cost:          ${cost:.6f}")
         return
 
     text = options.file.read_text(encoding="utf-8")
