@@ -45,7 +45,7 @@ def stop_warning(response: Message) -> str | None:
     if reason == "max_tokens":
         return (
             f"the answer was cut off at {response.usage.output_tokens:,}"
-            " tokens; run again with a larger --max-tokens"
+            " tokens; give it a larger --max-tokens"
         )
     if reason == "model_context_window_exceeded":
         return "the answer was cut off at the end of the context window"

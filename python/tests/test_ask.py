@@ -225,7 +225,7 @@ def test_a_finished_answer_has_no_warning(reason: str) -> None:
         (
             "max_tokens",
             "the answer was cut off at 60 tokens;"
-            " run again with a larger --max-tokens",
+            " give it a larger --max-tokens",
         ),
         (
             "model_context_window_exceeded",
@@ -260,7 +260,7 @@ def test_ask_stops_with_a_warning_when_the_answer_is_cut_off(
         main(["ask", "Hi", "--max-tokens", "60"])
     assert stopped.value.code == (
         "askkit: the answer was cut off at 60 tokens;"
-        " run again with a larger --max-tokens"
+        " give it a larger --max-tokens"
     )
     lines = capsys.readouterr().out.splitlines()
     assert lines[0] == "Order 4417: a replacement mug."
