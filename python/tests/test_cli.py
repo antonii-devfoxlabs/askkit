@@ -24,7 +24,7 @@ def test_estimate_prints_tokens_and_costs(
     )
     assert capsys.readouterr().out.splitlines() == [
         "Model:         claude-sonnet-5-5",
-        "Input tokens:  500 (from 1,350 characters)",
+        "Input tokens:  500 (estimated from 1,350 characters)",
         "Output tokens: 200 (your guess)",
         "Window:        700 of 1,000,000 tokens",
         "One call:      $0.003000",
@@ -40,7 +40,7 @@ def test_one_call_prints_no_total(
     main(["estimate", str(email), "--output", "10"])
     assert capsys.readouterr().out.splitlines() == [
         "Model:         claude-haiku-5-5",
-        "Input tokens:  10 (from 27 characters)",
+        "Input tokens:  10 (estimated from 27 characters)",
         "Output tokens: 10 (your guess)",
         "Window:        20 of 1,000,000 tokens",
         "One call:      $0.000006",
@@ -79,7 +79,7 @@ def test_estimate_adds_what_the_errors_cost(
     )
     assert capsys.readouterr().out.splitlines() == [
         "Model:         claude-haiku-5-5",
-        "Input tokens:  100 (from 270 characters)",
+        "Input tokens:  100 (estimated from 270 characters)",
         "Output tokens: 5 (your guess)",
         "Window:        105 of 1,000,000 tokens",
         "One call:      $0.000013",
@@ -145,3 +145,32 @@ def test_one_call_prints_no_errors(
     )
     lines = capsys.readouterr().out.splitlines()
     assert lines[-1] == "One call:      $0.000006"
+
+
+def test_a_model_with_a_published_tokenizer_is_counted(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    email = tmp_path / "email.txt"
+    email.write_text(
+        "Hi, my parcel for order 4417 arrived.", encoding="utf-8"
+    )
+    main(["estimate", str(email), "-m", "qwen3.8-27b", "--output", "40"])
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[:2] == [
+        "Model:         qwen3.8-27b",
+        "Input tokens:  13 (counted by the model's tokenizer)",
+    ]
+
+
+@pytest.mark.parametrize(
+    "model", ["claude-haiku-5-5", "gemini-3.5-flash-lite", "gpt-6-luna"]
+)
+def test_every_provider_can_be_estimated(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], model: str
+) -> None:
+    email = tmp_path / "email.txt"
+    email.write_text("a" * 40, encoding="utf-8")
+    main(["estimate", str(email), "-m", model, "--output", "10"])
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[0] == f"Model:         {model}"
+    assert lines[1].endswith("(estimated from 40 characters)")

@@ -6,7 +6,7 @@ from askkit.compare import compare_models
 from askkit.cost import call_cost, error_cost
 from askkit.limits import LIMITS
 from askkit.prices import PRICES
-from askkit.tokens import estimate_tokens
+from askkit.tokens import count_tokens
 
 
 def main(arguments: list[str] | None = None) -> None:
@@ -32,16 +32,11 @@ def main(arguments: list[str] | None = None) -> None:
     options = parser.parse_args(arguments)
 
     text = options.file.read_text(encoding="utf-8")
-    input_tokens = estimate_tokens(text)
     if options.command == "compare":
-        print(
-            f"Input tokens:  {input_tokens:,} (from {len(text):,} characters)"
-        )
+        print(f"Characters:    {len(text):,}")
         print(f"Output tokens: {options.output:,} (your guess)")
         print(f"Calls:         {options.calls:,}")
-        for row in compare_models(
-            input_tokens, options.output, options.calls
-        ):
+        for row in compare_models(text, options.output, options.calls):
             print(row)
         return
 
@@ -55,12 +50,19 @@ def main(arguments: list[str] | None = None) -> None:
             f"askkit: --cost-per-error {options.cost_per_error:g} is below"
             " zero; a wrong answer costs something or nothing"
         )
+    input_tokens, exact = count_tokens(options.model, text)
     window = LIMITS[options.model]["context_window"]
+    max_input = LIMITS[options.model]["max_input"]
     max_output = LIMITS[options.model]["max_output"]
     if options.output > max_output:
         sys.exit(
             f"askkit: --output {options.output:,} is over the most"
             f" {options.model} writes in one call, {max_output:,} tokens"
+        )
+    if input_tokens > max_input:
+        sys.exit(
+            f"askkit: {input_tokens:,} input tokens are over the most"
+            f" {options.model} reads in one call, {max_input:,} tokens"
         )
     needed = input_tokens + options.output
     if needed > window:
@@ -71,7 +73,11 @@ def main(arguments: list[str] | None = None) -> None:
 
     one_call = call_cost(options.model, input_tokens, options.output)
     print(f"Model:         {options.model}")
-    print(f"Input tokens:  {input_tokens:,} (from {len(text):,} characters)")
+    if exact:
+        how = "counted by the model's tokenizer"
+    else:
+        how = f"estimated from {len(text):,} characters"
+    print(f"Input tokens:  {input_tokens:,} ({how})")
     print(f"Output tokens: {options.output:,} (your guess)")
     print(f"Window:        {needed:,} of {window:,} tokens")
     print(f"One call:      ${one_call:.6f}")

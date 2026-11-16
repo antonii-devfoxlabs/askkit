@@ -7,8 +7,8 @@ code as it stands at the end of that module.
 
 ## What it does so far
 
-`askkit estimate` reads a text file, estimates how many tokens it is, and
-prints what sending it to a model would cost:
+`askkit estimate` reads a text file, works out how many tokens it is for
+one model, and prints what sending it to that model would cost:
 
 ```bash
 cd python
@@ -36,9 +36,17 @@ cd python
 uv run askkit compare email.txt --output 40 --calls 36000
 ```
 
-The token count is an estimate worked out from the number of characters.
+AskKit knows one comparable model from each of four providers
+(Anthropic, Google, OpenAI and Qwen, an open-weight family) and the rest
+of Anthropic's current line-up. Every model counts tokens its own way: a
+model whose tokenizer is published (Qwen) is counted exactly, on this
+machine, with Hugging Face's `tokenizers`; the first count downloads the
+tokenizer into `~/.cache/askkit/`. Every other model gets an estimate
+from the number of characters, at the rate its provider's docs give.
+
 Prices live in `python/src/askkit/prices.py` and the limits in
-`python/src/askkit/limits.py`, each with the date it was checked.
+`python/src/askkit/limits.py`, each with its sources and the date they
+were checked.
 
 ## Tags
 
