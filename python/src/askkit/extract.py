@@ -6,9 +6,10 @@ from anthropic.types import Message
 from askkit.prompts import render
 
 # The shape of a ticket in JSON Schema. The API holds the answer to it
-# while the model writes, so the JSON always parses and has these three
-# fields. Each field has a way out ("null", "not stated"), because a
-# schema with no way out makes the model invent a value to fill it.
+# while the model writes, so a finished answer's JSON parses and has
+# these three fields. Each field has a way out ("null", "not stated"),
+# because a schema with no way out makes the model invent a value to
+# fill it.
 TICKET_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
