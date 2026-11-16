@@ -61,7 +61,9 @@ AskKit's system prompt, `ASK_SYSTEM` in `python/src/askkit/prompts.py`;
 Under the cost, `ask` prints the stop reason, the API's word for why
 the answer ended. When the answer is not whole (cut off at
 `--max-tokens` or at the end of the context window, or declined),
-`ask` says so and exits with status 1.
+`ask` says so and exits with exit code 1. Of a declined answer it prints
+no part, as Anthropic advises, and names the category when the API
+gives one.
 
 Prices live in `python/src/askkit/prices.py` and the limits in
 `python/src/askkit/limits.py`, each with its sources and the date they

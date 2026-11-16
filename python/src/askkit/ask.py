@@ -50,5 +50,9 @@ def stop_warning(response: Message) -> str | None:
     if reason == "model_context_window_exceeded":
         return "the answer was cut off at the end of the context window"
     if reason == "refusal":
-        return "the model declined to answer this question"
+        warning = "the model declined to answer this question"
+        details = response.stop_details
+        if details is not None and details.category is not None:
+            warning += f" (category: {details.category})"
+        return warning
     return f"the answer stopped early: {reason}"

@@ -232,6 +232,7 @@ def test_a_finished_answer_has_no_warning(reason: str) -> None:
             "the answer was cut off at the end of the context window",
         ),
         ("refusal", "the model declined to answer this question"),
+        ("tool_use", "the answer stopped early: tool_use"),
         ("pause_turn", "the answer stopped early: pause_turn"),
     ],
 )
@@ -265,3 +266,39 @@ def test_ask_stops_with_a_warning_when_the_answer_is_cut_off(
     lines = capsys.readouterr().out.splitlines()
     assert lines[0] == "Order 4417: a replacement mug."
     assert lines[-1] == "Stop reason:   max_tokens"
+
+
+def test_a_refusal_names_its_category() -> None:
+    body = stopped_with("refusal")
+    body["stop_details"] = {
+        "type": "refusal",
+        "category": "cyber",
+        "explanation": None,
+    }
+    response = ask(
+        fake_client([], body), "Hi", "claude-haiku-5-5", 60, "Be brief."
+    )
+    assert stop_warning(response) == (
+        "the model declined to answer this question (category: cyber)"
+    )
+
+
+def test_ask_prints_no_part_of_a_declined_answer(
+    tmp_path: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-api03-a-test-key-Ab12")
+    use_fake_client(monkeypatch, [], stopped_with("refusal"))
+    with pytest.raises(SystemExit) as stopped:
+        main(["ask", "Hi"])
+    assert stopped.value.code == (
+        "askkit: the model declined to answer this question"
+    )
+    assert capsys.readouterr().out.splitlines() == [
+        "Model:         claude-haiku-5-5",
+        "Tokens:        118 in, 60 out",
+        "Cost:          $0.000042",
+        "Stop reason:   refusal",
+    ]

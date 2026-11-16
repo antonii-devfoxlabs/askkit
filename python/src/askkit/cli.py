@@ -74,8 +74,10 @@ def main(arguments: list[str] | None = None) -> None:
         cost = call_cost(
             options.model, usage.input_tokens, usage.output_tokens
         )
-        print(answer_text(response))
-        print()
+        # Anthropic advises discarding the part of a declined answer.
+        if response.stop_reason != "refusal":
+            print(answer_text(response))
+            print()
         print(f"Model:         {response.model}")
         print(
             f"Tokens:        {usage.input_tokens:,} in,"
