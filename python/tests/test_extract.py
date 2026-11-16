@@ -294,3 +294,15 @@ def test_an_order_number_written_as_text_comes_out_a_number(
     use_fake_client(monkeypatch, [], with_answer(text, "end_turn"))
     main(["extract", str(email_file)])
     assert capsys.readouterr().out.splitlines()[1] == '  "order": 4417,'
+
+
+def test_ticket_error_names_the_answer_when_it_is_not_a_ticket() -> None:
+    # Valid JSON that is not an object fails as a whole: Pydantic gives
+    # the problem no field ("loc" is empty), and the message must still
+    # be one line, not an IndexError.
+    with pytest.raises(ValidationError) as rejected:
+        Ticket.model_validate_json("[]")
+    assert ticket_error(rejected.value) == (
+        "the ticket does not match its model:"
+        " answer: Input should be an object, not []"
+    )

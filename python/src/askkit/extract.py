@@ -44,10 +44,14 @@ def extract_ticket(
 def ticket_error(error: ValidationError) -> str:
     # One line per field that broke the contract, so the message says
     # what came back as well as what Ticket allows. Ticket has no fields
-    # inside fields, so each problem's place ("loc") is one field name.
+    # inside fields, so a problem's place ("loc") is one field name, or
+    # empty when the whole answer is not a ticket.
     problems: list[str] = []
     for problem in error.errors():
-        line = f"{problem['loc'][0]}: {problem['msg']}"
+        field = "answer"
+        if problem["loc"]:
+            field = str(problem["loc"][0])
+        line = f"{field}: {problem['msg']}"
         if problem["type"] != "missing":
             line += f", not {problem['input']!r}"
         problems.append(line)
