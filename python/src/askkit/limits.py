@@ -1,9 +1,9 @@
 # Tokens per call, each from its provider's own model page, checked on
 # 2026-11-16. When limits change, change this file only.
-#   Anthropic  https://platform.claude.com/docs/en/about-claude/models/overview
-#   Google     https://aistudio.google.com/docs/models/gemini-3.5-flash-lite
-#   OpenAI     https://developers.openai.com/api/docs/models/gpt-6-luna
-#   Qwen       https://www.qwencloud.com/models/qwen3.8-27b
+# Anthropic: https://platform.claude.com/docs/en/about-claude/models/overview
+# Google: https://aistudio.google.com/docs/models/gemini-3.5-flash-lite
+# OpenAI: https://developers.openai.com/api/docs/models/gpt-6-luna
+# Qwen: https://www.qwencloud.com/models/qwen3.8-27b
 # context_window: input and answer together. max_input: the input alone,
 # lower than the window on some models. max_output: the longest answer.
 LIMITS: dict[str, dict[str, int]] = {

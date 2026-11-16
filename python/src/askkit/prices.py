@@ -1,9 +1,9 @@
 # US dollars per million tokens, standard prices, each from its
 # provider's own pricing page, checked on 2026-11-16:
-#   Anthropic  https://platform.claude.com/docs/en/about-claude/pricing
-#   Google     https://aistudio.google.com/docs/pricing
-#   OpenAI     https://developers.openai.com/api/docs/pricing
-#   Qwen       https://www.qwencloud.com/models/qwen3.8-27b
+# Anthropic: https://platform.claude.com/docs/en/about-claude/pricing
+# Google: https://aistudio.google.com/docs/pricing
+# OpenAI: https://developers.openai.com/api/docs/pricing
+# Qwen: https://www.qwencloud.com/models/qwen3.8-27b
 # When prices change, change this file only.
 PRICES: dict[str, dict[str, float]] = {
     "claude-fable-5-2": {"input": 8.00, "output": 40.00},
