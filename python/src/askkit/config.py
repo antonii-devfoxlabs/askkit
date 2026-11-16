@@ -6,8 +6,7 @@ KEY_NAME = "ANTHROPIC_API_KEY"
 
 
 def load_api_key() -> str | None:
-    # Finds .env in this folder or the nearest one above it. A key that
-    # is already in the environment wins: load_dotenv never replaces it.
+    # Finds .env in this folder or the nearest one above it.
     load_dotenv(find_dotenv(usecwd=True))
     key = os.environ.get(KEY_NAME, "").strip()
     return key or None
