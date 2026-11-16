@@ -1,8 +1,12 @@
 # AskKit's system prompt: the job and the rules for every question.
+# QUOTE_REQUEST asks for every sentence that applies, word for word, so
+# the word limit leaves those out: counting them would set the two rules
+# against each other, and a quote shortened to fit fails the quote check.
 ASK_SYSTEM = """You answer questions for AskKit, a command-line tool.
 Write plain text without Markdown, because the terminal shows it as raw
 symbols such as ** and #.
 Keep the answer under 120 words unless the question asks for more.
+Sentences you copy from documents do not count toward the 120 words.
 If you are not sure of the answer, write exactly: I don't know."""
 
 # Sent after the documents and before the question, so the model copies
