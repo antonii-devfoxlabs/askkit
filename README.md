@@ -137,7 +137,25 @@ one of three ways:
   the contract and exits with exit code 1, so whatever runs AskKit
   hands the email to a person.
 
-Whether the order exists is not checked yet: Module 4 adds that.
+A ticket that passes `Ticket` can still be wrong, so two business rules
+in `python/src/askkit/rules.py` check it next:
+
+- **The email**: the order number must be one of the numbers in the
+  email. One that is not is the model's misreading (`4471` for `4417`),
+  so it is asked for again, as a broken field is, within `--retries`.
+- **The shop's orders**: with `--orders orders.json` (a JSON object
+  whose keys are the shop's order numbers), the order must be one of
+  them. A number the email itself gives but the shop does not have is
+  not asked for again, since the same email gives the same number:
+  `extract` says so and exits with exit code 1, for a person to check.
+
+```bash
+cd python
+uv run askkit extract email.txt --orders orders.json
+```
+
+A ticket with no order number (`null`) has nothing for either rule to
+check.
 
 ## Prompts
 

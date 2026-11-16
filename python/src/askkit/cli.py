@@ -34,6 +34,7 @@ from askkit.extract import (
 from askkit.limits import LIMITS
 from askkit.prices import PRICES
 from askkit.prompts import ASK_SYSTEM
+from askkit.rules import email_fault, load_orders, order_fault
 from askkit.tokens import count_tokens
 
 
@@ -111,6 +112,7 @@ def main(arguments: list[str] | None = None) -> None:
     )
     extract.add_argument("--max-tokens", type=int, default=1000)
     extract.add_argument("--retries", type=int, default=1)
+    extract.add_argument("--orders", type=Path)
     options = parser.parse_args(arguments)
 
     if options.command == "key":
@@ -124,6 +126,9 @@ def main(arguments: list[str] | None = None) -> None:
                 " give 0 to never ask again"
             )
         email = options.file.read_text(encoding="utf-8")
+        orders: set[int] | None = None
+        if options.orders is not None:
+            orders = load_orders(options.orders)
         client = Anthropic(api_key=require_api_key())
         responses: list[Message] = []
         notes: list[str] = []
@@ -167,6 +172,26 @@ def main(arguments: list[str] | None = None) -> None:
                 faults = ticket_faults(error)
                 rejection = ticket_error(error)
                 continue
+            # The business rules, on a ticket Ticket has passed. A number
+            # the email does not give is the model's misreading: asked
+            # again, as a broken field is.
+            fault = email_fault(ticket, email)
+            if fault is not None:
+                faults = fault
+                rejection = f"the ticket does not match the email: {fault}"
+                continue
+            # A number the email gives but the shop does not have: asking
+            # again returns the same number, so a person sees it at once.
+            if orders is not None:
+                fault = order_fault(ticket, orders)
+                if fault is not None:
+                    print_calls(responses, options.model)
+                    for note in notes:
+                        print(note)
+                    sys.exit(
+                        f"askkit: {fault}; the email gives this number,"
+                        " so a person checks it"
+                    )
             if change is not None:
                 notes.append(f"Repaired:      {change}")
             print(ticket.model_dump_json(indent=2))
@@ -175,8 +200,8 @@ def main(arguments: list[str] | None = None) -> None:
             for note in notes:
                 print(note)
             return
-        # Every answer broke the contract: no ticket, and exit code 1, so
-        # whatever runs AskKit hands the email to a person.
+        # Every answer broke the contract or a rule: no ticket, and exit
+        # code 1, so whatever runs AskKit hands the email to a person.
         print_calls(responses, options.model)
         for note in notes:
             print(note)

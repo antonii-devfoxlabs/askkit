@@ -526,3 +526,117 @@ def test_a_cut_off_answer_is_not_asked_for_again(
     with pytest.raises(SystemExit):
         main(["extract", str(email_file)])
     assert len(sent) == 1
+
+
+# The business rules, after Ticket (lesson 4.5).
+RIGHT = '{"order":4417,"problem":"mug broken","wish":"replacement"}'
+# Valid against Ticket in every field, and wrong: Maria's email says 4417.
+SWAPPED = '{"order":4471,"problem":"mug broken","wish":"replacement"}'
+SWAPPED_FAULT = "order: 4471 is not a number in the email"
+
+
+@pytest.fixture
+def maria(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-api03-a-test-key-Ab12")
+    (tmp_path / "orders.json").write_text(
+        json.dumps({"4417": "mug", "6083": "lamp shade", "7302": "vase"}),
+        encoding="utf-8",
+    )
+    path = tmp_path / "maria.txt"
+    path.write_text(EMAIL, encoding="utf-8")
+    return path
+
+
+def test_a_valid_but_wrong_order_is_asked_for_again(
+    maria: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # It used to be printed as Maria's ticket, with exit code 0: Ticket
+    # passes 4471, a whole number.
+    sent: list[dict[str, Any]] = []
+    second = with_answer(RIGHT, "end_turn")
+    second["usage"] = {"input_tokens": 312, "output_tokens": 31}
+    use_fake_answers(
+        monkeypatch, sent, [with_answer(SWAPPED, "end_turn"), second]
+    )
+    main(["extract", str(maria)])
+    assert capsys.readouterr().out.splitlines() == [
+        "{",
+        '  "order": 4417,',
+        '  "problem": "mug broken",',
+        '  "wish": "replacement"',
+        "}",
+        "",
+        "Model:         claude-haiku-5-5",
+        "Tokens:        548 in, 62 out",
+        "Cost:          $0.000086",
+        "Stop reason:   end_turn",
+        f"Asked again:   {SWAPPED_FAULT}",
+    ]
+    assert len(sent) == 2
+    assert sent[1]["messages"][1] == {"role": "assistant", "content": SWAPPED}
+
+
+def test_a_number_wrong_twice_goes_to_a_person(
+    maria: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sent: list[dict[str, Any]] = []
+    swapped = with_answer(SWAPPED, "end_turn")
+    use_fake_answers(monkeypatch, sent, [swapped, swapped, swapped])
+    with pytest.raises(SystemExit) as stopped:
+        main(["extract", str(maria)])
+    assert stopped.value.code == (
+        f"askkit: the ticket does not match the email: {SWAPPED_FAULT}"
+    )
+    assert len(sent) == 2
+
+
+def test_an_order_the_shop_has_is_printed(
+    maria: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    use_fake_answers(monkeypatch, [], [with_answer(RIGHT, "end_turn")])
+    main(["extract", str(maria), "--orders", "orders.json"])
+    assert capsys.readouterr().out.splitlines()[1] == '  "order": 4417,'
+
+
+def test_an_order_the_shop_lacks_goes_to_a_person_at_once(
+    maria: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # The email itself says 4471, so asking again returns 4471 again.
+    maria.write_text(EMAIL.replace("4417", "4471"), encoding="utf-8")
+    sent: list[dict[str, Any]] = []
+    swapped = with_answer(SWAPPED, "end_turn")
+    use_fake_answers(monkeypatch, sent, [swapped, swapped])
+    with pytest.raises(SystemExit) as stopped:
+        main(["extract", str(maria), "--orders", "orders.json"])
+    assert stopped.value.code == (
+        "askkit: order: 4471 is not in the shop's orders;"
+        " the email gives this number, so a person checks it"
+    )
+    assert len(sent) == 1
+    assert capsys.readouterr().out.splitlines() == [
+        "Model:         claude-haiku-5-5",
+        "Tokens:        236 in, 31 out",
+        "Cost:          $0.000039",
+        "Stop reason:   end_turn",
+    ]
+
+
+def test_another_customers_order_is_asked_for_again(
+    maria: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # 6083 is a real order, so the shop's orders alone would pass it: only
+    # the email rule sees it is not Maria's.
+    sent: list[dict[str, Any]] = []
+    other = with_answer(SWAPPED.replace("4471", "6083"), "end_turn")
+    use_fake_answers(
+        monkeypatch, sent, [other, with_answer(RIGHT, "end_turn")]
+    )
+    main(["extract", str(maria), "--orders", "orders.json"])
+    assert len(sent) == 2
