@@ -38,11 +38,16 @@ uv run askkit compare email.txt --output 40 --calls 36000
 
 AskKit knows one comparable model from each of four providers
 (Anthropic, Google, OpenAI and Qwen, an open-weight family), the
-high-volume tier of each; add a model with one line in each data file. Every model counts tokens its own way: a
-model whose tokenizer is published (Qwen) is counted exactly, on this
-machine, with Hugging Face's `tokenizers`; the first count downloads the
-tokenizer into `~/.cache/askkit/`. Every other model gets an estimate
-from the number of characters, at the rate its provider's docs give.
+high-volume tier of each; add a model with one line in each data file.
+Every model counts tokens its own way: a model whose tokenizer is
+published (Qwen) is counted exactly, on this machine, with Hugging
+Face's `tokenizers`; the first count downloads the tokenizer into
+`~/.cache/askkit/`. Every other model gets an estimate from the number
+of characters, at the rate its provider's docs give.
+
+Prices live in `python/src/askkit/prices.py` and the limits in
+`python/src/askkit/limits.py`, each with its sources and the date they
+were checked.
 
 `askkit key` checks that AskKit finds your API key in `python/.env`
 (copy `python/.env.example` and put the key after the `=`), and shows it
@@ -55,8 +60,9 @@ cd python
 uv run askkit ask "In one sentence, what is a context window?"
 ```
 
-`-m` picks one of the Anthropic models AskKit prices (Claude Haiku 5.5 by
-default) and `--max-tokens` the room for the answer (1000 by default). Every question goes with
+`ask` calls Anthropic's models only, so `-m` takes the Claude models in
+the price table (Claude Haiku 5.5 by default); `--max-tokens` is the
+room for the answer (1000 by default). Every question goes with
 AskKit's system prompt, `ASK_SYSTEM` in `python/src/askkit/prompts.py`;
 `--system-file ticket.txt` sends the prompt in that file instead.
 Under the cost, `ask` prints the stop reason, the API's word for why
@@ -90,10 +96,6 @@ included, so clear them before you commit (**Edit**, then **Clear
 Outputs of All Cells**, then save); a test fails on any notebook saved
 with outputs. What a notebook settles moves into `src/askkit/` with a
 test, as the thinking count of `ask` did.
-
-Prices live in `python/src/askkit/prices.py` and the limits in
-`python/src/askkit/limits.py`, each with its sources and the date they
-were checked.
 
 ## Tags
 
