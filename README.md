@@ -62,7 +62,10 @@ uv run askkit ask "In one sentence, what is a context window?"
 
 `ask` calls Anthropic's models only, so `-m` takes the Claude models in
 the price table (Claude Haiku 5.5 by default); `--max-tokens` is the
-room for the answer (1000 by default). Every question goes with
+room for the answer (1000 by default), the model's thinking included;
+`--effort` sets how much work the model puts into the answer (`low`,
+`medium`, `high`, `xhigh` or `max`), and without it the model's own
+default holds, `medium` on Claude Haiku 5.5. Every question goes with
 AskKit's system prompt, `ASK_SYSTEM` in `python/src/askkit/prompts.py`;
 `--system-file ticket.txt` sends the prompt in that file instead.
 Under the cost, `ask` prints the stop reason, the API's word for why
@@ -90,7 +93,8 @@ uv run askkit ask "Who pays the postage for a wrong colour?" --document returns-
 ```
 
 The model copies the sentences its answer rests on into `<quote>` tags
-before it answers. Under the stop reason, `ask` prints how many of those
+and checks that it quoted every part that applies, an exception
+included, before it answers. Under the stop reason, `ask` prints how many of those
 quotes it found in the documents (line breaks and runs of spaces do not
 count), and when one is not there it names it and exits with exit code
 1, so the answer goes to a person instead of on.

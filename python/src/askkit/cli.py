@@ -4,7 +4,14 @@ from pathlib import Path
 
 from anthropic import Anthropic, APIError
 
-from askkit.ask import MODELS, answer_text, ask, stop_warning, thinking_tokens
+from askkit.ask import (
+    EFFORTS,
+    MODELS,
+    answer_text,
+    ask,
+    stop_warning,
+    thinking_tokens,
+)
 from askkit.compare import compare_models
 from askkit.config import KEY_NAME, load_api_key, masked
 from askkit.cost import call_cost, error_cost
@@ -53,6 +60,7 @@ def main(arguments: list[str] | None = None) -> None:
         "-m", "--model", choices=MODELS, default="claude-haiku-5-5"
     )
     ask_command.add_argument("--max-tokens", type=int, default=1000)
+    ask_command.add_argument("--effort", choices=EFFORTS)
     ask_command.add_argument("--system-file", type=Path)
     ask_command.add_argument(
         "--document", type=Path, action="append", default=[]
@@ -81,6 +89,7 @@ def main(arguments: list[str] | None = None) -> None:
                 options.model,
                 options.max_tokens,
                 system,
+                options.effort,
             )
         except APIError as error:
             sys.exit(f"askkit: {error_message(error)}")

@@ -78,6 +78,19 @@ def test_answer_text_joins_every_text_block() -> None:
     assert answer_text(response) == "Order 4417: a replacement mug."
 
 
+def test_ask_sends_the_effort_inside_output_config() -> None:
+    sent: list[dict[str, Any]] = []
+    ask(fake_client(sent), "Hi", "claude-haiku-5-5", 1000, "Be brief.", "low")
+    assert sent[0]["output_config"] == {"effort": "low"}
+    assert "effort" not in sent[0]
+
+
+def test_ask_without_an_effort_leaves_the_model_default() -> None:
+    sent: list[dict[str, Any]] = []
+    ask(fake_client(sent), "Hi", "claude-haiku-5-5", 1000, "Be brief.", None)
+    assert "output_config" not in sent[0]
+
+
 def use_fake_client(
     monkeypatch: pytest.MonkeyPatch,
     sent: list[dict[str, Any]],
@@ -134,6 +147,33 @@ def test_ask_takes_the_model_and_max_tokens(
     assert sent[0]["max_tokens"] == 200
     lines = capsys.readouterr().out.splitlines()
     assert lines[-2] == "Cost:          $0.000025"
+
+
+@pytest.mark.parametrize("effort", ["low", "medium", "high", "xhigh", "max"])
+def test_ask_takes_every_effort_level(
+    tmp_path: Any, monkeypatch: pytest.MonkeyPatch, effort: str
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-api03-a-test-key-Ab12")
+    sent: list[dict[str, Any]] = []
+    use_fake_client(monkeypatch, sent)
+    main(["ask", "Hi", "--effort", effort])
+    assert sent[0]["output_config"] == {"effort": effort}
+
+
+def test_ask_refuses_an_effort_the_api_does_not_take(
+    tmp_path: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-api03-a-test-key-Ab12")
+    sent: list[dict[str, Any]] = []
+    use_fake_client(monkeypatch, sent)
+    with pytest.raises(SystemExit):
+        main(["ask", "Hi", "--effort", "Low"])
+    assert "invalid choice: 'Low'" in capsys.readouterr().err
+    assert sent == []
 
 
 @pytest.mark.parametrize(

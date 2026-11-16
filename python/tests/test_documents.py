@@ -75,6 +75,13 @@ def test_the_request_asks_for_quotes_first_and_a_way_out() -> None:
     assert QUOTE_REQUEST.endswith("write exactly: I don't know.")
 
 
+def test_the_request_asks_for_a_check_before_the_answer() -> None:
+    check = QUOTE_REQUEST.index("Before you write the")
+    assert QUOTE_REQUEST.index("<quote></quote>") < check
+    assert check < QUOTE_REQUEST.index("<answer></answer>")
+    assert "exception" in QUOTE_REQUEST
+
+
 def test_quotes_in_finds_every_quote() -> None:
     assert quotes_in(ANSWER) == [
         "If we sent the wrong item or colour, we pay the return postage.",

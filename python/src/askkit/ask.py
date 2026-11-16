@@ -1,5 +1,7 @@
-from anthropic import Anthropic
-from anthropic.types import Message
+from typing import Literal
+
+from anthropic import Anthropic, Omit, omit
+from anthropic.types import Message, OutputConfigParam
 
 from askkit.prices import PRICES
 
@@ -9,6 +11,10 @@ for name in sorted(PRICES):
     if name.startswith("claude-"):
         MODELS.append(name)
 
+# The effort levels the API takes, from the least work to the most.
+Effort = Literal["low", "medium", "high", "xhigh", "max"]
+EFFORTS: list[str] = ["low", "medium", "high", "xhigh", "max"]
+
 
 def ask(
     client: Anthropic,
@@ -16,12 +22,18 @@ def ask(
     model: str,
     max_tokens: int,
     system: str,
+    effort: Effort | None = None,
 ) -> Message:
+    # Without an effort, the field stays out and the model's default holds.
+    output_config: OutputConfigParam | Omit = omit
+    if effort is not None:
+        output_config = {"effort": effort}
     return client.messages.create(
         model=model,
         max_tokens=max_tokens,
         system=system,
         messages=[{"role": "user", "content": question}],
+        output_config=output_config,
     )
 
 
