@@ -8,6 +8,7 @@ from askkit.ask import MODELS, answer_text, ask, stop_warning, thinking_tokens
 from askkit.compare import compare_models
 from askkit.config import KEY_NAME, load_api_key, masked
 from askkit.cost import call_cost, error_cost
+from askkit.documents import missing_quotes, quotes_in, with_documents
 from askkit.errors import error_message
 from askkit.limits import LIMITS
 from askkit.prices import PRICES
@@ -53,6 +54,9 @@ def main(arguments: list[str] | None = None) -> None:
     )
     ask_command.add_argument("--max-tokens", type=int, default=1000)
     ask_command.add_argument("--system-file", type=Path)
+    ask_command.add_argument(
+        "--document", type=Path, action="append", default=[]
+    )
     options = parser.parse_args(arguments)
 
     if options.command == "key":
@@ -63,11 +67,17 @@ def main(arguments: list[str] | None = None) -> None:
         system = ASK_SYSTEM
         if options.system_file is not None:
             system = options.system_file.read_text(encoding="utf-8").strip()
+        documents: dict[str, str] = {}
+        for path in options.document:
+            documents[str(path)] = path.read_text(encoding="utf-8")
+        question = options.question
+        if documents:
+            question = with_documents(options.question, documents)
         client = Anthropic(api_key=require_api_key())
         try:
             response = ask(
                 client,
-                options.question,
+                question,
                 options.model,
                 options.max_tokens,
                 system,
@@ -78,9 +88,10 @@ def main(arguments: list[str] | None = None) -> None:
         cost = call_cost(
             options.model, usage.input_tokens, usage.output_tokens
         )
+        text = answer_text(response)
         # Anthropic advises discarding the part of a declined answer.
         if response.stop_reason != "refusal":
-            print(answer_text(response))
+            print(text)
             print()
         print(f"Model:         {response.model}")
         tokens = f"{usage.input_tokens:,} in, {usage.output_tokens:,} out"
@@ -93,6 +104,19 @@ def main(arguments: list[str] | None = None) -> None:
         warning = stop_warning(response)
         if warning is not None:
             sys.exit(f"askkit: {warning}")
+        if documents:
+            quotes = quotes_in(text)
+            missing = missing_quotes(text, documents)
+            if not quotes:
+                print("Quotes:        none in the answer")
+            else:
+                found = len(quotes) - len(missing)
+                print(
+                    f"Quotes:        {found} of {len(quotes)}"
+                    " found in the documents"
+                )
+            if missing:
+                sys.exit(f'askkit: not in the documents: "{missing[0]}"')
         return
 
     text = options.file.read_text(encoding="utf-8")

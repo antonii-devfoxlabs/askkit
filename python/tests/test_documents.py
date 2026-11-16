@@ -1,0 +1,250 @@
+import json
+from pathlib import Path
+from typing import Any
+
+import httpx2
+import pytest
+from anthropic import Anthropic
+
+from askkit.cli import main
+from askkit.documents import (
+    documents_block,
+    missing_quotes,
+    quotes_in,
+    with_documents,
+)
+from askkit.prompts import QUOTE_REQUEST
+
+# Lesson 3.4's returns policy, as the file breaks its lines.
+POLICY = """Returns policy
+
+1. Changing your mind
+You can return an unused item in its original box within 30 days of
+delivery. You pay the return postage. We refund the price of the item
+within 5 working days of receiving it.
+
+3. Wrong items
+If we sent the wrong item or colour, we pay the return postage. Tell us
+within 30 days of delivery and we email you a prepaid label.
+"""
+
+ANSWER = (
+    "<quote>If we sent the wrong item or colour, we pay the return"
+    " postage.</quote>\n"
+    "<quote>Tell us within 30 days of delivery and we email you a prepaid"
+    " label.</quote>\n"
+    "<answer>We pay: we email the customer a prepaid label.</answer>"
+)
+
+
+def test_documents_block_numbers_each_document_with_its_source() -> None:
+    block = documents_block(
+        {"returns-policy.txt": "  Returns policy\n", "faq.txt": "FAQ"}
+    )
+    assert block == (
+        "<documents>\n"
+        '<document index="1">\n'
+        "<source>returns-policy.txt</source>\n"
+        "<document_content>\n"
+        "Returns policy\n"
+        "</document_content>\n"
+        "</document>\n"
+        '<document index="2">\n'
+        "<source>faq.txt</source>\n"
+        "<document_content>\n"
+        "FAQ\n"
+        "</document_content>\n"
+        "</document>\n"
+        "</documents>"
+    )
+
+
+def test_with_documents_puts_the_documents_first_and_the_question_last() -> (
+    None
+):
+    message = with_documents("Who pays?", {"returns-policy.txt": POLICY})
+    assert message.startswith("<documents>\n")
+    assert message.endswith("<question>\nWho pays?\n</question>")
+    assert message.index("</documents>") < message.index(QUOTE_REQUEST)
+    assert message.index(QUOTE_REQUEST) < message.index("<question>")
+
+
+def test_the_request_asks_for_quotes_first_and_a_way_out() -> None:
+    assert "<quote></quote>" in QUOTE_REQUEST
+    assert "<answer></answer>" in QUOTE_REQUEST
+    assert QUOTE_REQUEST.endswith("write exactly: I don't know.")
+
+
+def test_quotes_in_finds_every_quote() -> None:
+    assert quotes_in(ANSWER) == [
+        "If we sent the wrong item or colour, we pay the return postage.",
+        "Tell us within 30 days of delivery and we email you a prepaid"
+        " label.",
+    ]
+
+
+def test_quotes_in_finds_none_in_an_answer_without_quotes() -> None:
+    assert quotes_in("<answer>I don't know.</answer>") == []
+
+
+def test_a_quote_across_a_line_break_is_found() -> None:
+    assert missing_quotes(ANSWER, {"returns-policy.txt": POLICY}) == []
+
+
+def test_a_quote_in_any_document_is_found() -> None:
+    documents = {"faq.txt": "Opening hours.", "returns-policy.txt": POLICY}
+    assert missing_quotes(ANSWER, documents) == []
+
+
+def test_a_second_quote_not_in_the_documents_is_missing() -> None:
+    answer = (
+        "<quote>You pay the return postage.</quote>"
+        "<quote>Sale items are returned free of charge.</quote>"
+        "<answer>The customer pays.</answer>"
+    )
+    assert missing_quotes(answer, {"returns-policy.txt": POLICY}) == [
+        "Sale items are returned free of charge."
+    ]
+
+
+def test_a_reworded_quote_is_missing() -> None:
+    answer = "<quote>We pay the postage for a wrong colour.</quote>"
+    assert missing_quotes(answer, {"returns-policy.txt": POLICY}) == [
+        "We pay the postage for a wrong colour."
+    ]
+
+
+def recorded(text: str) -> dict[str, Any]:
+    return {
+        "id": "msg_01AskKitDocuments",
+        "type": "message",
+        "role": "assistant",
+        "model": "claude-haiku-5-5",
+        "content": [{"type": "text", "text": text}],
+        "stop_reason": "end_turn",
+        "stop_sequence": None,
+        "usage": {"input_tokens": 412, "output_tokens": 61},
+    }
+
+
+def use_fake_client(
+    monkeypatch: pytest.MonkeyPatch,
+    sent: list[dict[str, Any]],
+    text: str,
+) -> None:
+    def answer(request: httpx2.Request) -> httpx2.Response:
+        sent.append(json.loads(request.content))
+        return httpx2.Response(200, json=recorded(text))
+
+    def make(**options: Any) -> Anthropic:
+        return Anthropic(
+            api_key="sk-ant-api03-a-test-key-Ab12",
+            http_client=httpx2.Client(transport=httpx2.MockTransport(answer)),
+        )
+
+    monkeypatch.setattr("askkit.cli.Anthropic", make)
+
+
+@pytest.fixture
+def in_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-api03-a-test-key-Ab12")
+    (tmp_path / "returns-policy.txt").write_text(POLICY, encoding="utf-8")
+    return tmp_path
+
+
+def test_ask_sends_the_document_first_and_the_question_last(
+    in_project: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    sent: list[dict[str, Any]] = []
+    use_fake_client(monkeypatch, sent, ANSWER)
+    main(
+        [
+            "ask",
+            "Who pays the postage for order 6083?",
+            "--document",
+            "returns-policy.txt",
+        ]
+    )
+    assert sent[0]["messages"] == [
+        {
+            "role": "user",
+            "content": with_documents(
+                "Who pays the postage for order 6083?",
+                {"returns-policy.txt": POLICY},
+            ),
+        }
+    ]
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[-2:] == [
+        "Stop reason:   end_turn",
+        "Quotes:        2 of 2 found in the documents",
+    ]
+
+
+def test_ask_takes_several_documents_in_order(
+    in_project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (in_project / "faq.txt").write_text("Opening hours.\n", encoding="utf-8")
+    sent: list[dict[str, Any]] = []
+    use_fake_client(monkeypatch, sent, ANSWER)
+    main(
+        [
+            "ask",
+            "Who pays?",
+            "--document",
+            "returns-policy.txt",
+            "--document",
+            "faq.txt",
+        ]
+    )
+    content = sent[0]["messages"][0]["content"]
+    assert content.index("<source>returns-policy.txt</source>") < (
+        content.index("<source>faq.txt</source>")
+    )
+
+
+def test_ask_stops_on_a_quote_that_is_not_in_the_documents(
+    in_project: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    answer = (
+        "<quote>You pay the return postage.</quote>"
+        "<quote>Sale items are returned free of charge.</quote>"
+        "<answer>The customer pays.</answer>"
+    )
+    use_fake_client(monkeypatch, [], answer)
+    with pytest.raises(SystemExit) as stopped:
+        main(["ask", "Who pays?", "--document", "returns-policy.txt"])
+    assert stopped.value.code == (
+        'askkit: not in the documents: "Sale items are returned free of'
+        ' charge."'
+    )
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[-1] == "Quotes:        1 of 2 found in the documents"
+
+
+def test_ask_says_when_the_answer_quotes_nothing(
+    in_project: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    use_fake_client(monkeypatch, [], "<answer>I don't know.</answer>")
+    main(["ask", "Who pays?", "--document", "returns-policy.txt"])
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[-1] == "Quotes:        none in the answer"
+
+
+def test_ask_without_documents_sends_the_question_alone(
+    in_project: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    sent: list[dict[str, Any]] = []
+    use_fake_client(monkeypatch, sent, "Plain answer.")
+    main(["ask", "Who pays?"])
+    assert sent[0]["messages"][0]["content"] == "Who pays?"
+    assert "Quotes:" not in capsys.readouterr().out

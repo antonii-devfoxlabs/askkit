@@ -77,6 +77,24 @@ from `python/src/askkit/errors.py` saying what happened and what to do,
 instead of a traceback, and exits with exit code 1. The SDK has already
 sent a busy or failed request twice more by then.
 
+`--document FILE` sends a long text with the question: a policy, a
+contract, a manual. Give it once per file, as many times as you need.
+Each file goes into the user message in `<documents>` tags, numbered and
+named after its path, then a request to quote first
+(`QUOTE_REQUEST` in `python/src/askkit/prompts.py`), then the question,
+last:
+
+```bash
+cd python
+uv run askkit ask "Who pays the postage for a wrong colour?" --document returns-policy.txt
+```
+
+The model copies the sentences its answer rests on into `<quote>` tags
+before it answers. Under the stop reason, `ask` prints how many of those
+quotes it found in the documents (line breaks and runs of spaces do not
+count), and when one is not there it names it and exits with exit code
+1, so the answer goes to a person instead of on.
+
 ## Exploring in a notebook
 
 `python/notebooks/explore.ipynb` is a Jupyter notebook for trying a call
