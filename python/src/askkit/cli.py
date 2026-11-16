@@ -15,7 +15,12 @@ from askkit.ask import (
 from askkit.compare import compare_models
 from askkit.config import KEY_NAME, load_api_key, masked
 from askkit.cost import call_cost, error_cost
-from askkit.documents import missing_quotes, quotes_in, with_documents
+from askkit.documents import (
+    missing_quotes,
+    quotes_in,
+    unchecked,
+    with_documents,
+)
 from askkit.errors import error_message
 from askkit.limits import LIMITS
 from askkit.prices import PRICES
@@ -126,6 +131,11 @@ def main(arguments: list[str] | None = None) -> None:
                 )
             if missing:
                 sys.exit(f'askkit: not in the documents: "{missing[0]}"')
+            if unchecked(text):
+                sys.exit(
+                    "askkit: the answer quotes nothing from the documents,"
+                    " so it cannot be checked"
+                )
         return
 
     text = options.file.read_text(encoding="utf-8")

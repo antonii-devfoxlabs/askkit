@@ -1,5 +1,8 @@
 from askkit.prompts import render
 
+# The words both prompts tell the model to write when it has no answer.
+WAY_OUT = "I don't know"
+
 
 def documents_block(documents: dict[str, str]) -> str:
     # Anthropic's layout: each document numbered, with its source.
@@ -44,3 +47,9 @@ def missing_quotes(answer: str, documents: dict[str, str]) -> list[str]:
         if not found:
             missing.append(quote)
     return missing
+
+
+def unchecked(answer: str) -> bool:
+    # An answer that quotes nothing gives missing_quotes nothing to check,
+    # so it would pass unchecked; only the prompt's way out may do that.
+    return not quotes_in(answer) and WAY_OUT not in answer

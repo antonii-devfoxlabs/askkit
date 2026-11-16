@@ -96,7 +96,10 @@ and checks that it quoted every part that applies, an exception
 included, before it answers. Under the stop reason, `ask` prints how many of those
 quotes it found in the documents (line breaks and runs of spaces do not
 count), and when one is not there it names it and exits with exit code
-1, so the answer goes to a person instead of on.
+1, so the answer goes to a person instead of on. An answer that quotes
+nothing, such as one whose quotes are in a tag the request did not ask
+for, exits the same way, unless it is "I don't know": there would be
+nothing to check it against.
 
 ## Prompts
 

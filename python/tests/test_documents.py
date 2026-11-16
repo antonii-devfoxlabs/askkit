@@ -11,6 +11,7 @@ from askkit.documents import (
     documents_block,
     missing_quotes,
     quotes_in,
+    unchecked,
     with_documents,
 )
 from askkit.prompts import template_path
@@ -106,6 +107,28 @@ def test_quotes_in_finds_every_quote() -> None:
 
 def test_quotes_in_finds_none_in_an_answer_without_quotes() -> None:
     assert quotes_in("<answer>I don't know.</answer>") == []
+
+
+def test_quotes_in_finds_none_in_a_tag_with_an_attribute() -> None:
+    # The model may write <quote index="1">: not the tag the request
+    # asked for, so quotes_in reads no quote in it.
+    assert quotes_in('<quote index="1">You pay.</quote>') == []
+
+
+def test_an_answer_that_quotes_nothing_is_unchecked() -> None:
+    answer = (
+        '<quote index="1">You pay the return postage.</quote>'
+        "<answer>The customer pays.</answer>"
+    )
+    assert unchecked(answer)
+
+
+def test_the_way_out_is_not_unchecked() -> None:
+    assert not unchecked("<answer>I don't know.</answer>")
+
+
+def test_an_answer_with_quotes_is_not_unchecked() -> None:
+    assert not unchecked(ANSWER)
 
 
 def test_a_quote_across_a_line_break_is_found() -> None:
@@ -255,6 +278,29 @@ def test_ask_says_when_the_answer_quotes_nothing(
 ) -> None:
     use_fake_client(monkeypatch, [], "<answer>I don't know.</answer>")
     main(["ask", "Who pays?", "--document", "returns-policy.txt"])
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[-1] == "Quotes:        none in the answer"
+
+
+def test_ask_stops_on_an_answer_it_cannot_check(
+    in_project: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # Before lesson 4.1 this answer passed: quotes_in found no quote, so
+    # missing_quotes had nothing to report, and AskKit ended without an
+    # error on an answer nothing had checked.
+    answer = (
+        '<quote index="1">Sale items are returned free of charge.</quote>'
+        "<answer>The customer pays nothing.</answer>"
+    )
+    use_fake_client(monkeypatch, [], answer)
+    with pytest.raises(SystemExit) as stopped:
+        main(["ask", "Who pays?", "--document", "returns-policy.txt"])
+    assert stopped.value.code == (
+        "askkit: the answer quotes nothing from the documents, so it"
+        " cannot be checked"
+    )
     lines = capsys.readouterr().out.splitlines()
     assert lines[-1] == "Quotes:        none in the answer"
 
