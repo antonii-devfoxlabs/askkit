@@ -290,7 +290,7 @@ def test_a_declined_ticket_says_why_in_the_apis_words(
     # A refusal can come after part of the answer. That part is never
     # read, however much of a ticket it looks like: the person gets the
     # category and the explanation instead.
-    body = with_answer('{"order":5120,"problem":"account', "refusal")
+    body = with_answer('{"order":8125,"problem":"account', "refusal")
     body["stop_details"] = {
         "type": "refusal",
         "category": "cyber",
@@ -307,7 +307,14 @@ def test_a_declined_ticket_says_why_in_the_apis_words(
         " (category: cyber). This request was declined because it could"
         " enable cyber harm."
     )
-    assert "5120" not in capsys.readouterr().out
+    # The part of a ticket written before the decline is not printed:
+    # only the lines about the call.
+    assert capsys.readouterr().out.splitlines() == [
+        "Model:         claude-haiku-5-5",
+        "Tokens:        236 in, 31 out",
+        "Cost:          $0.000039",
+        "Stop reason:   refusal",
+    ]
     # The same email to the same model is declined again: no retry.
     assert len(sent) == 1
 
@@ -336,9 +343,19 @@ def test_a_ticket_with_a_way_out_says_what_to_ask_for(
     text = '{"order":null,"problem":"lamp flickers","wish":"not stated"}'
     use_fake_client(monkeypatch, [], with_answer(text, "end_turn"))
     main(["extract", str(email_file)])
-    assert capsys.readouterr().out.splitlines()[-1] == (
-        "Not stated:    order, wish"
-    )
+    assert capsys.readouterr().out.splitlines() == [
+        "{",
+        '  "order": null,',
+        '  "problem": "lamp flickers",',
+        '  "wish": "not stated"',
+        "}",
+        "",
+        "Model:         claude-haiku-5-5",
+        "Tokens:        236 in, 31 out",
+        "Cost:          $0.000039",
+        "Stop reason:   end_turn",
+        "Not stated:    order, wish",
+    ]
 
 
 def test_a_whole_ticket_has_no_not_stated_note(
