@@ -57,3 +57,14 @@ per field. It follows the email and the answer that failed.
 
 - v1: names what was wrong and asks for the ticket again, as the system
   prompt describes it.
+
+## classify_email
+
+The system prompt of `askkit classify`: the condition of each queue the
+email can go to. The queues themselves are `Queue` in `../classify.py`,
+whose values the JSON schema sent beside the prompt allows.
+
+- v1: the four queues, `damaged`, `refund`, `delivery` and `other`, each
+  defined by what happened to the order, `other` for an email that meets
+  none of the three conditions, and the rule to decide by what happened,
+  not by the words the email uses.

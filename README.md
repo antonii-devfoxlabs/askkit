@@ -166,6 +166,27 @@ only in a quoted earlier email, such as another order's, is asked for
 again. Nothing else is cut: a signature or a P.S. may hold what the
 ticket needs, and only the model can tell.
 
+## Sorting an email into a queue
+
+`askkit classify` puts a customer's email in one of the shop's four
+queues: `damaged`, `refund`, `delivery`, or `other` for an email that
+meets none of the first three conditions. The queues are `Queue` in
+`python/src/askkit/classify.py`; the template `classify_email` defines
+each one by what happened to the order, and the JSON schema made from
+`Classification` holds the answer to one of the four values:
+
+```bash
+cd python
+uv run askkit classify gift.txt
+```
+
+It prints the classification as JSON, then the same lines as `ask`. The
+email is cleaned first, as for `extract`. A queue that differs from an
+allowed one only in its capitals is repaired, and a `Repaired:` line says
+so; any other answer is not asked for again, since the schema leaves
+nothing else to go wrong, and `classify` exits with exit code 1 for a
+person to sort the email.
+
 ## Prompts
 
 Every prompt AskKit sends is a template file in

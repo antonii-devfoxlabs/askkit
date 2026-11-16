@@ -14,6 +14,7 @@ IN_USE = {
     "quote_request": 2,
     "extract_ticket": 2,
     "retry_ticket": 1,
+    "classify_email": 1,
 }
 
 

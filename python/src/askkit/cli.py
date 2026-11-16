@@ -14,6 +14,11 @@ from askkit.ask import (
     stop_warning,
     thinking_tokens,
 )
+from askkit.classify import (
+    check_classification,
+    classification_error,
+    classify_email,
+)
 from askkit.clean import clean_email
 from askkit.compare import compare_models
 from askkit.config import KEY_NAME, load_api_key, masked
@@ -114,6 +119,14 @@ def main(arguments: list[str] | None = None) -> None:
     extract.add_argument("--max-tokens", type=int, default=1000)
     extract.add_argument("--retries", type=int, default=1)
     extract.add_argument("--orders", type=Path)
+    classify = commands.add_parser(
+        "classify", help="put an email in one of the shop's queues"
+    )
+    classify.add_argument("file", type=Path)
+    classify.add_argument(
+        "-m", "--model", choices=MODELS, default="claude-haiku-5-5"
+    )
+    classify.add_argument("--max-tokens", type=int, default=1000)
     options = parser.parse_args(arguments)
 
     if options.command == "key":
@@ -212,6 +225,39 @@ def main(arguments: list[str] | None = None) -> None:
         for note in notes:
             print(note)
         sys.exit(f"askkit: {rejection}")
+
+    if options.command == "classify":
+        # The same cleaning as extract: a quoted earlier email is not this
+        # one, and its words could pull the email into the wrong queue.
+        email, left_out = clean_email(
+            options.file.read_text(encoding="utf-8")
+        )
+        client = Anthropic(api_key=require_api_key())
+        try:
+            response = classify_email(
+                client, email, options.model, options.max_tokens
+            )
+        except APIError as error:
+            sys.exit(f"askkit: {error_message(error)}")
+        warning = stop_warning(response)
+        if warning is not None:
+            print_calls([response], options.model)
+            sys.exit(f"askkit: {warning}")
+        try:
+            classification, change = check_classification(
+                answer_text(response)
+            )
+        except ValidationError as error:
+            print_calls([response], options.model)
+            sys.exit(f"askkit: {classification_error(error)}")
+        print(classification.model_dump_json(indent=2))
+        print()
+        print_calls([response], options.model)
+        if left_out:
+            print(f"Left out:      {left_out} quoted lines")
+        if change is not None:
+            print(f"Repaired:      {change}")
+        return
 
     if options.command == "ask":
         system = ASK_SYSTEM

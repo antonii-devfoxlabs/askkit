@@ -16,6 +16,9 @@ RELEASED = {
     "ask_system.v2.txt": (
         "70bbce54f01c9a82d943f0875bfee892ef480a276516ac0ad0d1349ce8719761"
     ),
+    "classify_email.v1.txt": (
+        "9fc584cd96a95a585ccddacc8a2453835979df96d90b8895525985f5cd3cf9ee"
+    ),
     "extract_ticket.v1.txt": (
         "9c52494b304b836c87ed89cf78160ae10d6128d372911b6bf21574eb7a3635f1"
     ),
