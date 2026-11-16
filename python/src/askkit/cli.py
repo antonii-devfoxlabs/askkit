@@ -2,6 +2,7 @@ import argparse
 import sys
 from pathlib import Path
 
+from askkit.compare import compare_models
 from askkit.cost import call_cost
 from askkit.limits import LIMITS
 from askkit.prices import PRICES
@@ -20,10 +21,28 @@ def main(arguments: list[str] | None = None) -> None:
     )
     estimate.add_argument("--output", type=int, default=500)
     estimate.add_argument("--calls", type=int, default=1)
+    compare = commands.add_parser(
+        "compare", help="price one file on every model"
+    )
+    compare.add_argument("file", type=Path)
+    compare.add_argument("--output", type=int, default=500)
+    compare.add_argument("--calls", type=int, default=1)
     options = parser.parse_args(arguments)
 
     text = options.file.read_text(encoding="utf-8")
     input_tokens = estimate_tokens(text)
+    if options.command == "compare":
+        print(
+            f"Input tokens:  {input_tokens:,} (from {len(text):,} characters)"
+        )
+        print(f"Output tokens: {options.output:,} (your guess)")
+        print(f"Calls:         {options.calls:,}")
+        for line in compare_models(
+            input_tokens, options.output, options.calls
+        ):
+            print(line)
+        return
+
     window = LIMITS[options.model]["context_window"]
     max_output = LIMITS[options.model]["max_output"]
     if options.output > max_output:

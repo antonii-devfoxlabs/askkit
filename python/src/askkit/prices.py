@@ -2,6 +2,7 @@
 # https://platform.claude.com/docs/en/about-claude/pricing
 # checked on 2026-11-16. When prices change, change this file only.
 PRICES: dict[str, dict[str, float]] = {
+    "claude-fable-5-2": {"input": 8.00, "output": 40.00},
     "claude-opus-5-5": {"input": 4.00, "output": 20.00},
     "claude-sonnet-5-5": {"input": 2.00, "output": 10.00},
     "claude-haiku-5-5": {"input": 0.10, "output": 0.50},

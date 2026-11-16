@@ -19,6 +19,14 @@ It also checks that the text and the answer fit in the model's context
 window, and that the answer is no longer than the model can write in one
 call; if not, it says so and exits with status 1.
 
+`askkit compare` prices the same file on every model AskKit knows, most
+capable first, so the trade-off between the models is one command:
+
+```bash
+cd python
+uv run askkit compare email.txt --output 40 --calls 36000
+```
+
 The token count is an estimate worked out from the number of characters.
 Prices live in `python/src/askkit/prices.py` and the limits in
 `python/src/askkit/limits.py`, each with the date it was checked.
