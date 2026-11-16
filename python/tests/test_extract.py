@@ -644,7 +644,7 @@ def test_another_customers_order_is_asked_for_again(
 
 # Maria writes again, as a reply to the shop's last email, which was about
 # another of her orders. The order she means is in the P.S.; the quoted
-# reply below it names the vase's order, 7302, a real order of the shop.
+# email below it names the vase's order, 7302, a real order of the shop.
 REPLY = """Hi again,
 
 My mug came today in pieces, and the box was torn as well. I'd like
@@ -657,7 +657,7 @@ Tel. 0161 496 0731
 P.S. The order number is 4417.
 
 On 3 Nov 2026, at 10:14, the shop wrote:
-> Your return of order 7302 is accepted. Please send the vase back
+> Your vase, order 7302, was sent today. It should reach you
 > within 14 days.
 """
 # The ticket the reply asks for: both things that went wrong, her first
