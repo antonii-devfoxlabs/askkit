@@ -8,7 +8,17 @@ from anthropic import Anthropic, transform_schema
 from pydantic import ValidationError
 
 from askkit.cli import main
-from askkit.extract import TICKET_SCHEMA, Ticket, extract_ticket, ticket_error
+from askkit.extract import (
+    TICKET_SCHEMA,
+    WISHES,
+    Ticket,
+    check_ticket,
+    extract_ticket,
+    repair_ticket,
+    retry_ticket,
+    ticket_error,
+    ticket_problems,
+)
 from askkit.prompts import render
 
 EMAIL = (
@@ -43,6 +53,26 @@ def with_answer(text: str, stop_reason: str) -> dict[str, Any]:
     body["content"] = [{"type": "text", "text": text}]
     body["stop_reason"] = stop_reason
     return body
+
+
+def use_fake_answers(
+    monkeypatch: pytest.MonkeyPatch,
+    sent: list[dict[str, Any]],
+    bodies: list[dict[str, Any]],
+) -> None:
+    # One recorded response per call, in order, for a command that asks
+    # more than once.
+    def answer(request: httpx2.Request) -> httpx2.Response:
+        sent.append(json.loads(request.content))
+        return httpx2.Response(200, json=bodies[len(sent) - 1])
+
+    def make(api_key: str) -> Anthropic:
+        transport = httpx2.MockTransport(answer)
+        return Anthropic(
+            api_key=api_key, http_client=httpx2.Client(transport=transport)
+        )
+
+    monkeypatch.setattr("askkit.cli.Anthropic", make)
 
 
 def use_fake_client(
@@ -259,29 +289,32 @@ def test_extract_takes_max_tokens(
     assert sent[0]["max_tokens"] == 300
 
 
-def test_an_answer_that_breaks_ticket_is_stopped(
+def test_a_wish_in_other_capitals_is_repaired(
     email_file: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     # The API holds the shape but not the capitals of an allowed value,
-    # so "not Stated" can come back with end_turn. Printed as it was, it
-    # reached the warehouse as a wish no code knows.
+    # so "not Stated" can come back with end_turn. It has one right
+    # reading, so it is mended in code, for free, and said so.
+    sent: list[dict[str, Any]] = []
     text = '{"order":null,"problem":"lamp flickers","wish":"not Stated"}'
-    use_fake_client(monkeypatch, [], with_answer(text, "end_turn"))
-    with pytest.raises(SystemExit) as stopped:
-        main(["extract", str(email_file)])
-    assert stopped.value.code == (
-        "askkit: the ticket does not match its model:"
-        " wish: Input should be 'replacement', 'refund' or 'not stated',"
-        " not 'not Stated'"
-    )
+    use_fake_client(monkeypatch, sent, with_answer(text, "end_turn"))
+    main(["extract", str(email_file)])
     assert capsys.readouterr().out.splitlines() == [
+        "{",
+        '  "order": null,',
+        '  "problem": "lamp flickers",',
+        '  "wish": "not stated"',
+        "}",
+        "",
         "Model:         claude-haiku-5-5",
         "Tokens:        236 in, 31 out",
         "Cost:          $0.000039",
         "Stop reason:   end_turn",
+        "Repaired:      wish 'not Stated' to 'not stated'",
     ]
+    assert len(sent) == 1
 
 
 def test_an_order_number_written_as_text_comes_out_a_number(
@@ -306,3 +339,187 @@ def test_ticket_error_names_the_answer_when_it_is_not_a_ticket() -> None:
         "the ticket does not match its model:"
         " answer: Input should be an object, not []"
     )
+
+
+LONG = "desk lamp flickers when it is switched on"
+TOO_LONG = (
+    '{"order":null,"problem":"desk lamp flickers when it is switched on",'
+    '"wish":"not stated"}'
+)
+SHORT = '{"order":null,"problem":"lamp flickers","wish":"not stated"}'
+TOO_LONG_PROBLEM = (
+    "problem: String should have at most 40 characters,"
+    " not 'desk lamp flickers when it is switched on'"
+)
+
+
+def test_the_wishes_are_the_ones_ticket_allows() -> None:
+    assert WISHES == ("replacement", "refund", "not stated")
+    assert TICKET_SCHEMA["properties"]["wish"]["enum"] == list(WISHES)
+
+
+def test_the_problem_length_is_checked_here_not_by_the_api() -> None:
+    # The API takes no maxLength: the SDK moves it into the description,
+    # so the model is told, and only Ticket holds the answer to it.
+    problem = TICKET_SCHEMA["properties"]["problem"]
+    assert "maxLength" not in problem
+    assert problem["description"] == "{maxLength: 40}"
+    assert len(LONG) == 41
+    with pytest.raises(ValidationError) as rejected:
+        Ticket.model_validate_json(TOO_LONG)
+    assert ticket_problems(rejected.value) == TOO_LONG_PROBLEM
+
+
+def test_repair_mends_only_the_capitals_of_an_allowed_wish() -> None:
+    assert repair_ticket(
+        '{"order":4417,"problem":"mug broken","wish":"Refund"}'
+    ) == (
+        '{"order": 4417, "problem": "mug broken", "wish": "refund"}',
+        "wish 'Refund' to 'refund'",
+    )
+
+
+def test_repair_never_guesses_a_wish() -> None:
+    # "money back" probably means a refund, but probably is a guess, and
+    # a guess is the model's job: it is asked again instead.
+    assert (
+        repair_ticket(
+            '{"order":4417,"problem":"mug broken","wish":"money back"}'
+        )
+        is None
+    )
+
+
+def test_repair_leaves_what_it_cannot_read() -> None:
+    assert repair_ticket('{"order":4417,"problem":"mug bro') is None
+    assert repair_ticket("[]") is None
+    assert repair_ticket('{"order":4417,"problem":"mug broken"}') is None
+    assert repair_ticket(SHORT) is None
+
+
+def test_a_repaired_answer_is_checked_again_in_full() -> None:
+    text = TOO_LONG.replace('"not stated"', '"not Stated"')
+    with pytest.raises(ValidationError) as rejected:
+        check_ticket(text)
+    assert ticket_problems(rejected.value) == TOO_LONG_PROBLEM
+
+
+def test_check_ticket_says_nothing_was_mended_for_a_good_answer() -> None:
+    ticket, change = check_ticket(SHORT)
+    assert ticket.problem == "lamp flickers"
+    assert change is None
+
+
+def test_retry_ticket_sends_the_answer_and_its_problems() -> None:
+    sent: list[dict[str, Any]] = []
+
+    def answer(request: httpx2.Request) -> httpx2.Response:
+        sent.append(json.loads(request.content))
+        return httpx2.Response(200, json=RECORDED)
+
+    client = Anthropic(
+        api_key="sk-ant-api03-a-test-key-Ab12",
+        http_client=httpx2.Client(transport=httpx2.MockTransport(answer)),
+    )
+    retry_ticket(
+        client, EMAIL, TOO_LONG, TOO_LONG_PROBLEM, "claude-haiku-5-5", 1000
+    )
+    assert sent[0]["messages"] == [
+        {"role": "user", "content": EMAIL},
+        {"role": "assistant", "content": TOO_LONG},
+        {
+            "role": "user",
+            "content": render("retry_ticket", {"problems": TOO_LONG_PROBLEM}),
+        },
+    ]
+    assert sent[0]["system"] == render("extract_ticket", {})
+    assert sent[0]["output_config"]["format"]["schema"] == TICKET_SCHEMA
+
+
+def test_a_broken_ticket_is_asked_for_again_with_its_problems(
+    email_file: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    sent: list[dict[str, Any]] = []
+    second = with_answer(SHORT, "end_turn")
+    second["usage"] = {"input_tokens": 312, "output_tokens": 29}
+    use_fake_answers(
+        monkeypatch, sent, [with_answer(TOO_LONG, "end_turn"), second]
+    )
+    main(["extract", str(email_file)])
+    assert capsys.readouterr().out.splitlines() == [
+        "{",
+        '  "order": null,',
+        '  "problem": "lamp flickers",',
+        '  "wish": "not stated"',
+        "}",
+        "",
+        "Model:         claude-haiku-5-5",
+        "Tokens:        548 in, 60 out",
+        "Cost:          $0.000085",
+        "Stop reason:   end_turn",
+        f"Asked again:   {TOO_LONG_PROBLEM}",
+    ]
+    assert len(sent) == 2
+    assert sent[1]["messages"][1] == {
+        "role": "assistant",
+        "content": TOO_LONG,
+    }
+
+
+def test_a_ticket_broken_twice_goes_to_a_person(
+    email_file: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # One retry, then exit code 1: never a loop that pays for answers
+    # until one happens to pass.
+    sent: list[dict[str, Any]] = []
+    broken = with_answer(TOO_LONG, "end_turn")
+    use_fake_answers(monkeypatch, sent, [broken, broken, broken])
+    with pytest.raises(SystemExit) as stopped:
+        main(["extract", str(email_file)])
+    assert stopped.value.code == (
+        f"askkit: the ticket does not match its model: {TOO_LONG_PROBLEM}"
+    )
+    assert len(sent) == 2
+    assert capsys.readouterr().out.splitlines() == [
+        "Model:         claude-haiku-5-5",
+        "Tokens:        472 in, 62 out",
+        "Cost:          $0.000078",
+        "Stop reason:   end_turn",
+        f"Asked again:   {TOO_LONG_PROBLEM}",
+    ]
+
+
+def test_retries_0_never_asks_again(
+    email_file: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sent: list[dict[str, Any]] = []
+    broken = with_answer(TOO_LONG, "end_turn")
+    use_fake_answers(monkeypatch, sent, [broken, broken])
+    with pytest.raises(SystemExit):
+        main(["extract", str(email_file), "--retries", "0"])
+    assert len(sent) == 1
+
+
+def test_retries_below_zero_are_refused(email_file: Path) -> None:
+    with pytest.raises(SystemExit) as stopped:
+        main(["extract", str(email_file), "--retries", "-1"])
+    assert stopped.value.code == (
+        "askkit: --retries -1 is below zero; give 0 to never ask again"
+    )
+
+
+def test_a_cut_off_answer_is_not_asked_for_again(
+    email_file: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The same room cuts the same answer off: only a larger --max-tokens
+    # helps, and how much more to pay is the person's choice.
+    sent: list[dict[str, Any]] = []
+    cut = with_answer('{"order":4417,"problem":"mug bro', "max_tokens")
+    use_fake_answers(monkeypatch, sent, [cut, cut])
+    with pytest.raises(SystemExit):
+        main(["extract", str(email_file)])
+    assert len(sent) == 1

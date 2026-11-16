@@ -9,7 +9,12 @@ from string import Template
 TEMPLATES = Path(__file__).parent / "templates"
 
 # The version of each prompt AskKit sends now.
-IN_USE = {"ask_system": 2, "quote_request": 2, "extract_ticket": 1}
+IN_USE = {
+    "ask_system": 2,
+    "quote_request": 2,
+    "extract_ticket": 1,
+    "retry_ticket": 1,
+}
 
 
 def template_path(name: str, version: int) -> Path:

@@ -1,0 +1,4 @@
+That ticket could not be used: $problems.
+
+Write the ticket for the same email again, with every field as the system
+prompt describes it.

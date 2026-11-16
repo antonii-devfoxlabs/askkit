@@ -118,12 +118,26 @@ uv run askkit extract email.txt
 It prints the ticket, then the same lines as `ask`. It reads the stop
 reason first: an answer cut off at `--max-tokens` (1000 by default) or
 declined may not match the schema, so it is not read, and `extract`
-says why and exits with exit code 1. A finished answer is checked
-against `Ticket` again in AskKit's own code, because the API holds the
-shape but not, for example, the capitals of an allowed value: an answer
-that does not match names each field that broke the contract and exits
-with exit code 1. Whether the order exists is not checked yet: Module 4
-adds that.
+says why and exits with exit code 1; neither is asked for again, since
+the same room or the same email stops the same way. A finished answer
+is checked against `Ticket` again in AskKit's own code, because the API
+holds the shape but not, for example, the capitals of an allowed value
+or the length of `problem` (at most 40 characters). What fails takes
+one of three ways:
+
+- **Repaired**: a wish that differs from an allowed one only in its
+  capitals (`not Stated`) is mended in code and checked again in full,
+  and a `Repaired:` line says what changed. Nothing else is mended: any
+  other fault is a question about the email.
+- **Asked again**: the model gets the email, its answer and what was
+  wrong with it (the template `retry_ticket`), once by default
+  (`--retries 1`; `--retries 0` turns it off). An `Asked again:` line
+  says why, and the tokens and cost add up every call.
+- **Rejected**: an answer that still fails names each field that broke
+  the contract and exits with exit code 1, so whatever runs AskKit
+  hands the email to a person.
+
+Whether the order exists is not checked yet: Module 4 adds that.
 
 ## Prompts
 

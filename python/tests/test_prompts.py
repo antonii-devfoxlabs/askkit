@@ -25,6 +25,9 @@ RELEASED = {
     "quote_request.v2.txt": (
         "476a48c7d1346e43e4472aec0f61f4f032f606829d9095a07a3372959fe4614c"
     ),
+    "retry_ticket.v1.txt": (
+        "26b3c6de2ef2c307efe35184857c6592cd940d2cb0ca340d024631fdd05bab05"
+    ),
 }
 
 

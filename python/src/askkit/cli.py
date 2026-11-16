@@ -24,7 +24,13 @@ from askkit.documents import (
     with_documents,
 )
 from askkit.errors import error_message
-from askkit.extract import Ticket, extract_ticket, ticket_error
+from askkit.extract import (
+    check_ticket,
+    extract_ticket,
+    retry_ticket,
+    ticket_error,
+    ticket_problems,
+)
 from askkit.limits import LIMITS
 from askkit.prices import PRICES
 from askkit.prompts import ASK_SYSTEM
@@ -41,17 +47,27 @@ def require_api_key() -> str:
     return key
 
 
-def print_call(response: Message, model: str) -> None:
-    usage = response.usage
-    cost = call_cost(model, usage.input_tokens, usage.output_tokens)
-    print(f"Model:         {response.model}")
-    tokens = f"{usage.input_tokens:,} in, {usage.output_tokens:,} out"
-    thinking = thinking_tokens(response)
+def print_calls(responses: list[Message], model: str) -> None:
+    # One summary for every call a command made: the tokens and the cost
+    # are added up, so a ticket asked for twice shows what both cost.
+    input_tokens = 0
+    output_tokens = 0
+    thinking: int | None = None
+    for response in responses:
+        input_tokens += response.usage.input_tokens
+        output_tokens += response.usage.output_tokens
+        thought = thinking_tokens(response)
+        if thought is not None:
+            thinking = (thinking or 0) + thought
+    last = responses[-1]
+    cost = call_cost(model, input_tokens, output_tokens)
+    print(f"Model:         {last.model}")
+    tokens = f"{input_tokens:,} in, {output_tokens:,} out"
     if thinking is not None:
         tokens += f" ({thinking:,} thinking)"
     print(f"Tokens:        {tokens}")
     print(f"Cost:          ${cost:.6f}")
-    print(f"Stop reason:   {response.stop_reason}")
+    print(f"Stop reason:   {last.stop_reason}")
 
 
 def main(arguments: list[str] | None = None) -> None:
@@ -94,6 +110,7 @@ def main(arguments: list[str] | None = None) -> None:
         "-m", "--model", choices=MODELS, default="claude-haiku-5-5"
     )
     extract.add_argument("--max-tokens", type=int, default=1000)
+    extract.add_argument("--retries", type=int, default=1)
     options = parser.parse_args(arguments)
 
     if options.command == "key":
@@ -101,32 +118,69 @@ def main(arguments: list[str] | None = None) -> None:
         return
 
     if options.command == "extract":
+        if options.retries < 0:
+            sys.exit(
+                f"askkit: --retries {options.retries} is below zero;"
+                " give 0 to never ask again"
+            )
         email = options.file.read_text(encoding="utf-8")
         client = Anthropic(api_key=require_api_key())
-        try:
-            response = extract_ticket(
-                client, email, options.model, options.max_tokens
-            )
-        except APIError as error:
-            sys.exit(f"askkit: {error_message(error)}")
-        # A cut-off or declined answer may not match the schema, so the
-        # stop reason is read before the JSON is.
-        warning = stop_warning(response)
-        if warning is None:
-            # Ticket checks every field again here, in our own code: the
-            # API holds the shape, but not the capitals of an allowed
-            # value, and nothing else reaches the warehouse unchecked.
+        responses: list[Message] = []
+        notes: list[str] = []
+        answer = ""
+        problems = ""
+        rejection = ""
+        for attempt in range(options.retries + 1):
             try:
-                ticket = Ticket.model_validate_json(answer_text(response))
+                if attempt == 0:
+                    response = extract_ticket(
+                        client, email, options.model, options.max_tokens
+                    )
+                else:
+                    notes.append(f"Asked again:   {problems}")
+                    response = retry_ticket(
+                        client,
+                        email,
+                        answer,
+                        problems,
+                        options.model,
+                        options.max_tokens,
+                    )
+            except APIError as error:
+                sys.exit(f"askkit: {error_message(error)}")
+            responses.append(response)
+            # A cut-off or declined answer may not match the schema, so the
+            # stop reason is read before the JSON is. Neither is asked for
+            # again: the same room or the same email gives the same stop.
+            warning = stop_warning(response)
+            if warning is not None:
+                print_calls(responses, options.model)
+                sys.exit(f"askkit: {warning}")
+            answer = answer_text(response)
+            # Ticket checks every field again here, in our own code: the
+            # API holds the shape, but not the capitals of an allowed value
+            # or the length of a text, and nothing reaches the warehouse
+            # unchecked.
+            try:
+                ticket, change = check_ticket(answer)
             except ValidationError as error:
-                print_call(response, options.model)
-                sys.exit(f"askkit: {ticket_error(error)}")
+                problems = ticket_problems(error)
+                rejection = ticket_error(error)
+                continue
+            if change is not None:
+                notes.append(f"Repaired:      {change}")
             print(ticket.model_dump_json(indent=2))
             print()
-        print_call(response, options.model)
-        if warning is not None:
-            sys.exit(f"askkit: {warning}")
-        return
+            print_calls(responses, options.model)
+            for note in notes:
+                print(note)
+            return
+        # Every answer broke the contract: no ticket, and exit code 1, so
+        # whatever runs AskKit hands the email to a person.
+        print_calls(responses, options.model)
+        for note in notes:
+            print(note)
+        sys.exit(f"askkit: {rejection}")
 
     if options.command == "ask":
         system = ASK_SYSTEM
@@ -155,7 +209,7 @@ def main(arguments: list[str] | None = None) -> None:
         if response.stop_reason != "refusal":
             print(text)
             print()
-        print_call(response, options.model)
+        print_calls([response], options.model)
         warning = stop_warning(response)
         if warning is not None:
             sys.exit(f"askkit: {warning}")
