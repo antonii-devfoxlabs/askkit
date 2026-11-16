@@ -15,7 +15,7 @@ def test_estimate_prints_tokens_and_costs(
             "estimate",
             str(email),
             "-m",
-            "claude-sonnet-5-5",
+            "gemini-3.5-flash-lite",
             "--output",
             "200",
             "--calls",
@@ -23,12 +23,12 @@ def test_estimate_prints_tokens_and_costs(
         ]
     )
     assert capsys.readouterr().out.splitlines() == [
-        "Model:         claude-sonnet-5-5",
-        "Input tokens:  500 (estimated from 1,350 characters)",
+        "Model:         gemini-3.5-flash-lite",
+        "Input tokens:  338 (estimated from 1,350 characters)",
         "Output tokens: 200 (your guess)",
-        "Window:        700 of 1,000,000 tokens",
-        "One call:      $0.003000",
-        "1,000 calls: $3.00",
+        "Window:        538 of 1,048,576 tokens",
+        "One call:      $0.000601",
+        "1,000 calls: $0.60",
     ]
 
 
@@ -163,14 +163,7 @@ def test_a_model_with_a_published_tokenizer_is_counted(
 
 
 @pytest.mark.parametrize(
-    "model",
-    [
-        "claude-fable-5-2",
-        "gemini-4-hydrogen",
-        "gemini-3.5-flash-lite",
-        "gpt-6-astra",
-        "gpt-6-luna",
-    ],
+    "model", ["claude-haiku-5-5", "gemini-3.5-flash-lite", "gpt-6-luna"]
 )
 def test_every_provider_can_be_estimated(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], model: str

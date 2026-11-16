@@ -8,10 +8,10 @@ def test_input_and_output_have_their_own_prices() -> None:
     assert call_cost("claude-haiku-5-5", 1_500, 200) == pytest.approx(0.00025)
 
 
-def test_output_costs_five_times_input() -> None:
-    input_only = call_cost("claude-sonnet-5-5", 1_000, 0)
-    output_only = call_cost("claude-sonnet-5-5", 0, 1_000)
-    assert output_only == pytest.approx(5 * input_only)
+def test_output_costs_six_times_input_on_qwen() -> None:
+    input_only = call_cost("qwen3.8-27b", 1_000, 0)
+    output_only = call_cost("qwen3.8-27b", 0, 1_000)
+    assert output_only == pytest.approx(6 * input_only)
 
 
 def test_long_haiku_prompt_pays_the_higher_price() -> None:
@@ -21,8 +21,8 @@ def test_long_haiku_prompt_pays_the_higher_price() -> None:
     )
 
 
-def test_long_prompt_price_is_haiku_only() -> None:
-    assert call_cost("claude-opus-5-5", 200_000, 0) == pytest.approx(0.8)
+def test_a_model_without_a_long_prompt_price_keeps_its_own() -> None:
+    assert call_cost("qwen3.8-27b", 200_000, 0) == pytest.approx(0.1)
 
 
 def test_unknown_model_is_an_error() -> None:

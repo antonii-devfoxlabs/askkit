@@ -16,21 +16,10 @@ EMAIL = (
 )
 
 ROWS = [
-    "claude-fable-5-2           ~101 in   $0.002408 a call   $86.69 in all",
-    "claude-opus-5-5            ~101 in   $0.001204 a call   $43.34 in all",
-    "claude-sonnet-5-5          ~101 in   $0.000602 a call   $21.67 in all",
     "claude-haiku-5-5           ~101 in   $0.000030 a call   $1.08 in all",
-    "gemini-4-carbon             ~68 in   $0.001072 a call   $38.59 in all",
-    "gemini-4-argon              ~68 in   $0.001072 a call   $38.59 in all",
-    "gemini-4-hydrogen           ~68 in   $0.000402 a call   $14.47 in all",
     "gemini-3.5-flash-lite       ~68 in   $0.000120 a call   $4.33 in all",
-    "gpt-6-astra                 ~68 in   $0.002680 a call   $96.48 in all",
-    "gpt-6.1-sol                 ~68 in   $0.000536 a call   $19.30 in all",
-    "gpt-6.1-terra               ~68 in   $0.000268 a call   $9.65 in all",
     "gpt-6-luna                  ~68 in   $0.000027 a call   $0.96 in all",
-    "qwen3.8-max                  73 in   $0.000386 a call   $13.90 in all",
     "qwen3.8-27b                  73 in   $0.000157 a call   $5.63 in all",
-    "qwen3.8-flash                73 in   $0.000030 a call   $1.07 in all",
 ]
 
 
@@ -40,13 +29,13 @@ def test_every_model_is_compared_in_the_price_table_order() -> None:
 
 
 def test_each_model_counts_the_text_its_own_way() -> None:
-    # ~ marks an estimate; Qwen's models are counted by their tokenizer.
+    # ~ marks an estimate; qwen3.8-27b is counted by its own tokenizer.
     assert compare_models(EMAIL, 40, 36_000) == ROWS
 
 
 def test_a_call_that_does_not_fit_is_not_priced() -> None:
     rows = compare_models("a" * 2_699_973, 40, 1)
-    assert rows[0] == f"{'claude-fable-5-2':<22} does not fit"
+    assert rows[0] == f"{'claude-haiku-5-5':<22} does not fit"
 
 
 def test_compare_command_prints_the_text_then_every_model(
@@ -61,12 +50,3 @@ def test_compare_command_prints_the_text_then_every_model(
         "Calls:         36,000",
         *ROWS,
     ]
-
-
-def test_fable_can_be_estimated(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    email = tmp_path / "email.txt"
-    email.write_text("a" * 272, encoding="utf-8")
-    main(["estimate", str(email), "-m", "claude-fable-5-2", "--output", "40"])
-    assert "One call:      $0.002408" in capsys.readouterr().out.splitlines()

@@ -4,12 +4,9 @@ from pathlib import Path
 from tokenizers import Tokenizer
 
 # Models whose tokenizer is published, with the Hugging Face repository
-# that holds it: AskKit counts their tokens exactly. The three Qwen3.8
-# models share one tokenizer file, so one download counts all three.
+# that holds it: AskKit counts their tokens exactly.
 TOKENIZERS: dict[str, str] = {
-    "qwen3.8-max": "Qwen/Qwen3.8-27B",
     "qwen3.8-27b": "Qwen/Qwen3.8-27B",
-    "qwen3.8-flash": "Qwen/Qwen3.8-27B",
 }
 
 # The first count downloads a tokenizer and keeps a copy here, so every
