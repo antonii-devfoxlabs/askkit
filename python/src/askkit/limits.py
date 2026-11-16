@@ -40,10 +40,12 @@ LIMITS: dict[str, dict[str, int]] = {
         "max_input": 922_000,
         "max_output": 128_000,
     },
-    # Qwen Cloud rounds to thousands: 1M, 991K and 131K.
+    # Qwen Cloud rounds to thousands: 1M, 983K and 131K. 983K is the
+    # input limit with thinking, which Qwen3.8 does by default (991K
+    # without).
     "qwen3.8-27b": {
         "context_window": 1_000_000,
-        "max_input": 991_000,
+        "max_input": 983_000,
         "max_output": 131_000,
     },
 }

@@ -72,11 +72,11 @@ def main(arguments: list[str] | None = None) -> None:
         )
 
     one_call = call_cost(options.model, input_tokens, options.output)
-    print(f"Model:         {options.model}")
     if exact:
         how = "counted by the model's tokenizer"
     else:
         how = f"estimated from {len(text):,} characters"
+    print(f"Model:         {options.model}")
     print(f"Input tokens:  {input_tokens:,} ({how})")
     print(f"Output tokens: {options.output:,} (your guess)")
     print(f"Window:        {needed:,} of {window:,} tokens")
