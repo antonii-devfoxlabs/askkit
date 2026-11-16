@@ -4,8 +4,9 @@ AFTER_RETRIES = "after the SDK's retries"
 
 
 def error_message(error: anthropic.APIError) -> str:
-    # Most specific first: OverloadedError is a kind of
-    # InternalServerError, and APITimeoutError of APIConnectionError.
+    # Most specific first: the spend cap's error is a kind of
+    # RateLimitError, OverloadedError a kind of InternalServerError,
+    # and APITimeoutError a kind of APIConnectionError.
     if isinstance(error, anthropic.AuthenticationError):
         return "the API key was rejected (401); put a working key in .env"
     if isinstance(error, anthropic.PermissionDeniedError):
@@ -17,6 +18,9 @@ def error_message(error: anthropic.APIError) -> str:
         return f"the API rejected the request (400): {error.api_message}"
     if isinstance(error, anthropic.ContentTooLargeError):
         return "the request is too large (413); send less text"
+    if isinstance(error, anthropic.EnforcedSpendLimitReachedError):
+        # Waiting a minute will not help; the API names the date.
+        return f"the monthly spend cap was reached (429): {error.api_message}"
     if isinstance(error, anthropic.RateLimitError):
         return (
             f"the rate limit was reached (429) {AFTER_RETRIES};"

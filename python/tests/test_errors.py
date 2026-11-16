@@ -165,3 +165,13 @@ def test_ask_stops_with_the_message_instead_of_a_traceback(
     assert capsys.readouterr().out == ""
     # AskKit leaves the SDK's retries as they are.
     assert "max_retries" not in options_seen[0]
+
+
+def test_the_monthly_spend_cap_is_not_told_to_wait_a_minute() -> None:
+    body = error_body("rate_limit_error", "You will regain access on 1 Dec.")
+    body["error"]["details"] = {"error_code": "enforced_spend_limit_reached"}
+    error = raised(failing_client(429, body, []))
+    assert error_message(error) == (
+        "the monthly spend cap was reached (429): You will regain access"
+        " on 1 Dec."
+    )
