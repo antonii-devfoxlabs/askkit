@@ -5,6 +5,7 @@ description = "A command-line app built on a large language model."
 requires-python = ">=3.14"
 dependencies = [
     "anthropic>=2.8.0",
+    "pydantic>=2.14.3",
     "python-dotenv>=1.2.4",
     "tokenizers==0.23.3",
 ]

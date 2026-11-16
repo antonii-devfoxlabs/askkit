@@ -1,10 +1,10 @@
 import argparse
-import json
 import sys
 from pathlib import Path
 
 from anthropic import Anthropic, APIError
 from anthropic.types import Message
+from pydantic import ValidationError
 
 from askkit.ask import (
     EFFORTS,
@@ -24,7 +24,7 @@ from askkit.documents import (
     with_documents,
 )
 from askkit.errors import error_message
-from askkit.extract import extract_ticket
+from askkit.extract import Ticket, extract_ticket, ticket_error
 from askkit.limits import LIMITS
 from askkit.prices import PRICES
 from askkit.prompts import ASK_SYSTEM
@@ -113,8 +113,15 @@ def main(arguments: list[str] | None = None) -> None:
         # stop reason is read before the JSON is.
         warning = stop_warning(response)
         if warning is None:
-            ticket = json.loads(answer_text(response))
-            print(json.dumps(ticket, indent=2))
+            # Ticket checks every field again here, in our own code: the
+            # API holds the shape, but not the capitals of an allowed
+            # value, and nothing else reaches the warehouse unchecked.
+            try:
+                ticket = Ticket.model_validate_json(answer_text(response))
+            except ValidationError as error:
+                print_call(response, options.model)
+                sys.exit(f"askkit: {ticket_error(error)}")
+            print(ticket.model_dump_json(indent=2))
             print()
         print_call(response, options.model)
         if warning is not None:

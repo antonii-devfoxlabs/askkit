@@ -36,7 +36,8 @@ the request to quote, then `$question` last.
 
 The system prompt of `askkit extract`: what each field of the ticket
 means and which value says the email does not give it. The shape itself
-is `TICKET_SCHEMA` in `../extract.py`, sent beside the prompt.
+is the class `Ticket` in `../extract.py`, whose JSON schema is sent
+beside the prompt.
 
 - v1: the three fields, `order`, `problem` and `wish`, each with its
   meaning, and the way out of each: `null` for no order number, `not

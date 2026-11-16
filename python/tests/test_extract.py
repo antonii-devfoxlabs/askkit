@@ -4,10 +4,11 @@ from typing import Any
 
 import httpx2
 import pytest
-from anthropic import Anthropic
+from anthropic import Anthropic, transform_schema
+from pydantic import ValidationError
 
 from askkit.cli import main
-from askkit.extract import TICKET_SCHEMA, extract_ticket
+from askkit.extract import TICKET_SCHEMA, Ticket, extract_ticket, ticket_error
 from askkit.prompts import render
 
 EMAIL = (
@@ -106,8 +107,68 @@ def test_the_schema_is_one_the_api_accepts() -> None:
 def test_every_field_has_a_way_out() -> None:
     # Without one, an email with no order number forces a made-up number.
     properties = TICKET_SCHEMA["properties"]
-    assert "null" in properties["order"]["type"]
+    assert {"type": "null"} in properties["order"]["anyOf"]
     assert "not stated" in properties["wish"]["enum"]
+
+
+def test_the_schema_sent_is_made_from_ticket() -> None:
+    # One class for both sides: the schema the API holds the answer to
+    # and the check in our code cannot drift apart.
+    assert TICKET_SCHEMA == transform_schema(Ticket)
+    assert TICKET_SCHEMA["properties"]["order"]["anyOf"] == [
+        {"type": "integer"},
+        {"type": "null"},
+    ]
+    assert TICKET_SCHEMA["properties"]["problem"]["type"] == "string"
+    assert TICKET_SCHEMA["properties"]["wish"]["enum"] == [
+        "replacement",
+        "refund",
+        "not stated",
+    ]
+
+
+def test_ticket_reads_a_finished_answer() -> None:
+    ticket = Ticket.model_validate_json(
+        '{"order":4417,"problem":"mug broken","wish":"replacement"}'
+    )
+    assert ticket == Ticket(
+        order=4417, problem="mug broken", wish="replacement"
+    )
+
+
+def test_ticket_rejects_a_field_it_does_not_name() -> None:
+    with pytest.raises(ValidationError) as rejected:
+        Ticket.model_validate_json(
+            '{"order":4417,"problem":"mug broken","wish":"refund",'
+            '"urgent":true}'
+        )
+    assert ticket_error(rejected.value) == (
+        "the ticket does not match its model:"
+        " urgent: Extra inputs are not permitted, not True"
+    )
+
+
+def test_ticket_error_names_every_field_that_broke() -> None:
+    with pytest.raises(ValidationError) as rejected:
+        Ticket.model_validate_json(
+            '{"order":"Order 4417","problem":"mug broken",'
+            '"wish":"a replacement"}'
+        )
+    assert ticket_error(rejected.value) == (
+        "the ticket does not match its model:"
+        " order: Input should be a valid integer, unable to parse string"
+        " as an integer, not 'Order 4417';"
+        " wish: Input should be 'replacement', 'refund' or 'not stated',"
+        " not 'a replacement'"
+    )
+
+
+def test_ticket_error_does_not_print_the_whole_answer_for_a_gap() -> None:
+    with pytest.raises(ValidationError) as rejected:
+        Ticket.model_validate_json('{"order":4417,"problem":"mug broken"}')
+    assert ticket_error(rejected.value) == (
+        "the ticket does not match its model: wish: Field required"
+    )
 
 
 def test_extract_prints_the_ticket_and_the_call(
@@ -196,3 +257,40 @@ def test_extract_takes_max_tokens(
     main(["extract", str(email_file), "--max-tokens", "300"])
     assert sent[0]["model"] == "claude-haiku-5-5"
     assert sent[0]["max_tokens"] == 300
+
+
+def test_an_answer_that_breaks_ticket_is_stopped(
+    email_file: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # The API holds the shape but not the capitals of an allowed value,
+    # so "not Stated" can come back with end_turn. Printed as it was, it
+    # reached the warehouse as a wish no code knows.
+    text = '{"order":null,"problem":"lamp flickers","wish":"not Stated"}'
+    use_fake_client(monkeypatch, [], with_answer(text, "end_turn"))
+    with pytest.raises(SystemExit) as stopped:
+        main(["extract", str(email_file)])
+    assert stopped.value.code == (
+        "askkit: the ticket does not match its model:"
+        " wish: Input should be 'replacement', 'refund' or 'not stated',"
+        " not 'not Stated'"
+    )
+    assert capsys.readouterr().out.splitlines() == [
+        "Model:         claude-haiku-5-5",
+        "Tokens:        236 in, 31 out",
+        "Cost:          $0.000039",
+        "Stop reason:   end_turn",
+    ]
+
+
+def test_an_order_number_written_as_text_comes_out_a_number(
+    email_file: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # Pydantic's default (lax) mode turns text of digits into an int.
+    text = '{"order":"4417","problem":"mug broken","wish":"replacement"}'
+    use_fake_client(monkeypatch, [], with_answer(text, "end_turn"))
+    main(["extract", str(email_file)])
+    assert capsys.readouterr().out.splitlines()[1] == '  "order": 4417,'

@@ -102,22 +102,28 @@ for, exits the same way, unless it is "I don't know": there would be
 nothing to check it against.
 
 `askkit extract` turns a customer's email into a support ticket, as
-JSON. It sends the email with the template `extract_ticket` as the
-system prompt and `TICKET_SCHEMA` (in `python/src/askkit/extract.py`), a
-JSON Schema the API holds the answer to while the model writes it:
+JSON. The ticket is one class, `Ticket` in `python/src/askkit/extract.py`,
+a Pydantic model with three fields: `order` (a whole number, or `null`
+when the email gives none), `problem` and `wish` (`replacement`,
+`refund` or `not stated`), and nothing else. `extract` sends the email
+with the template `extract_ticket` as the system prompt and the JSON
+Schema made from `Ticket` (`TICKET_SCHEMA`), which the API holds the
+answer to while the model writes it:
 
 ```bash
 cd python
 uv run askkit extract email.txt
 ```
 
-It prints the ticket, its three fields `order` (a whole number, or
-`null` when the email gives none), `problem` and `wish` (`replacement`,
-`refund` or `not stated`), then the same lines as `ask`. It reads the
-stop reason before the JSON: an answer cut off at `--max-tokens` (1000
-by default) or declined may not match the schema, so it is not parsed,
-and `extract` says why and exits with exit code 1. The ticket's values
-are not checked yet: Module 4 adds that.
+It prints the ticket, then the same lines as `ask`. It reads the stop
+reason first: an answer cut off at `--max-tokens` (1000 by default) or
+declined may not match the schema, so it is not read, and `extract`
+says why and exits with exit code 1. A finished answer is checked
+against `Ticket` again in AskKit's own code, because the API holds the
+shape but not, for example, the capitals of an allowed value: an answer
+that does not match names each field that broke the contract and exits
+with exit code 1. Whether the order exists is not checked yet: Module 4
+adds that.
 
 ## Prompts
 
