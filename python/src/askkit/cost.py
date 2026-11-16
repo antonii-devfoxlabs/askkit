@@ -10,3 +10,8 @@ def call_cost(model: str, input_tokens: int, output_tokens: int) -> float:
         input_tokens * prices["input"] + output_tokens * prices["output"]
     )
     return dollars / 1_000_000
+
+
+def error_cost(calls: int, error_rate: float, cost_per_error: float) -> float:
+    # What the wrong answers cost: someone's time, a lost sale, a refund.
+    return calls * error_rate * cost_per_error

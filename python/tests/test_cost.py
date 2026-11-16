@@ -1,6 +1,6 @@
 import pytest
 
-from askkit.cost import call_cost
+from askkit.cost import call_cost, error_cost
 
 
 def test_input_and_output_have_their_own_prices() -> None:
@@ -28,3 +28,12 @@ def test_long_prompt_price_is_haiku_only() -> None:
 def test_unknown_model_is_an_error() -> None:
     with pytest.raises(KeyError):
         call_cost("claude-haiku-5.5", 100, 100)
+
+
+def test_error_cost_is_the_wrong_calls_times_the_price_of_one() -> None:
+    # 3 in 100 of 36,000 calls wrong, $0.50 each
+    assert error_cost(36_000, 0.03, 0.50) == pytest.approx(540.0)
+
+
+def test_no_errors_cost_nothing() -> None:
+    assert error_cost(36_000, 0.0, 0.50) == 0.0
