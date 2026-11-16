@@ -64,6 +64,11 @@ the answer ended. When the answer is not whole (cut off at
 `ask` says so and exits with exit code 1. Of a declined answer it prints
 no part, as Anthropic advises, and names the category when the API
 gives one.
+When the call itself fails (a rejected key, a rate limit, Anthropic's
+servers overloaded, no connection), `ask` prints one short message
+from `python/src/askkit/errors.py` saying what happened and what to do,
+instead of a traceback, and exits with exit code 1. The SDK has already
+sent a busy or failed request twice more by then.
 
 Prices live in `python/src/askkit/prices.py` and the limits in
 `python/src/askkit/limits.py`, each with its sources and the date they

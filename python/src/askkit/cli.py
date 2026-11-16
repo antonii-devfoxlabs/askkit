@@ -2,12 +2,13 @@ import argparse
 import sys
 from pathlib import Path
 
-from anthropic import Anthropic
+from anthropic import Anthropic, APIError
 
 from askkit.ask import MODELS, answer_text, ask, stop_warning
 from askkit.compare import compare_models
 from askkit.config import KEY_NAME, load_api_key, masked
 from askkit.cost import call_cost, error_cost
+from askkit.errors import error_message
 from askkit.limits import LIMITS
 from askkit.prices import PRICES
 from askkit.prompts import ASK_SYSTEM
@@ -63,13 +64,16 @@ def main(arguments: list[str] | None = None) -> None:
         if options.system_file is not None:
             system = options.system_file.read_text(encoding="utf-8").strip()
         client = Anthropic(api_key=require_api_key())
-        response = ask(
-            client,
-            options.question,
-            options.model,
-            options.max_tokens,
-            system,
-        )
+        try:
+            response = ask(
+                client,
+                options.question,
+                options.model,
+                options.max_tokens,
+                system,
+            )
+        except APIError as error:
+            sys.exit(f"askkit: {error_message(error)}")
         usage = response.usage
         cost = call_cost(
             options.model, usage.input_tokens, usage.output_tokens
