@@ -12,7 +12,7 @@ TEMPLATES = Path(__file__).parent / "templates"
 IN_USE = {
     "ask_system": 2,
     "quote_request": 2,
-    "extract_ticket": 1,
+    "extract_ticket": 2,
     "retry_ticket": 1,
 }
 

@@ -640,3 +640,91 @@ def test_another_customers_order_is_asked_for_again(
     )
     main(["extract", str(maria), "--orders", "orders.json"])
     assert len(sent) == 2
+
+
+# Maria writes again, as a reply to the shop's last email, which was about
+# another of her orders. The order she means is in the P.S.; the quoted
+# reply below it names the vase's order, 7302, a real order of the shop.
+REPLY = """Hi again,
+
+My mug came today in pieces, and the box was torn as well. I'd like
+a new one, or my money back if you have run out.
+
+Thanks,
+Maria
+Tel. 0161 496 0731
+
+P.S. The order number is 4417.
+
+On 3 Nov 2026, at 10:14, the shop wrote:
+> Your return of order 7302 is accepted. Please send the vase back
+> within 14 days.
+"""
+# The ticket the reply asks for: both things that went wrong, her first
+# wish, and the order in the P.S.
+REPLY_RIGHT = (
+    '{"order":4417,"problem":"mug broken, box torn","wish":"replacement"}'
+)
+# Valid, and the vase's order from the quoted reply.
+QUOTED = '{"order":7302,"problem":"mug broken","wish":"replacement"}'
+
+
+@pytest.fixture
+def reply(maria: Path) -> Path:
+    maria.write_text(REPLY, encoding="utf-8")
+    return maria
+
+
+def test_the_quoted_reply_is_not_sent_to_the_model(
+    reply: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sent: list[dict[str, Any]] = []
+    use_fake_answers(
+        monkeypatch, sent, [with_answer(REPLY_RIGHT, "end_turn")]
+    )
+    main(["extract", str(reply), "--orders", "orders.json"])
+    email = sent[0]["messages"][0]["content"]
+    assert "7302" not in email
+    assert "the shop wrote" not in email
+    assert email.endswith("P.S. The order number is 4417.")
+
+
+def test_an_order_only_in_the_quoted_reply_is_asked_for_again(
+    reply: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # It used to be printed as Maria's ticket, with exit code 0: 7302 is a
+    # number in the email file and an order the shop has, so both rules
+    # passed it.
+    sent: list[dict[str, Any]] = []
+    use_fake_answers(
+        monkeypatch,
+        sent,
+        [
+            with_answer(QUOTED, "end_turn"),
+            with_answer(REPLY_RIGHT, "end_turn"),
+        ],
+    )
+    main(["extract", str(reply), "--orders", "orders.json"])
+    out = capsys.readouterr().out.splitlines()
+    assert out[1] == '  "order": 4417,'
+    assert out[-2:] == [
+        "Left out:      3 quoted lines",
+        "Asked again:   order: 7302 is not a number in the email",
+    ]
+    assert len(sent) == 2
+
+
+def test_an_email_with_nothing_quoted_says_nothing_was_left_out(
+    maria: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    sent: list[dict[str, Any]] = []
+    use_fake_answers(monkeypatch, sent, [with_answer(RIGHT, "end_turn")])
+    main(["extract", str(maria)])
+    assert (
+        capsys.readouterr().out.splitlines()[-1] == "Stop reason:   end_turn"
+    )
+    assert sent[0]["messages"][0]["content"] == EMAIL

@@ -42,6 +42,12 @@ beside the prompt.
 - v1: the three fields, `order`, `problem` and `wish`, each with its
   meaning, and the way out of each: `null` for no order number, `not
   stated` for no wish.
+- v2: for emails that hold more than the ticket needs, such as a reply
+  with a phone number, a P.S. and an earlier order mentioned in passing.
+  v1 did not say which number is the order, what to write when two
+  things went wrong, or which wish counts when the email asks for two.
+  v2 says all three: the order this email is about, every thing that
+  went wrong with the most serious first, and the wish asked for first.
 
 ## retry_ticket
 

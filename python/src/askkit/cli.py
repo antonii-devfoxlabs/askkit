@@ -14,6 +14,7 @@ from askkit.ask import (
     stop_warning,
     thinking_tokens,
 )
+from askkit.clean import clean_email
 from askkit.compare import compare_models
 from askkit.config import KEY_NAME, load_api_key, masked
 from askkit.cost import call_cost, error_cost
@@ -125,13 +126,18 @@ def main(arguments: list[str] | None = None) -> None:
                 f"askkit: --retries {options.retries} is below zero;"
                 " give 0 to never ask again"
             )
-        email = options.file.read_text(encoding="utf-8")
+        # The model reads the cleaned email, and the rules check against
+        # it: a number only in a quoted earlier email is not this email's.
+        raw = options.file.read_text(encoding="utf-8")
+        email, left_out = clean_email(raw)
         orders: set[int] | None = None
         if options.orders is not None:
             orders = load_orders(options.orders)
         client = Anthropic(api_key=require_api_key())
         responses: list[Message] = []
         notes: list[str] = []
+        if left_out:
+            notes.append(f"Left out:      {left_out} quoted lines")
         answer = ""
         faults = ""
         rejection = ""

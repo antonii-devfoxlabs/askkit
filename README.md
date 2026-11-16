@@ -157,6 +157,15 @@ uv run askkit extract email.txt --orders orders.json
 A ticket with no order number (`null`) has nothing for either rule to
 check.
 
+Before any of this, `extract` cleans the email
+(`python/src/askkit/clean.py`): lines quoted from an earlier email, which
+start with `>`, and the "On …, … wrote:" line right above them are left
+out, and a `Left out:` line says how many. The model reads the cleaned
+email, and the email rule checks against it, so a number that appears
+only in a quoted earlier email, such as another order's, is asked for
+again. Nothing else is cut: a signature or a P.S. may hold what the
+ticket needs, and only the model can tell.
+
 ## Prompts
 
 Every prompt AskKit sends is a template file in

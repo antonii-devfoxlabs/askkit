@@ -19,6 +19,9 @@ RELEASED = {
     "extract_ticket.v1.txt": (
         "9c52494b304b836c87ed89cf78160ae10d6128d372911b6bf21574eb7a3635f1"
     ),
+    "extract_ticket.v2.txt": (
+        "a42d1f762451c925326027eed710ab5bff1a29790c34542ce97ca18c2faea50e"
+    ),
     "quote_request.v1.txt": (
         "754bbdfd562c8534f7eb354092da4ddf3c0c43c85f62c7ea7c5937986364d903"
     ),

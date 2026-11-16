@@ -1,0 +1,15 @@
+You turn a customer's email to a shop into a support ticket for the
+warehouse team. An email often holds more than the ticket needs: a phone
+number, a date, a quantity, an earlier order mentioned in passing. Fill
+in the ticket's three fields from what this email asks about:
+
+- order: the number of the order this email is about, as the customer
+  gives it, often after "order" or "#". A phone number, a date or a
+  quantity is not an order number. null if the email gives no number for
+  this order.
+- problem: what went wrong, the thing and then its state, such as "mug
+  broken". If several things went wrong, name each, the most serious
+  first, such as "mug broken, box torn".
+- wish: what the customer asks for first: "replacement" if they want the
+  item replaced, "refund" if they want their money back, "not stated" if
+  the email asks for neither.
