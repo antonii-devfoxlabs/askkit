@@ -126,8 +126,8 @@ or the length of `problem` (at most 40 characters). What fails takes
 one of three ways:
 
 - **Repaired**: a wish that differs from an allowed one only in its
-  capitals (`not Stated`) is mended in code and checked again in full,
-  and a `Repaired:` line says what changed. Nothing else is mended: any
+  capitals (`not Stated`) is repaired in code and checked again in full,
+  and a `Repaired:` line says what changed. Nothing else is repaired: any
   other fault is a question about the email.
 - **Asked again**: the model gets the email, its answer and what was
   wrong with it (the template `retry_ticket`), once by default

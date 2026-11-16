@@ -29,7 +29,7 @@ from askkit.extract import (
     extract_ticket,
     retry_ticket,
     ticket_error,
-    ticket_problems,
+    ticket_faults,
 )
 from askkit.limits import LIMITS
 from askkit.prices import PRICES
@@ -128,7 +128,7 @@ def main(arguments: list[str] | None = None) -> None:
         responses: list[Message] = []
         notes: list[str] = []
         answer = ""
-        problems = ""
+        faults = ""
         rejection = ""
         for attempt in range(options.retries + 1):
             try:
@@ -137,12 +137,12 @@ def main(arguments: list[str] | None = None) -> None:
                         client, email, options.model, options.max_tokens
                     )
                 else:
-                    notes.append(f"Asked again:   {problems}")
+                    notes.append(f"Asked again:   {faults}")
                     response = retry_ticket(
                         client,
                         email,
                         answer,
-                        problems,
+                        faults,
                         options.model,
                         options.max_tokens,
                     )
@@ -164,7 +164,7 @@ def main(arguments: list[str] | None = None) -> None:
             try:
                 ticket, change = check_ticket(answer)
             except ValidationError as error:
-                problems = ticket_problems(error)
+                faults = ticket_faults(error)
                 rejection = ticket_error(error)
                 continue
             if change is not None:

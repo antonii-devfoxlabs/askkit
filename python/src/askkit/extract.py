@@ -54,7 +54,7 @@ def retry_ticket(
     client: Anthropic,
     email: str,
     answer: str,
-    problems: str,
+    faults: str,
     model: str,
     max_tokens: int,
 ) -> Message:
@@ -71,7 +71,7 @@ def retry_ticket(
             {"role": "assistant", "content": answer},
             {
                 "role": "user",
-                "content": render("retry_ticket", {"problems": problems}),
+                "content": render("retry_ticket", {"faults": faults}),
             },
         ],
         output_config={
@@ -81,11 +81,11 @@ def retry_ticket(
 
 
 def repair_ticket(text: str) -> tuple[str, str] | None:
-    # Mends only what has one right reading: an allowed wish written with
+    # Repairs only what has one right reading: an allowed wish written with
     # other capitals, which Anthropic's documentation says the API does
     # not hold ("not Stated" for "not stated"). Anything else is a
     # question about the email, and only the model can answer it again.
-    # Returns the mended answer and what changed, or None.
+    # Returns the repaired answer and what changed, or None.
     try:
         data = json.loads(text)
     except json.JSONDecodeError:
@@ -102,8 +102,8 @@ def repair_ticket(text: str) -> tuple[str, str] | None:
 
 
 def check_ticket(text: str) -> tuple[Ticket, str | None]:
-    # The answer as a Ticket, and what repair_ticket mended, if anything.
-    # A mended answer is checked again in full: the repair touches one
+    # The answer as a Ticket, and what repair_ticket changed, if anything.
+    # A repaired answer is checked again in full: the repair touches one
     # field, and the others still have to pass.
     try:
         return Ticket.model_validate_json(text), None
@@ -111,16 +111,16 @@ def check_ticket(text: str) -> tuple[Ticket, str | None]:
         repaired = repair_ticket(text)
         if repaired is None:
             raise
-    mended, change = repaired
-    return Ticket.model_validate_json(mended), change
+    repaired_text, change = repaired
+    return Ticket.model_validate_json(repaired_text), change
 
 
-def ticket_problems(error: ValidationError) -> str:
+def ticket_faults(error: ValidationError) -> str:
     # One part per field that broke the contract, so the message says
     # what came back as well as what Ticket allows. Ticket has no fields
     # inside fields, so a problem's place ("loc") is one field name, or
     # empty when the whole answer is not a ticket.
-    problems: list[str] = []
+    faults: list[str] = []
     for problem in error.errors():
         field = "answer"
         if problem["loc"]:
@@ -128,9 +128,9 @@ def ticket_problems(error: ValidationError) -> str:
         line = f"{field}: {problem['msg']}"
         if problem["type"] != "missing":
             line += f", not {problem['input']!r}"
-        problems.append(line)
-    return "; ".join(problems)
+        faults.append(line)
+    return "; ".join(faults)
 
 
 def ticket_error(error: ValidationError) -> str:
-    return "the ticket does not match its model: " + ticket_problems(error)
+    return "the ticket does not match its model: " + ticket_faults(error)

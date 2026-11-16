@@ -17,7 +17,7 @@ from askkit.extract import (
     repair_ticket,
     retry_ticket,
     ticket_error,
-    ticket_problems,
+    ticket_faults,
 )
 from askkit.prompts import render
 
@@ -296,7 +296,7 @@ def test_a_wish_in_other_capitals_is_repaired(
 ) -> None:
     # The API holds the shape but not the capitals of an allowed value,
     # so "not Stated" can come back with end_turn. It has one right
-    # reading, so it is mended in code, for free, and said so.
+    # reading, so it is repaired in code, for free, and said so.
     sent: list[dict[str, Any]] = []
     text = '{"order":null,"problem":"lamp flickers","wish":"not Stated"}'
     use_fake_client(monkeypatch, sent, with_answer(text, "end_turn"))
@@ -347,7 +347,7 @@ TOO_LONG = (
     '"wish":"not stated"}'
 )
 SHORT = '{"order":null,"problem":"lamp flickers","wish":"not stated"}'
-TOO_LONG_PROBLEM = (
+TOO_LONG_FAULT = (
     "problem: String should have at most 40 characters,"
     " not 'desk lamp flickers when it is switched on'"
 )
@@ -367,10 +367,10 @@ def test_the_problem_length_is_checked_here_not_by_the_api() -> None:
     assert len(LONG) == 41
     with pytest.raises(ValidationError) as rejected:
         Ticket.model_validate_json(TOO_LONG)
-    assert ticket_problems(rejected.value) == TOO_LONG_PROBLEM
+    assert ticket_faults(rejected.value) == TOO_LONG_FAULT
 
 
-def test_repair_mends_only_the_capitals_of_an_allowed_wish() -> None:
+def test_repair_changes_only_the_capitals_of_an_allowed_wish() -> None:
     assert repair_ticket(
         '{"order":4417,"problem":"mug broken","wish":"Refund"}'
     ) == (
@@ -401,16 +401,16 @@ def test_a_repaired_answer_is_checked_again_in_full() -> None:
     text = TOO_LONG.replace('"not stated"', '"not Stated"')
     with pytest.raises(ValidationError) as rejected:
         check_ticket(text)
-    assert ticket_problems(rejected.value) == TOO_LONG_PROBLEM
+    assert ticket_faults(rejected.value) == TOO_LONG_FAULT
 
 
-def test_check_ticket_says_nothing_was_mended_for_a_good_answer() -> None:
+def test_check_ticket_says_nothing_was_repaired_for_a_good_answer() -> None:
     ticket, change = check_ticket(SHORT)
     assert ticket.problem == "lamp flickers"
     assert change is None
 
 
-def test_retry_ticket_sends_the_answer_and_its_problems() -> None:
+def test_retry_ticket_sends_the_answer_and_its_faults() -> None:
     sent: list[dict[str, Any]] = []
 
     def answer(request: httpx2.Request) -> httpx2.Response:
@@ -422,21 +422,21 @@ def test_retry_ticket_sends_the_answer_and_its_problems() -> None:
         http_client=httpx2.Client(transport=httpx2.MockTransport(answer)),
     )
     retry_ticket(
-        client, EMAIL, TOO_LONG, TOO_LONG_PROBLEM, "claude-haiku-5-5", 1000
+        client, EMAIL, TOO_LONG, TOO_LONG_FAULT, "claude-haiku-5-5", 1000
     )
     assert sent[0]["messages"] == [
         {"role": "user", "content": EMAIL},
         {"role": "assistant", "content": TOO_LONG},
         {
             "role": "user",
-            "content": render("retry_ticket", {"problems": TOO_LONG_PROBLEM}),
+            "content": render("retry_ticket", {"faults": TOO_LONG_FAULT}),
         },
     ]
     assert sent[0]["system"] == render("extract_ticket", {})
     assert sent[0]["output_config"]["format"]["schema"] == TICKET_SCHEMA
 
 
-def test_a_broken_ticket_is_asked_for_again_with_its_problems(
+def test_a_broken_ticket_is_asked_for_again_with_its_faults(
     email_file: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -459,7 +459,7 @@ def test_a_broken_ticket_is_asked_for_again_with_its_problems(
         "Tokens:        548 in, 60 out",
         "Cost:          $0.000085",
         "Stop reason:   end_turn",
-        f"Asked again:   {TOO_LONG_PROBLEM}",
+        f"Asked again:   {TOO_LONG_FAULT}",
     ]
     assert len(sent) == 2
     assert sent[1]["messages"][1] == {
@@ -481,7 +481,7 @@ def test_a_ticket_broken_twice_goes_to_a_person(
     with pytest.raises(SystemExit) as stopped:
         main(["extract", str(email_file)])
     assert stopped.value.code == (
-        f"askkit: the ticket does not match its model: {TOO_LONG_PROBLEM}"
+        f"askkit: the ticket does not match its model: {TOO_LONG_FAULT}"
     )
     assert len(sent) == 2
     assert capsys.readouterr().out.splitlines() == [
@@ -489,7 +489,7 @@ def test_a_ticket_broken_twice_goes_to_a_person(
         "Tokens:        472 in, 62 out",
         "Cost:          $0.000078",
         "Stop reason:   end_turn",
-        f"Asked again:   {TOO_LONG_PROBLEM}",
+        f"Asked again:   {TOO_LONG_FAULT}",
     ]
 
 

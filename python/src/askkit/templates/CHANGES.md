@@ -46,7 +46,7 @@ beside the prompt.
 ## retry_ticket
 
 The user message `askkit extract` sends when a ticket broke its contract
-and is asked for again: `$problems` is what `Ticket` found wrong, one part
+and is asked for again: `$faults` is what `Ticket` found wrong, one part
 per field. It follows the email and the answer that failed.
 
 - v1: names what was wrong and asks for the ticket again, as the system

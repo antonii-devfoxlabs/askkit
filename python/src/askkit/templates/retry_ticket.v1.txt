@@ -1,4 +1,4 @@
-That ticket could not be used: $problems.
+That ticket could not be used: $faults.
 
 Write the ticket for the same email again, with every field as the system
 prompt describes it.
