@@ -55,6 +55,7 @@ from askkit.rubric import (
     load_rubric,
 )
 from askkit.rules import email_fault, load_orders, order_fault
+from askkit.runs import diff_lines, load_results
 from askkit.tokens import count_tokens
 
 
@@ -166,6 +167,11 @@ def main(arguments: list[str] | None = None) -> None:
     grade_command.add_argument("--cases", type=Path, required=True)
     grade_command.add_argument("--rubric", type=Path, required=True)
     grade_command.add_argument("--out", type=Path, required=True)
+    diff_command = commands.add_parser(
+        "diff", help="compare two results files of the eval, case by case"
+    )
+    diff_command.add_argument("old", type=Path)
+    diff_command.add_argument("new", type=Path)
     options = parser.parse_args(arguments)
 
     if options.command == "key":
@@ -192,6 +198,18 @@ def main(arguments: list[str] | None = None) -> None:
         print(f"{'Total':<14}{len(main_cases):>5}{len(held_out):>10}")
         if empty:
             sys.exit("askkit: no case in one part for " + ", ".join(empty))
+        return
+
+    if options.command == "diff":
+        # No model call: two files the eval wrote, read side by side.
+        try:
+            old = load_results(options.old)
+            new = load_results(options.new)
+            lines = diff_lines(options.old.name, old, options.new.name, new)
+        except (OSError, ValueError) as error:
+            sys.exit(f"askkit: {error}")
+        for line in lines:
+            print(line)
         return
 
     if options.command == "answer":

@@ -39,14 +39,20 @@ def case_faults(answer: str, case: Case) -> list[str]:
 
 
 def run_case(
-    client: Anthropic, folder: Path, case: Case, model: str, max_tokens: int
+    client: Anthropic,
+    folder: Path,
+    case: Case,
+    model: str,
+    max_tokens: int,
+    version: int | None = None,
 ) -> list[str]:
     # One case of the golden set through the steps extract takes on its
     # first call: the cleaned email, the prompt in use, the stop reason
     # read before the JSON. No retry: the eval scores the prompt, and a
-    # second call would hide the first answer's faults.
+    # second call would hide the first answer's faults. version is the
+    # prompt file to score, IN_USE's when it is None.
     email, _ = clean_email(email_text(folder, case))
-    response = extract_ticket(client, email, model, max_tokens)
+    response = extract_ticket(client, email, model, max_tokens, version)
     warning = stop_warning(response, "turn this email into a ticket")
     if warning is not None:
         return [f"stop: {warning}"]

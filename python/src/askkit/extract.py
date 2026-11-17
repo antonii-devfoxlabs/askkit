@@ -36,12 +36,18 @@ TICKET_SCHEMA: dict[str, Any] = transform_schema(Ticket)
 
 
 def extract_ticket(
-    client: Anthropic, email: str, model: str, max_tokens: int
+    client: Anthropic,
+    email: str,
+    model: str,
+    max_tokens: int,
+    version: int | None = None,
 ) -> Message:
+    # version picks the prompt file; None sends the one in IN_USE. The eval
+    # passes another one to score a version before it is put in use.
     return client.messages.create(
         model=model,
         max_tokens=max_tokens,
-        system=render("extract_ticket", {}),
+        system=render("extract_ticket", {}, version),
         messages=[{"role": "user", "content": email}],
         output_config={
             "format": {"type": "json_schema", "schema": TICKET_SCHEMA}

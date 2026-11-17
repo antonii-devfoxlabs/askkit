@@ -305,6 +305,25 @@ run `tests/` only, so they never call the model; the eval is apart
 because it costs money, needs a key and scores a model that can answer
 differently from one run to the next.
 
+### Comparing two versions
+
+`--prompt-version 3` scores the file `extract_ticket.v3.txt` instead of
+the version in `IN_USE`, and `--model claude-sonnet-5-5` another model
+(Claude Haiku 5.5 by default). `--results v3.json` adds the run's faults
+to a results file; run the same command again and the file holds two
+runs, so a case that passes one and fails the other shows as the model's
+chance, not the version. A file takes runs of one model and one prompt
+version over the same cases only, and never from `--replay`, which
+repeats one run. `askkit diff v2.json v3.json` then reads two files side
+by side, with no call to the model: every case that failed a run of
+either, how many of its runs passed, and `fixed` or `broke` only when
+every run of both agrees (`unsure` when one version's runs disagree),
+then each run's score. Change one thing between the two files, and put
+a version in `IN_USE` only when the diff shows what it fixed and that
+it broke nothing; then run both on the held-out part once (`-m
+held_out`, a results file of its own). `src/askkit/runs.py` holds the
+results file and the diff.
+
 ## Grading answers by hand
 
 An answer of `askkit ask` has no field to compare: it can be right in
@@ -388,7 +407,8 @@ test, as the thinking count of `ask` did.
   - `notebooks/`: notebooks for exploring, saved without outputs.
   - `evals/`: the golden sets, a main and a held-out part each, the
     ask set's documents and rubric, and the eval that runs the extract
-    set through the model (`uv run pytest evals`).
+    set through the model (`uv run pytest evals`), with the version and
+    the model to score chosen on the command line.
   - `tests/`: pytest tests. They never call a model's API: the real SDK
     sends each call to a fake transport (`httpx2.MockTransport`) that
     answers with a response written in the shape of the API's.

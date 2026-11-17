@@ -48,6 +48,11 @@ beside the prompt.
   things went wrong, or which wish counts when the email asks for two.
   v2 says all three: the order this email is about, every thing that
   went wrong with the most serious first, and the wish asked for first.
+- v3: the problem under 40 characters, the length `Ticket` holds. v2's
+  "name each" made one problem 43 characters long for an email where three
+  things went wrong, and `Ticket` rejected the ticket. Not in use yet: it
+  goes in when a comparison with v2 on the golden set shows that it fixes
+  more than it breaks (see "Comparing two versions" in the README).
 
 ## retry_ticket
 
