@@ -10,7 +10,7 @@ from askkit.cli import main
 from askkit.loop import requests_line
 
 QUESTION = (
-    "What is today's date, and what do 1,284 calls at $0.000137 each cost?"
+    "What is the date today, and what do 1,284 calls at $0.000137 each cost?"
 )
 
 
