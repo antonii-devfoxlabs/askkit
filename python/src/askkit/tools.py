@@ -7,6 +7,8 @@ from anthropic.types import (
     ToolUseBlock,
 )
 
+from askkit.fetch import FETCH, fetch_page
+
 # A definition is all the model ever learns about a tool: the name it
 # asks for it by, a description of what it does and when to call it,
 # and the schema of its input. Every AskKit tool is strict, so the API
@@ -66,7 +68,7 @@ CALCULATOR: ToolParam = {
     "strict": True,
 }
 
-TOOLS: list[ToolParam] = [CLOCK, CALCULATOR]
+TOOLS: list[ToolParam] = [CLOCK, CALCULATOR, FETCH]
 
 # An error result is all the model learns about a failure, so each one
 # says what went wrong and what to do next: call again with a fixed
@@ -159,7 +161,7 @@ def error_result(call: ToolUseBlock, message: str) -> ToolResultBlockParam:
     }
 
 
-def tool_output(call: ToolUseBlock) -> str:
+def tool_output(call: ToolUseBlock, sites: tuple[str, ...]) -> str:
     # Runs the tool the model asked for, after checking the request.
     # Raises ValueError, saying what is wrong and what to do instead, for
     # a request it cannot run.
@@ -172,6 +174,8 @@ def tool_output(call: ToolUseBlock) -> str:
         return current_time()
     if call.name == CALCULATOR["name"]:
         return calculate(call.input)
+    if call.name == FETCH["name"]:
+        return fetch_page(call.input, sites)
     names = []
     for tool in TOOLS:
         names.append(tool["name"])
@@ -181,12 +185,14 @@ def tool_output(call: ToolUseBlock) -> str:
     )
 
 
-def run_tool(call: ToolUseBlock) -> ToolResultBlockParam:
+def run_tool(
+    call: ToolUseBlock, sites: tuple[str, ...] = ()
+) -> ToolResultBlockParam:
     # The model only asks. Whatever happens while a request runs, it gets
     # a result: the tool's output, or an error result the model can act
     # on. Nothing a tool raises stops AskKit.
     try:
-        content = tool_output(call)
+        content = tool_output(call, sites)
     except ValueError as error:
         return error_result(call, str(error))
     except Exception as error:

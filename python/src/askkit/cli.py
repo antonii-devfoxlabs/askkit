@@ -207,6 +207,9 @@ def main(arguments: list[str] | None = None) -> None:
     ask_command.add_argument(
         "--deny", choices=tool_names, action="append", default=[]
     )
+    ask_command.add_argument(
+        "--allow-site", action="append", default=[], metavar="HOST"
+    )
     chat_command = commands.add_parser(
         "chat", help="chat with a model until you type /exit"
     )
@@ -599,6 +602,11 @@ def main(arguments: list[str] | None = None) -> None:
         if options.history is not None:
             history = require_history(options.history)
         permissions = permissions_for(options.confirm, options.deny)
+        sites = tuple(options.allow_site)
+        if not sites:
+            # With no site allowed, every fetch would be refused, so the
+            # model is not offered the tool at all.
+            permissions["fetch_page"] = "deny"
         tools = offered(TOOLS, permissions)
         client = Anthropic(api_key=require_api_key())
         try:
@@ -613,6 +621,7 @@ def main(arguments: list[str] | None = None) -> None:
                 tools or None,
                 permissions,
                 confirm_on_terminal,
+                sites,
             )
         except APIError as error:
             sys.exit(f"askkit: {error_message(error)}")

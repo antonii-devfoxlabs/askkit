@@ -18,6 +18,10 @@ from askkit.tools import tool_calls
 # keeps asking would cost more with every round and never end.
 MAX_ROUNDS = 5
 
+# A result longer than this is shown as its size: a page would fill the
+# terminal.
+LONG_RESULT = 200
+
 TOO_MANY_ROUNDS = (
     f"the model still asked for a tool after {MAX_ROUNDS} rounds;"
     " nothing more ran"
@@ -45,6 +49,7 @@ def tool_loop(
     tools: list[ToolParam] | None,
     permissions: dict[str, Permission],
     confirm: Callable[[str], bool],
+    sites: tuple[str, ...] = (),
 ) -> Answered:
     # Call, run every request, send the results back, and call again,
     # until the model answers instead of asking. Every request of every
@@ -74,12 +79,15 @@ def tool_loop(
         rounds += 1
         results: list[ToolResultBlockParam] = []
         for call in tool_calls(reply):
-            result = run_permitted(call, permissions, confirm)
+            result = run_permitted(call, permissions, confirm, sites)
             if result.get("is_error"):
                 # So you can tell a refusal or a failure from a result.
                 print(f"Tool error:    {call.name}: {result['content']}")
             else:
-                print(f"Tool:          {call.name}: {result['content']}")
+                text = str(result["content"])
+                if len(text) > LONG_RESULT:
+                    text = f"{len(text):,} characters"
+                print(f"Tool:          {call.name}: {text}")
             results.append(result)
         # The next call carries everything so far: what was sent, the
         # model's turn as it came, then the results as the next message.

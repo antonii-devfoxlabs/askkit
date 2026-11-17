@@ -11,10 +11,13 @@ from askkit.tools import TOOLS, error_result, run_tool
 Permission = Literal["allow", "ask", "deny"]
 
 # Reading the clock and doing a sum change nothing and send nothing
-# anywhere, so both run unless you say otherwise.
+# anywhere, so both run unless you say otherwise. A fetch reaches only
+# the sites you allow with --allow-site, so it runs too; without one it
+# is never offered.
 DEFAULT_PERMISSIONS: dict[str, Permission] = {
     "current_time": "allow",
     "calculate": "allow",
+    "fetch_page": "allow",
 }
 
 
@@ -53,12 +56,13 @@ def run_permitted(
     call: ToolUseBlock,
     permissions: dict[str, Permission],
     confirm: Callable[[str], bool],
+    sites: tuple[str, ...] = (),
 ) -> ToolResultBlockParam:
     # Checked by AskKit before anything runs, whatever the model was told
     # or wrote: the model proposes, you decide.
     if call.name not in [tool["name"] for tool in TOOLS]:
         # Not one of AskKit's tools: run_tool answers that there is none.
-        return run_tool(call)
+        return run_tool(call, sites)
     # A tool with no permission is denied, as offered treats it.
     permission = permissions.get(call.name, "deny")
     if permission == "deny":
@@ -74,4 +78,4 @@ def run_permitted(
             " with the same input: answer without it, or ask the user what to"
             " do instead",
         )
-    return run_tool(call)
+    return run_tool(call, sites)

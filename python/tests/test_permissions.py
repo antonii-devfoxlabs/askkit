@@ -5,6 +5,7 @@ import pytest
 from test_tools import ANSWERED, NOW, asked_for, call, use_answers
 
 from askkit.cli import main
+from askkit.fetch import FETCH
 from askkit.permissions import (
     DEFAULT_PERMISSIONS,
     offered,
@@ -37,16 +38,21 @@ def test_every_tool_has_a_default_permission() -> None:
     )
 
 
-def test_the_clock_and_the_calculator_run_without_asking() -> None:
+def test_every_tool_runs_without_asking_by_default() -> None:
     assert permissions_for([], []) == {
         "current_time": "allow",
         "calculate": "allow",
+        "fetch_page": "allow",
     }
 
 
 def test_confirm_and_deny_change_one_tool_each() -> None:
     permissions = permissions_for(["calculate"], ["current_time"])
-    assert permissions == {"current_time": "deny", "calculate": "ask"}
+    assert permissions == {
+        "current_time": "deny",
+        "calculate": "ask",
+        "fetch_page": "allow",
+    }
 
 
 def test_a_tool_both_confirmed_and_denied_is_denied() -> None:
@@ -62,12 +68,12 @@ def test_the_defaults_are_never_changed() -> None:
 
 def test_a_denied_tool_is_not_offered() -> None:
     permissions = permissions_for([], ["current_time"])
-    assert offered(TOOLS, permissions) == [CALCULATOR]
+    assert offered(TOOLS, permissions) == [CALCULATOR, FETCH]
 
 
 def test_a_tool_to_confirm_is_still_offered() -> None:
     permissions = permissions_for(["calculate"], [])
-    assert offered(TOOLS, permissions) == [CLOCK, CALCULATOR]
+    assert offered(TOOLS, permissions) == [CLOCK, CALCULATOR, FETCH]
 
 
 def test_a_tool_with_no_permission_is_not_offered() -> None:
@@ -146,7 +152,7 @@ def test_a_tool_askkit_does_not_have_is_answered_as_unknown() -> None:
     )
     assert result["content"] == (
         "there is no tool named cancel_order; the tools are current_time,"
-        " calculate"
+        " calculate, fetch_page"
     )
     assert result.get("is_error") is True
 
@@ -190,9 +196,9 @@ def test_askkit_ask_refuses_an_unknown_tool_name(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     with pytest.raises(SystemExit) as stopped:
-        main(["ask", "Hi", "--deny", "fetch_page"])
+        main(["ask", "Hi", "--deny", "send_email"])
     assert stopped.value.code == 2
-    assert "invalid choice: 'fetch_page'" in capsys.readouterr().err
+    assert "invalid choice: 'send_email'" in capsys.readouterr().err
 
 
 def test_askkit_ask_asks_before_it_runs_a_tool_to_confirm(

@@ -13,7 +13,7 @@ from test_tools import ANSWERED, use_answers
 from askkit.cli import main
 from askkit.loop import MAX_ROUNDS, TOO_MANY_ROUNDS, tool_loop
 from askkit.permissions import DEFAULT_PERMISSIONS
-from askkit.tools import TOOLS
+from askkit.tools import CALCULATOR, CLOCK, TOOLS
 
 PRODUCT = {"operation": "multiply", "a": 1284, "b": 0.000137}
 TOTAL = {"operation": "add", "a": 0.175908, "b": 5}
@@ -174,8 +174,10 @@ def test_each_call_carries_every_earlier_round(
             "content": "5.175908",
         }
     ]
-    # Every call offers the same tools.
-    assert [request["tools"] for request in sent] == [TOOLS, TOOLS, TOOLS]
+    # Every call offers the same tools: with no site allowed, the clock
+    # and the calculator.
+    offered = [CLOCK, CALCULATOR]
+    assert [request["tools"] for request in sent] == [offered] * 3
 
 
 def test_every_round_asks_for_your_permission(

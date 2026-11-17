@@ -10,6 +10,7 @@ from anthropic.types import Message, ToolUseBlock
 from test_ask import replied
 
 from askkit.cli import main
+from askkit.fetch import FETCH
 from askkit.tools import (
     CALCULATOR,
     CLOCK,
@@ -108,8 +109,8 @@ def test_the_clock_takes_no_input() -> None:
     }
 
 
-def test_askkit_offers_the_clock_and_the_calculator() -> None:
-    assert TOOLS == [CLOCK, CALCULATOR]
+def test_askkit_offers_the_clock_the_calculator_and_the_fetch() -> None:
+    assert TOOLS == [CLOCK, CALCULATOR, FETCH]
 
 
 @pytest.mark.parametrize("tool", TOOLS, ids=lambda tool: tool["name"])
@@ -269,7 +270,7 @@ def test_a_tool_askkit_never_offered_runs_nothing(
         "tool_use_id": "toolu_01AskKitClock",
         "content": (
             "there is no tool named cancel_order; the tools are current_time,"
-            " calculate"
+            " calculate, fetch_page"
         ),
         "is_error": True,
     }
@@ -309,7 +310,7 @@ def test_run_tool_answers_a_division_by_zero_with_an_error() -> None:
     }
 
 
-def test_askkit_ask_offers_both_tools(
+def test_askkit_ask_with_no_site_offers_the_clock_and_the_calculator(
     tmp_path: Any,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -317,7 +318,7 @@ def test_askkit_ask_offers_both_tools(
     sent: list[dict[str, Any]] = []
     use_answers(monkeypatch, sent, [ANSWERED])
     main(["ask", "What is 2 + 2?"])
-    assert sent[0]["tools"] == TOOLS
+    assert sent[0]["tools"] == [CLOCK, CALCULATOR]
     assert len(sent) == 1
 
 
@@ -350,7 +351,7 @@ def test_askkit_ask_runs_the_clock_and_sends_the_result_back(
             }
         ],
     }
-    assert sent[1]["tools"] == TOOLS
+    assert sent[1]["tools"] == [CLOCK, CALCULATOR]
     assert capsys.readouterr().out.splitlines() == [
         f"Tool:          current_time: {NOW}",
         "Today is Tuesday, 17 November 2026.",
@@ -382,7 +383,7 @@ def test_askkit_ask_refuses_a_tool_it_never_offered(
     assert result["is_error"] is True
     assert capsys.readouterr().out.splitlines()[0] == (
         "Tool error:    cancel_order: there is no tool named cancel_order;"
-        " the tools are current_time, calculate"
+        " the tools are current_time, calculate, fetch_page"
     )
 
 

@@ -69,11 +69,12 @@ long the answer ran (`cancelled at …`), says the text above is not a
 whole answer and exits with code 1. A cancelled answer has no stop reason and no
 usage, so no tokens or cost are printed, and it is never saved.
 
-`ask` offers the model two tools, defined in
+`ask` offers the model up to three tools, defined in
 `python/src/askkit/tools.py`: a clock (`current_time`), because a model
 has no clock of its own, and a calculator (`calculate`: one of `add`,
 `subtract`, `multiply` or `divide` on two numbers `a` and `b`), because
-a model writing a number token by token can get it wrong. The model
+a model writing a number token by token can get it wrong, and a
+web fetch (`fetch_page`, below). The model
 never runs anything: when an answer depends on today's date or needs a
 sum, it stops with the stop reason `tool_use` and asks for a tool
 instead of answering. Each definition's description says when to call
@@ -124,6 +125,28 @@ did not allow). Nothing a tool raises stops AskKit: a fault in AskKit's
 own code goes back as an error result that names only its kind, such
 as `(OSError)`, never its text, which may hold your paths. Every error
 result prints as a `Tool error:` line instead of `Tool:`.
+
+`fetch_page` (`python/src/askkit/fetch.py`) downloads one page and sends
+its text to the model. AskKit makes that request from your computer, so
+it could reach whatever your computer can: your router, a service on
+your own machine, a server at work. So it fetches only from the sites
+you name with `--allow-site HOST` (given more than once for several;
+with none, the tool is not offered), only `https://` addresses that name
+the site alone, with no user name, password or port. It looks the name
+up and refuses it if any address it leads to is not on the public
+internet (`ipaddress`'s `is_global`: loopback, private, link-local such
+as `169.254.169.254`, shared and reserved ranges all fail), then
+connects to the address it checked, never to a second look-up of the
+name, with the site's name in the `Host` header and the TLS handshake,
+so the certificate is checked for the site. It follows no redirect: a
+moved page goes back to the model as an error result naming the new
+address, and the model's next request passes every check again. It
+reads only text, at most 100,000 bytes, counted as they arrive (the size
+a site states is checked too, never trusted), within 10 seconds for the
+whole download and 5 for any one wait. Every refusal is an error result
+that says what to do next; a fetched page prints as its size, such as
+`Tool:          fetch_page: 36,371 characters`. Tests never reach the
+network: every look-up and every site is a stand-in.
 
 `ask` calls Anthropic's models only, so `-m` takes the Claude models in
 the price table (Claude Haiku 5.5 by default); `--max-tokens` is the
@@ -606,9 +629,12 @@ test, as the thinking count of `ask` did.
   - `src/askkit/structured.py`: a JSON answer streamed, with the fields
     that have settled so far.
   - `src/askkit/tools.py`: the tools `askkit ask` offers the model (a
-    clock and a calculator), their definitions, the check each request
+    clock, a calculator and a web fetch), their definitions, the check each request
     passes before anything runs, and the error results the model gets
     when one fails.
+  - `src/askkit/fetch.py`: the web fetch, which reaches only the sites
+    you allow, never a private address, and reads at most 100,000 bytes
+    of text within 10 seconds.
   - `src/askkit/permissions.py`: which tools AskKit may run for you
     (allow, ask first, or deny), and the check every request passes
     before it runs.

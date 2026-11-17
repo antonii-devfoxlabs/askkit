@@ -124,7 +124,7 @@ def test_ctrl_c_inside_a_tool_is_not_turned_into_a_result(
             "cancel_order",
             {"order": 4417},
             "there is no tool named cancel_order; the tools are"
-            " current_time, calculate",
+            " current_time, calculate, fetch_page",
         ),
     ],
     ids=["clock-input", "zero", "operation", "unknown-tool"],
