@@ -16,6 +16,7 @@ from askkit.ask import (
     stop_warning,
     thinking_tokens,
 )
+from askkit.chat import STOP, chat
 from askkit.classify import (
     check_classification,
     classification_error,
@@ -75,6 +76,21 @@ def require_api_key() -> str:
             " and put your key after the ="
         )
     return key
+
+
+def require_history(path: Path) -> list[SavedMessage]:
+    # Read and checked before the client is made, so a broken file costs
+    # nothing.
+    try:
+        history = load_history(path)
+    except ValueError:
+        # Not JSON (JSONDecodeError), not a list, or not AskKit's
+        # messages (ValidationError): each is a ValueError.
+        sys.exit(f"askkit: {path} is not a conversation AskKit saved")
+    fault = history_fault(history)
+    if fault is not None:
+        sys.exit(f"askkit: {path}: {fault}")
+    return history
 
 
 def print_calls(
@@ -138,6 +154,18 @@ def main(arguments: list[str] | None = None) -> None:
         "--document", type=Path, action="append", default=[]
     )
     ask_command.add_argument("--history", type=Path)
+    chat_command = commands.add_parser(
+        "chat", help="chat with a model until you type /exit"
+    )
+    chat_command.add_argument(
+        "-m", "--model", choices=MODELS, default="claude-haiku-5-5"
+    )
+    chat_command.add_argument("--max-tokens", type=int, default=1000)
+    chat_command.add_argument("--effort", choices=EFFORTS)
+    chat_command.add_argument("--system-file", type=Path)
+    chat_command.add_argument(
+        "--history", type=Path, default=Path("chat.json")
+    )
     extract = commands.add_parser(
         "extract", help="turn an email into a ticket, as JSON"
     )
@@ -484,18 +512,7 @@ def main(arguments: list[str] | None = None) -> None:
             question = with_documents(options.question, documents)
         history: list[SavedMessage] = []
         if options.history is not None:
-            try:
-                history = load_history(options.history)
-            except ValueError:
-                # Not JSON (JSONDecodeError), not a list, or not AskKit's
-                # messages (ValidationError): each is a ValueError.
-                sys.exit(
-                    f"askkit: {options.history} is not a conversation"
-                    " AskKit saved"
-                )
-            fault = history_fault(history)
-            if fault is not None:
-                sys.exit(f"askkit: {options.history}: {fault}")
+            history = require_history(options.history)
         client = Anthropic(api_key=require_api_key())
         try:
             response = ask(
@@ -545,6 +562,33 @@ def main(arguments: list[str] | None = None) -> None:
             print(
                 f"History:       {len(history)} messages in {options.history}"
             )
+        return
+
+    if options.command == "chat":
+        system = ASK_SYSTEM
+        if options.system_file is not None:
+            system = options.system_file.read_text(encoding="utf-8").strip()
+        history = require_history(options.history)
+        client = Anthropic(api_key=require_api_key())
+        print(f"History:       {len(history)} messages in {options.history}")
+        print(f"Type {STOP} to stop.")
+        print()
+        try:
+            chat(
+                client,
+                options.history,
+                history,
+                options.model,
+                options.max_tokens,
+                system,
+                options.effort,
+                input,
+            )
+        except KeyboardInterrupt:
+            # Ctrl-C stops the chat at once. Every whole turn is in the
+            # file already; only an answer still on its way is lost.
+            print()
+        print(f"History:       {len(history)} messages in {options.history}")
         return
 
     text = options.file.read_text(encoding="utf-8")

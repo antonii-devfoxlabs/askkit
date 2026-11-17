@@ -119,6 +119,25 @@ Every run sends the whole conversation again, so each one's input
 tokens, and its cost, grow with it. `History:` under the stop reason
 says how many messages the file now holds.
 
+`askkit chat` asks question after question in one run, until you type
+`/exit` or end the input (Ctrl-D on macOS and Linux, Ctrl-Z then Enter
+on Windows); Ctrl-C stops it too. It keeps the conversation in
+`chat.json` by default (`--history FILE` for another), reads it when it
+starts, and sends the whole conversation with every question. It takes
+the same `-m`, `--max-tokens`, `--effort` and `--system-file` as `ask`:
+
+```bash
+cd python
+uv run askkit chat
+```
+
+A turn joins the history only once its answer is whole, and the file is
+written after every such turn, so stopping at any moment loses at most
+the answer still on its way. An API error, a cut-off or a declined
+answer prints `askkit:` and why, keeps nothing, and the chat goes on, so
+the same question can be asked again. Each whole turn prints its tokens
+and cost on a `Turn N:` line; they grow with the conversation.
+
 `askkit extract` turns a customer's email into a support ticket, as
 JSON. The ticket is one class, `Ticket` in `python/src/askkit/extract.py`,
 a Pydantic model with three fields: `order` (a whole number, or `null`
@@ -443,6 +462,7 @@ test, as the thinking count of `ask` did.
   - `src/askkit/`: the package.
   - `src/askkit/templates/`: the prompts, one file per version.
   - `src/askkit/history.py`: a conversation saved in a file of its own.
+  - `src/askkit/chat.py`: the chat loop of `askkit chat`.
   - `notebooks/`: notebooks for exploring, saved without outputs.
   - `evals/`: the golden sets, a main and a held-out part each, the
     ask set's documents and rubric, and the eval that runs the extract
