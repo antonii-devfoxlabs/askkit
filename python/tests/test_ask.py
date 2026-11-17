@@ -9,9 +9,9 @@ from askkit.ask import answer_text, ask, stop_warning, thinking_tokens
 from askkit.cli import main
 from askkit.prompts import ASK_SYSTEM, render
 
-# A response shaped like the Messages API's, recorded for the tests:
+# A response shaped like the Messages API's, written for the tests:
 # Haiku 5.5 may think first, so the text is not always the first block.
-RECORDED = {
+WRITTEN = {
     "id": "msg_01AskKitTest",
     "type": "message",
     "role": "assistant",
@@ -27,7 +27,7 @@ RECORDED = {
 
 
 def fake_client(
-    sent: list[dict[str, Any]], body: dict[str, Any] = RECORDED
+    sent: list[dict[str, Any]], body: dict[str, Any] = WRITTEN
 ) -> Anthropic:
     def answer(request: httpx2.Request) -> httpx2.Response:
         sent.append(json.loads(request.content))
@@ -67,7 +67,7 @@ def test_answer_text_skips_the_thinking_block() -> None:
 
 
 def test_answer_text_joins_every_text_block() -> None:
-    body = dict(RECORDED)
+    body = dict(WRITTEN)
     body["content"] = [
         {"type": "text", "text": "Order 4417: "},
         {"type": "text", "text": "a replacement mug."},
@@ -94,7 +94,7 @@ def test_ask_without_an_effort_leaves_the_model_default() -> None:
 def use_fake_client(
     monkeypatch: pytest.MonkeyPatch,
     sent: list[dict[str, Any]],
-    body: dict[str, Any] = RECORDED,
+    body: dict[str, Any] = WRITTEN,
 ) -> None:
     def make(**options: Any) -> Anthropic:
         return fake_client(sent, body)
@@ -256,7 +256,7 @@ def test_both_prompts_end_on_the_same_way_out() -> None:
 
 
 def stopped_with(reason: str) -> dict[str, Any]:
-    body = dict(RECORDED)
+    body = dict(WRITTEN)
     body["stop_reason"] = reason
     body["usage"] = {"input_tokens": 118, "output_tokens": 60}
     return body
@@ -390,7 +390,7 @@ def test_ask_prints_no_part_of_a_declined_answer(
 
 
 def with_thinking(thinking: int, output: int) -> dict[str, Any]:
-    body = dict(RECORDED)
+    body = dict(WRITTEN)
     usage: dict[str, Any] = {
         "input_tokens": 118,
         "output_tokens": output,

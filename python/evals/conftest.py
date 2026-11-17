@@ -31,10 +31,8 @@ def client(request: pytest.FixtureRequest) -> Anthropic:
     if request.config.getoption("--replay"):
         if not RECORDING.is_file():
             pytest.skip(f"no {RECORDING.name} yet: run once with --record")
-        # No retries: a request the recording lacks fails at once.
         return Anthropic(
             api_key="replay",
-            max_retries=0,
             http_client=httpx2.Client(transport=replaying(RECORDING)),
         )
     key = load_api_key()

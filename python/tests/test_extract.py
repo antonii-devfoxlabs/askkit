@@ -29,7 +29,7 @@ EMAIL = (
 
 # A response shaped like the Messages API's to a call with a JSON schema:
 # the JSON is the text block, after the model's thinking.
-RECORDED = {
+WRITTEN = {
     "id": "msg_01AskKitExtract",
     "type": "message",
     "role": "assistant",
@@ -50,7 +50,7 @@ RECORDED = {
 
 
 def with_answer(text: str, stop_reason: str) -> dict[str, Any]:
-    body = dict(RECORDED)
+    body = dict(WRITTEN)
     body["content"] = [{"type": "text", "text": text}]
     body["stop_reason"] = stop_reason
     return body
@@ -79,7 +79,7 @@ def use_fake_answers(
 def use_fake_client(
     monkeypatch: pytest.MonkeyPatch,
     sent: list[dict[str, Any]],
-    body: dict[str, Any] = RECORDED,
+    body: dict[str, Any] = WRITTEN,
 ) -> None:
     def answer(request: httpx2.Request) -> httpx2.Response:
         sent.append(json.loads(request.content))
@@ -108,7 +108,7 @@ def test_extract_ticket_sends_the_schema_beside_the_email() -> None:
 
     def answer(request: httpx2.Request) -> httpx2.Response:
         sent.append(json.loads(request.content))
-        return httpx2.Response(200, json=RECORDED)
+        return httpx2.Response(200, json=WRITTEN)
 
     client = Anthropic(
         api_key="sk-ant-api03-a-test-key-Ab12",
@@ -508,7 +508,7 @@ def test_retry_ticket_sends_the_answer_and_its_faults() -> None:
 
     def answer(request: httpx2.Request) -> httpx2.Response:
         sent.append(json.loads(request.content))
-        return httpx2.Response(200, json=RECORDED)
+        return httpx2.Response(200, json=WRITTEN)
 
     client = Anthropic(
         api_key="sk-ant-api03-a-test-key-Ab12",
