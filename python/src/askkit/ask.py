@@ -43,9 +43,8 @@ def stream_answer(
     effort: Effort | None = None,
     history: list[MessageParam] | None = None,
 ) -> Message:
-    # The same request as ask(), with the answer printed piece by piece
-    # while the model writes it, so the first words show while the rest
-    # is still being written, not after the whole answer is done.
+    # The same request as ask(), printed piece by piece as the model
+    # writes it.
     shown = False
     try:
         with client.messages.stream(
@@ -56,7 +55,7 @@ def stream_answer(
             output_config=effort_config(effort),
         ) as stream:
             for text in stream.text_stream:
-                # flush: show the piece now, not when the line is full.
+                # flush: show the piece now, not when the line ends.
                 print(text, end="", flush=True)
                 shown = True
             return stream.get_final_message()
