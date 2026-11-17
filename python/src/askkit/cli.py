@@ -143,6 +143,11 @@ def print_calls(
         print(f"Stop reason:   {last.stop_reason}")
 
 
+# What input() raises when no one answers: no line left to read (input
+# from a pipe or a file), or Ctrl-C.
+NO_ANSWER = (EOFError, KeyboardInterrupt)
+
+
 def confirm_on_terminal(request: str) -> bool:
     # Asked on stderr, so a program reading AskKit's answer never reads
     # the question. Only y or yes runs the tool; anything else, or no one
@@ -150,7 +155,7 @@ def confirm_on_terminal(request: str) -> bool:
     print(f"Run {request}? [y/N] ", end="", file=sys.stderr, flush=True)
     try:
         answer = input()
-    except EOFError, KeyboardInterrupt:
+    except NO_ANSWER:
         print(file=sys.stderr)
         return False
     return answer.strip().lower() in ("y", "yes")
