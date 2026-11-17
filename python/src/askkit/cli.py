@@ -149,14 +149,12 @@ def main(arguments: list[str] | None = None) -> None:
         except (OSError, ValueError) as error:
             sys.exit(f"askkit: {error}")
         main_counts = kind_counts(main_cases)
-        held_out_counts = kind_counts(held_out)
+        held_counts = kind_counts(held_out)
         print(f"{'Kind':<14}{'Main':>5}{'Held out':>10}")
         empty: list[str] = []
         for kind in KINDS:
-            print(
-                f"{kind:<14}{main_counts[kind]:>5}{held_out_counts[kind]:>10}"
-            )
-            if main_counts[kind] == 0 or held_out_counts[kind] == 0:
+            print(f"{kind:<14}{main_counts[kind]:>5}{held_counts[kind]:>10}")
+            if main_counts[kind] == 0 or held_counts[kind] == 0:
                 empty.append(kind)
         print(f"{'Total':<14}{len(main_cases):>5}{len(held_out):>10}")
         if empty:
