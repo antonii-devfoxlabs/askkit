@@ -601,7 +601,6 @@ def main(arguments: list[str] | None = None) -> None:
         permissions = permissions_for(options.confirm, options.deny)
         tools = offered(TOOLS, permissions)
         client = Anthropic(api_key=require_api_key())
-
         try:
             answered = tool_loop(
                 client,
