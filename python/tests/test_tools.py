@@ -326,6 +326,7 @@ def test_askkit_ask_runs_the_clock_and_sends_the_result_back(
         "Tokens:        1,003 in, 55 out",
         "Cost:          $0.000128",
         "Stop reason:   end_turn",
+        "Tool requests: 1 in 1 round",
         "Time:          no text, total 0.42 s",
         "Time:          first token 0.42 s, total 0.84 s",
     ]

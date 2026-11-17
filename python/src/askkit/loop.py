@@ -82,3 +82,18 @@ def tool_loop(
         sent = messages_for(content, sent)
         sent.append({"role": "assistant", "content": reply.content})
         content = results
+
+
+def requests_line(replies: list[Message]) -> str | None:
+    # How many tool requests a question ran, and in how many rounds. Every
+    # reply but the last asked for tools that ran, one round each; the
+    # last one answered, or asked once too often and ran nothing.
+    rounds = replies[:-1]
+    if not rounds:
+        return None
+    requests = 0
+    for reply in rounds:
+        requests += len(tool_calls(reply))
+    if len(rounds) == 1:
+        return f"{requests} in 1 round"
+    return f"{requests} in {len(rounds)} rounds"

@@ -133,6 +133,7 @@ def test_two_rounds_in_a_row_then_the_answer(
         "Tokens:        2,067 in, 130 out",
         "Cost:          $0.000272",
         "Stop reason:   end_turn",
+        "Tool requests: 2 in 2 rounds",
         "Time:          no text, total 0.42 s",
         "Time:          no text, total 0.42 s",
         "Time:          first token 0.42 s, total 0.84 s",

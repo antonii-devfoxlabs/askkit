@@ -55,7 +55,7 @@ from askkit.history import (
     save_history,
 )
 from askkit.limits import LIMITS
-from askkit.loop import TOO_MANY_ROUNDS, tool_loop
+from askkit.loop import TOO_MANY_ROUNDS, requests_line, tool_loop
 from askkit.memory import load_memory
 from askkit.permissions import offered, permissions_for
 from askkit.prices import PRICES
@@ -636,6 +636,11 @@ def main(arguments: list[str] | None = None) -> None:
             # A blank line between the answer and its numbers.
             print()
         print_calls(responses, options.model)
+        requests = requests_line(responses)
+        if requests is not None:
+            # Requests asked for in one turn share a round, and every
+            # round is one more call: hence one Time: line per call below.
+            print(f"Tool requests: {requests}")
         print_times(timings)
         warning = stop_warning(reply)
         if reply.stop_reason == "tool_use":

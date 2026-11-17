@@ -95,6 +95,13 @@ nothing more: if the model still asks for a tool, `ask` stops with exit
 code 1 and says so. The calls' tokens and cost are added up, with one
 `Time:` line per call.
 
+When requests do not depend on each other, such as today's date and a
+sum, the model can ask for several in one turn. AskKit runs them one
+after another, in the order asked, and sends all their results back in
+one message, each matched to its request by `tool_use_id`. A
+`Tool requests:` line says how many requests ran in how many rounds:
+`2 in 1 round` took two calls, `2 in 2 rounds` three.
+
 Which tools AskKit may run for you is your decision, not the model's.
 Each tool has a permission in `python/src/askkit/permissions.py`:
 `allow` (run it), `ask` (ask you first) or `deny` (never offer it). The
@@ -596,7 +603,7 @@ test, as the thinking count of `ask` did.
     before it runs.
   - `src/askkit/loop.py`: the tool loop, which calls the model, runs
     what it asks for and sends the results back until it answers, for
-    at most 5 rounds.
+    at most 5 rounds, and counts the requests and rounds a question took.
   - `notebooks/`: notebooks for exploring, saved without outputs.
   - `evals/`: the golden sets, a main and a held-out part each, the
     ask set's documents and rubric, and the eval that runs the extract
