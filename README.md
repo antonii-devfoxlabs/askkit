@@ -263,6 +263,35 @@ them); and the problem must not hold an order number, four digits in a
 row. A test holds a right ticket, written by a person, for every main
 case: a check that fails one of them is stricter than the job.
 
+## Running the eval
+
+`python/evals/test_extract_cases.py` is the eval: one pytest test per
+case of the golden set, each sending its email to the model as
+`extract` does on its first call (the cleaned email, the prompt in use,
+the stop reason read first, no retry) and asserting that
+`case_faults` finds nothing. `run_case` in `checks.py` is that one case.
+In `python/`:
+
+```bash
+uv run pytest evals
+```
+
+runs the 16 main cases, one billed call each to Claude Haiku 5.5, and
+ends with the score as pytest counts it, such as `3 failed, 13 passed,
+8 deselected`; each failure names its case and its faults.
+
+- `uv run pytest evals -k clock` runs one case, `-k "clock or pans"`
+  two.
+- `uv run pytest evals -m held_out` runs the held-out part. Its tests
+  carry the `held_out` marker, which `pyproject.toml` deselects on every
+  other run, so it runs only when a version is ready.
+- Without `ANTHROPIC_API_KEY` every case is skipped, never failed.
+
+Run it after every change to a prompt template. `uv run pytest` and CI
+run `tests/` only, so they never call the model; the eval is apart
+because it costs money, needs a key and scores a model that can answer
+differently from one run to the next.
+
 ## Grading answers by hand
 
 An answer of `askkit ask` has no field to compare: it can be right in
@@ -344,8 +373,9 @@ test, as the thinking count of `ask` did.
   - `src/askkit/`: the package.
   - `src/askkit/templates/`: the prompts, one file per version.
   - `notebooks/`: notebooks for exploring, saved without outputs.
-  - `evals/`: the golden sets, a main and a held-out part each, and the
-    ask set's documents and rubric.
+  - `evals/`: the golden sets, a main and a held-out part each, the
+    ask set's documents and rubric, and the eval that runs the extract
+    set through the model (`uv run pytest evals`).
   - `tests/`: pytest tests. They never call a model's API: the calls go
     to a fake transport that answers with a recorded response.
 
@@ -355,7 +385,7 @@ test, as the thinking count of `ask` did.
 cd python
 uv run ruff check .
 uv run ruff format --check .
-uv run mypy src tests
+uv run mypy src tests evals
 uv run pytest
 ```
 

@@ -1,9 +1,13 @@
 import re
+from pathlib import Path
 
+from anthropic import Anthropic
 from pydantic import ValidationError
 
-from askkit.extract import check_ticket, ticket_faults
-from askkit.golden import Case
+from askkit.ask import answer_text, stop_warning
+from askkit.clean import clean_email
+from askkit.extract import check_ticket, extract_ticket, ticket_faults
+from askkit.golden import Case, email_text
 
 # Four digits in a row: an order number. The warehouse finds a ticket by
 # its order field, so the number said again in the problem only takes
@@ -32,3 +36,18 @@ def case_faults(answer: str, case: Case) -> list[str]:
     if re.search(ORDER_NUMBER, ticket.problem):
         faults.append(f"problem: an order number in {ticket.problem!r}")
     return faults
+
+
+def run_case(
+    client: Anthropic, folder: Path, case: Case, model: str, max_tokens: int
+) -> list[str]:
+    # One case of the golden set through the steps extract takes on its
+    # first call: the cleaned email, the prompt in use, the stop reason
+    # read before the JSON. No retry: the eval scores the prompt, and a
+    # second call would hide the first answer's faults.
+    email, _ = clean_email(email_text(folder, case))
+    response = extract_ticket(client, email, model, max_tokens)
+    warning = stop_warning(response, "turn this email into a ticket")
+    if warning is not None:
+        return [f"stop: {warning}"]
+    return case_faults(answer_text(response), case)

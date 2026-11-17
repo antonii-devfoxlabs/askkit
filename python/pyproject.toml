@@ -28,6 +28,8 @@ strict = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = ["held_out: a case of the held-out part, run with -m held_out"]
+addopts = ["-m", "not held_out"]
 
 [dependency-groups]
 dev = [
