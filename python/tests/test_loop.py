@@ -6,13 +6,14 @@ from typing import Any
 import httpx2
 import pytest
 from anthropic import Anthropic
-from anthropic.types import MessageParam, ToolResultBlockParam, ToolUseBlock
+from anthropic.types import MessageParam
 from test_ask import Interrupted, replied
 from test_tools import ANSWERED, use_answers
 
 from askkit.cli import main
 from askkit.loop import MAX_ROUNDS, TOO_MANY_ROUNDS, tool_loop
-from askkit.tools import TOOLS, run_tool
+from askkit.permissions import DEFAULT_PERMISSIONS
+from askkit.tools import TOOLS
 
 PRODUCT = {"operation": "multiply", "a": 1284, "b": 0.000137}
 TOTAL = {"operation": "add", "a": 0.175908, "b": 5}
@@ -52,10 +53,6 @@ def two_sums() -> list[dict[str, Any]]:
     return [asked(1, PRODUCT, 618), asked(2, TOTAL, 689), answered]
 
 
-def result_for(call: ToolUseBlock) -> ToolResultBlockParam:
-    return {"type": "tool_result", "tool_use_id": call.id, "content": "1"}
-
-
 def client_for(
     sent: list[dict[str, Any]], answers: list[httpx2.Response]
 ) -> Anthropic:
@@ -84,10 +81,24 @@ def always_asking() -> Iterator[httpx2.Response]:
         yield streamed(asked(number, PRODUCT, 618))
 
 
+def never_asked(request: str) -> bool:
+    raise AssertionError(f"asked about {request}")
+
+
+def counted_runs(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, object]]:
+    # Every input the calculator really ran with, in order.
+    ran: list[dict[str, object]] = []
+
+    def counted(tool_input: dict[str, object]) -> str:
+        ran.append(tool_input)
+        return "0.175908"
+
+    monkeypatch.setattr("askkit.tools.calculate", counted)
+    return ran
+
+
 def loop_with(
-    client: Anthropic,
-    run: Any,
-    history: list[MessageParam] | None = None,
+    client: Anthropic, history: list[MessageParam] | None = None
 ) -> Any:
     return tool_loop(
         client,
@@ -98,7 +109,8 @@ def loop_with(
         None,
         history or [],
         TOOLS,
-        run,
+        DEFAULT_PERMISSIONS,
+        never_asked,
     )
 
 
@@ -189,13 +201,7 @@ def test_a_no_in_the_second_round_runs_nothing_there(
     monkeypatch.chdir(tmp_path)
     replies = iter(["y", "n"])
     monkeypatch.setattr("builtins.input", lambda: next(replies))
-    ran: list[dict[str, object]] = []
-
-    def counted(tool_input: dict[str, object]) -> str:
-        ran.append(tool_input)
-        return "0.175908"
-
-    monkeypatch.setattr("askkit.tools.calculate", counted)
+    ran = counted_runs(monkeypatch)
     sent: list[dict[str, Any]] = []
     use_answers(monkeypatch, sent, two_sums())
     main(["ask", QUESTION, "--confirm", "calculate"])
@@ -210,17 +216,14 @@ def test_a_no_in_the_second_round_runs_nothing_there(
     ]
 
 
-def test_the_loop_stops_after_the_last_round() -> None:
+def test_the_loop_stops_after_the_last_round(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     sent: list[dict[str, Any]] = []
     responses = always_asking()
     answers = [next(responses) for _ in range(MAX_ROUNDS + 2)]
-    ran: list[ToolUseBlock] = []
-
-    def run(call: ToolUseBlock) -> ToolResultBlockParam:
-        ran.append(call)
-        return result_for(call)
-
-    answered = loop_with(client_for(sent, answers), run)
+    ran = counted_runs(monkeypatch)
+    answered = loop_with(client_for(sent, answers))
     # One call per round, then one more whose request is never run.
     assert len(sent) == MAX_ROUNDS + 1
     assert len(ran) == MAX_ROUNDS
@@ -251,13 +254,13 @@ def test_askkit_ask_says_why_it_stopped_asking(
     assert "Stop reason:   tool_use" in printed
 
 
-def test_an_answer_ends_the_loop_at_once() -> None:
+def test_an_answer_ends_the_loop_at_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     sent: list[dict[str, Any]] = []
-
-    def never_run(call: ToolUseBlock) -> ToolResultBlockParam:
-        raise AssertionError(f"ran {call.name}")
-
-    answered = loop_with(client_for(sent, [streamed(ANSWERED)]), never_run)
+    ran = counted_runs(monkeypatch)
+    answered = loop_with(client_for(sent, [streamed(ANSWERED)]))
+    assert ran == []
     assert len(sent) == 1
     assert [reply.stop_reason for reply in answered.replies] == ["end_turn"]
 
@@ -267,7 +270,7 @@ def test_a_refusal_ends_the_loop() -> None:
     refused = deepcopy(ANSWERED)
     refused["stop_reason"] = "refusal"
     answers = [streamed(asked(1, PRODUCT, 618)), streamed(refused)]
-    answered = loop_with(client_for(sent, answers), result_for)
+    answered = loop_with(client_for(sent, answers))
     assert len(sent) == 2
     assert answered.replies[-1].stop_reason == "refusal"
 
@@ -283,7 +286,7 @@ def test_a_cancel_in_the_second_round_ends_the_loop(
             200, headers={"content-type": "text/event-stream"}, stream=stream
         ),
     ]
-    answered = loop_with(client_for(sent, answers), result_for)
+    answered = loop_with(client_for(sent, answers))
     assert answered.cancelled is True
     assert len(answered.replies) == 1
     assert len(answered.timings) == 2
@@ -335,6 +338,6 @@ def test_the_history_you_pass_is_not_changed() -> None:
     ]
     kept = deepcopy(history)
     answers = [streamed(body) for body in two_sums()]
-    loop_with(client_for(sent, answers), run_tool, history)
+    loop_with(client_for(sent, answers), history)
     assert history == kept
     assert sent[2]["messages"][:2] == kept

@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 
 from anthropic import Anthropic, APIError
-from anthropic.types import Message, ToolResultBlockParam, ToolUseBlock
+from anthropic.types import Message
 from pydantic import ValidationError
 
 from askkit.analysis import fault_lines
@@ -57,7 +57,7 @@ from askkit.history import (
 from askkit.limits import LIMITS
 from askkit.loop import TOO_MANY_ROUNDS, tool_loop
 from askkit.memory import load_memory
-from askkit.permissions import offered, permissions_for, run_permitted
+from askkit.permissions import offered, permissions_for
 from askkit.prices import PRICES
 from askkit.prompts import ASK_SYSTEM, render
 from askkit.rubric import (
@@ -602,12 +602,6 @@ def main(arguments: list[str] | None = None) -> None:
         tools = offered(TOOLS, permissions)
         client = Anthropic(api_key=require_api_key())
 
-        def run_and_show(call: ToolUseBlock) -> ToolResultBlockParam:
-            # Your permission first, in every round, then one line each.
-            result = run_permitted(call, permissions, confirm_on_terminal)
-            print(f"Tool:          {call.name}: {result['content']}")
-            return result
-
         try:
             answered = tool_loop(
                 client,
@@ -618,7 +612,8 @@ def main(arguments: list[str] | None = None) -> None:
                 options.effort,
                 as_messages(history),
                 tools or None,
-                run_and_show,
+                permissions,
+                confirm_on_terminal,
             )
         except APIError as error:
             sys.exit(f"askkit: {error_message(error)}")

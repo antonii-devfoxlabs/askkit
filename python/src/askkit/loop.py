@@ -7,10 +7,10 @@ from anthropic.types import (
     MessageParam,
     ToolParam,
     ToolResultBlockParam,
-    ToolUseBlock,
 )
 
 from askkit.ask import Effort, Timing, messages_for, stream_answer
+from askkit.permissions import Permission, run_permitted
 from askkit.tools import tool_calls
 
 # The most rounds of tool requests one question may run. Every round is
@@ -43,11 +43,12 @@ def tool_loop(
     effort: Effort | None,
     history: list[MessageParam],
     tools: list[ToolParam] | None,
-    run: Callable[[ToolUseBlock], ToolResultBlockParam],
+    permissions: dict[str, Permission],
+    confirm: Callable[[str], bool],
 ) -> Answered:
     # Call, run every request, send the results back, and call again,
-    # until the model answers instead of asking. run checks and runs one
-    # request: every request of every round goes through it.
+    # until the model answers instead of asking. Every request of every
+    # round passes your permission before anything runs.
     replies: list[Message] = []
     timings: list[Timing] = []
     sent = history
@@ -73,7 +74,9 @@ def tool_loop(
         rounds += 1
         results: list[ToolResultBlockParam] = []
         for call in tool_calls(reply):
-            results.append(run(call))
+            result = run_permitted(call, permissions, confirm)
+            print(f"Tool:          {call.name}: {result['content']}")
+            results.append(result)
         # The next call carries everything so far: what was sent, the
         # model's turn as it came, then the results as the next message.
         sent = messages_for(content, sent)
