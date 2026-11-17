@@ -20,7 +20,7 @@ MAX_ROUNDS = 5
 
 TOO_MANY_ROUNDS = (
     f"the model still asked for a tool after {MAX_ROUNDS} rounds;"
-    " AskKit ran nothing more"
+    " nothing more ran"
 )
 
 

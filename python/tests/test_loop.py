@@ -242,8 +242,7 @@ def test_askkit_ask_says_why_it_stopped_asking(
         main(["ask", QUESTION])
     assert stopped.value.code == f"askkit: {TOO_MANY_ROUNDS}"
     assert TOO_MANY_ROUNDS == (
-        "the model still asked for a tool after 5 rounds;"
-        " AskKit ran nothing more"
+        "the model still asked for a tool after 5 rounds; nothing more ran"
     )
     printed = capsys.readouterr().out.splitlines()
     assert len(sent) == 6
