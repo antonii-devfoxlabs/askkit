@@ -1,0 +1,6 @@
+$system
+
+The earlier turns of this conversation, summarised:
+<summary>
+$summary
+</summary>

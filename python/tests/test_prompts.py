@@ -40,6 +40,15 @@ RELEASED = {
     "retry_ticket.v1.txt": (
         "a88920196f5db7dd08eaee247474631854b76edfcd95408222ecbeb014b6af8c"
     ),
+    "summarise_turns.v1.txt": (
+        "f933d9595272db575d30ef4890c6871efa9d1aa3e0572bf90c976a1748c7f7ff"
+    ),
+    "fold_turns.v1.txt": (
+        "05aa2042426c91896a81c57311942f2a4440cfb58e5ca92e766c51b1640ee2e8"
+    ),
+    "earlier_turns.v1.txt": (
+        "336fc685957a278165c49287f580eebd05700aeb50db9f18e0e99fa8253a73b5"
+    ),
 }
 
 

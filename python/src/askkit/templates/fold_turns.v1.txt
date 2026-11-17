@@ -1,0 +1,10 @@
+<summary>
+$summary
+</summary>
+
+<turns>
+$turns
+</turns>
+
+Write one summary that holds the summary above and these turns, in the
+order they happened.

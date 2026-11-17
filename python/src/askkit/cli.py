@@ -67,6 +67,7 @@ from askkit.rubric import (
 from askkit.rules import email_fault, load_orders, order_fault
 from askkit.runs import Results, diff_lines, load_results
 from askkit.tokens import count_tokens
+from askkit.trim import OLD_TURNS
 
 
 def require_api_key() -> str:
@@ -168,6 +169,9 @@ def main(arguments: list[str] | None = None) -> None:
         "--history", type=Path, default=Path("chat.json")
     )
     chat_command.add_argument("--budget", type=int, default=DEFAULT_BUDGET)
+    chat_command.add_argument(
+        "--old-turns", choices=OLD_TURNS, default="summarise"
+    )
     extract = commands.add_parser(
         "extract", help="turn an email into a ticket, as JSON"
     )
@@ -579,6 +583,7 @@ def main(arguments: list[str] | None = None) -> None:
         client = Anthropic(api_key=require_api_key())
         print(f"History:       {len(history)} messages in {options.history}")
         print(f"Budget:        {options.budget:,} input tokens a turn")
+        print(f"Old turns:     {options.old_turns}")
         print(f"Type {STOP} to stop.")
         print()
         try:
@@ -591,6 +596,7 @@ def main(arguments: list[str] | None = None) -> None:
                 system,
                 options.effort,
                 options.budget,
+                options.old_turns,
                 input,
             )
         except KeyboardInterrupt:

@@ -82,3 +82,27 @@ whose values the JSON schema sent beside the prompt allows.
   defined by what happened to the order, `other` for an email that meets
   none of the three conditions, and the rule to decide by what happened,
   not by the words the email uses.
+
+## summarise_turns
+
+The system prompt of the call that folds a chat's oldest turns into a
+summary, when a turn of `askkit chat` would not fit its budget.
+
+- v1: keep every fact the user may come back to word for word (names,
+  numbers, prices, order numbers, decisions), leave out greetings and
+  repeats, plain text under 100 words.
+
+## fold_turns
+
+The user message of that call: the `$summary` so far and the `$turns` to
+fold in, each in its own tags, then the request for one summary.
+
+- v1: the summary so far first, the turns after it, oldest first.
+
+## earlier_turns
+
+The system prompt of a chat turn once old turns were summarised: the
+chat's own `$system` prompt, then the `$summary` in tags.
+
+- v1: the summary after the chat's rules, under a line that says what it
+  is.

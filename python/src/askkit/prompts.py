@@ -15,6 +15,9 @@ IN_USE = {
     "extract_ticket": 2,
     "retry_ticket": 1,
     "classify_email": 1,
+    "summarise_turns": 1,
+    "fold_turns": 1,
+    "earlier_turns": 1,
 }
 
 

@@ -12,10 +12,16 @@ from askkit.budget import DEFAULT_BUDGET
 from askkit.chat import NOT_KEPT, NOT_SENT, chat
 from askkit.cli import main
 from askkit.history import SavedMessage, load_history, save_history
+from askkit.prompts import render
+from askkit.trim import OldTurns
 
 MARIA = "Order 4417 came with a broken mug. Can I get a new one?"
 FOLLOW_UP = "And who pays the postage?"
 ANSWER = "Order 4417: a replacement mug."
+# What a count returns: a number, a number worked out from the count's
+# body, or None for a count that fails.
+Needed = int | Callable[[dict[str, Any]], int] | None
+
 OVERLOADED = {
     "type": "error",
     "error": {"type": "overloaded_error", "message": "Overloaded"},
@@ -26,12 +32,13 @@ def answering(
     sent: list[dict[str, Any]],
     replies: list[int | dict[str, Any]],
     counted: list[dict[str, Any]] | None = None,
-    needed: int | None = 118,
+    needed: Needed = 118,
 ) -> Anthropic:
     # Each call gets the next reply: a response body, or a status code
     # the API answers with an error. A count before a call gets needed
-    # tokens, or a 529 when needed is None; it is no call, so it is kept
-    # in counted, not in sent.
+    # tokens (or what needed works out from the count's body), or a 529
+    # when needed is None; it is no call, so it is kept in counted, not
+    # in sent.
     def answer(request: httpx2.Request) -> httpx2.Response:
         body = json.loads(request.content)
         if request.url.path == "/v1/messages/count_tokens":
@@ -39,7 +46,8 @@ def answering(
                 counted.append(body)
             if needed is None:
                 return httpx2.Response(529, json=OVERLOADED)
-            return httpx2.Response(200, json={"input_tokens": needed})
+            tokens = needed if isinstance(needed, int) else needed(body)
+            return httpx2.Response(200, json={"input_tokens": tokens})
         sent.append(body)
         reply = replies[len(sent) - 1]
         if isinstance(reply, int):
@@ -72,8 +80,9 @@ def run_chat(
     read: Callable[[str], str],
     history: list[SavedMessage] | None = None,
     budget: int = DEFAULT_BUDGET,
-    needed: int | None = 118,
+    needed: Needed = 118,
     counted: list[dict[str, Any]] | None = None,
+    old_turns: OldTurns = "summarise",
 ) -> tuple[list[dict[str, Any]], list[SavedMessage]]:
     sent: list[dict[str, Any]] = []
     if history is None:
@@ -87,6 +96,7 @@ def run_chat(
         "Be brief.",
         None,
         budget,
+        old_turns,
         read,
     )
     return sent, history
@@ -242,9 +252,10 @@ def test_askkit_chat_reads_and_saves_chat_json(
     use_answers(monkeypatch, sent, [WRITTEN], [MARIA, "/exit"])
     main(["chat"])
     lines = capsys.readouterr().out.splitlines()
-    assert lines[:4] == [
+    assert lines[:5] == [
         "History:       0 messages in chat.json",
         "Budget:        90,000 input tokens a turn",
+        "Old turns:     summarise",
         "Type /exit to stop.",
         "",
     ]
@@ -396,3 +407,208 @@ def test_askkit_chat_refuses_a_budget_the_window_cannot_hold(
     )
     assert sent == []
     assert not (tmp_path / "chat.json").exists()
+
+
+SUMMARY = "Maria: order 4417 came with a broken mug; she wants a new one."
+SUMMARISED = {
+    "id": "msg_01AskKitSummary",
+    "type": "message",
+    "role": "assistant",
+    "model": "claude-haiku-5-5",
+    "content": [{"type": "text", "text": SUMMARY}],
+    "stop_reason": "end_turn",
+    "stop_sequence": None,
+    "usage": {"input_tokens": 160, "output_tokens": 40},
+}
+
+
+def three_turns() -> list[SavedMessage]:
+    saved: list[SavedMessage] = []
+    for number in [1, 2, 3]:
+        saved.append(SavedMessage(role="user", content=f"Question {number}"))
+        saved.append(
+            SavedMessage(role="assistant", content=f"Answer {number}")
+        )
+    return saved
+
+
+def by_messages(body: dict[str, Any]) -> int:
+    # 100 tokens of system prompt and 50 a message: the question alone
+    # is 150, and three turns before it make 450.
+    return 100 + 50 * len(body["messages"])
+
+
+def test_drop_sends_the_turns_after_the_oldest(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    sent, history = run_chat(
+        tmp_path,
+        [WRITTEN],
+        typed(MARIA),
+        three_turns(),
+        budget=400,
+        needed=by_messages,
+        old_turns="drop",
+    )
+    assert sent[0]["messages"][0] == {"role": "user", "content": "Question 2"}
+    assert len(sent[0]["messages"]) == 5
+    assert sent[0]["system"] == "Be brief."
+    # The file keeps every turn: only the call leaves turn 1 out.
+    assert len(history) == 8
+    assert len(load_history(tmp_path / "chat.json")) == 8
+    assert capsys.readouterr().out.startswith("Dropped:       turn 1\n")
+
+
+def test_drop_counts_again_after_every_turn_it_drops(tmp_path: Path) -> None:
+    counted: list[dict[str, Any]] = []
+    run_chat(
+        tmp_path,
+        [WRITTEN],
+        typed(MARIA),
+        three_turns(),
+        budget=400,
+        needed=by_messages,
+        counted=counted,
+        old_turns="drop",
+    )
+    lengths: list[int] = []
+    for count in counted:
+        lengths.append(len(count["messages"]))
+    assert lengths == [7, 5]
+
+
+def test_drop_keeps_the_last_two_turns(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    sent, history = run_chat(
+        tmp_path,
+        [WRITTEN],
+        typed(MARIA),
+        three_turns(),
+        budget=300,
+        needed=by_messages,
+        old_turns="drop",
+    )
+    assert sent == []
+    assert len(history) == 6
+    captured = capsys.readouterr()
+    assert captured.err == (
+        "askkit: this turn would send 350 tokens,"
+        " over the chat's budget of 300\n"
+    )
+    assert captured.out.startswith("Dropped:       turn 1\n")
+    assert NOT_SENT in captured.out
+
+
+def test_summarise_folds_all_but_the_last_two_turns(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    sent, history = run_chat(
+        tmp_path,
+        [SUMMARISED, WRITTEN],
+        typed(MARIA),
+        four_turns(),
+        budget=400,
+        needed=by_messages,
+    )
+    request = sent[0]["messages"][0]["content"]
+    assert "No summary yet." in request
+    assert "User: Question 1\nAssistant: Answer 1" in request
+    assert "User: Question 2\nAssistant: Answer 2" in request
+    assert "Question 3" not in request
+    assert sent[0]["system"] == render("summarise_turns", {})
+    assert sent[0]["max_tokens"] == 4000
+    assert sent[0]["output_config"] == {"effort": "low"}
+    call = sent[1]
+    assert call["messages"][0] == {"role": "user", "content": "Question 3"}
+    assert len(call["messages"]) == 5
+    assert call["system"] == render(
+        "earlier_turns", {"system": "Be brief.", "summary": SUMMARY}
+    )
+    assert len(history) == 10
+    assert capsys.readouterr().out.startswith(
+        "Summarised:    turns 1 to 2, $0.000036\n"
+    )
+
+
+def four_turns() -> list[SavedMessage]:
+    return three_turns() + [
+        SavedMessage(role="user", content="Question 4"),
+        SavedMessage(role="assistant", content="Answer 4"),
+    ]
+
+
+def test_a_summary_leaves_room_for_the_next_turns(tmp_path: Path) -> None:
+    sent, _ = run_chat(
+        tmp_path,
+        [SUMMARISED, WRITTEN, WRITTEN],
+        typed(MARIA, FOLLOW_UP),
+        four_turns(),
+        budget=500,
+        needed=by_messages,
+    )
+    # Turn 1 folds turns 1 and 2. The next turn sends turns 3 to 5 and
+    # its question, 450 tokens, so it needs no summary call.
+    assert len(sent) == 3
+    assert sent[2]["system"] == sent[1]["system"]
+    assert sent[2]["messages"][0] == {"role": "user", "content": "Question 3"}
+
+
+def test_the_next_summary_holds_the_one_before(tmp_path: Path) -> None:
+    sent, _ = run_chat(
+        tmp_path,
+        [SUMMARISED, WRITTEN, WRITTEN, SUMMARISED, WRITTEN],
+        typed(MARIA, FOLLOW_UP, "And the box?"),
+        four_turns(),
+        budget=500,
+        needed=by_messages,
+    )
+    second_summary = sent[3]["messages"][0]["content"]
+    assert f"<summary>\n{SUMMARY}\n</summary>" in second_summary
+    assert "User: Question 3\nAssistant: Answer 3" in second_summary
+    assert "User: Question 4\nAssistant: Answer 4" in second_summary
+    assert "Question 2" not in second_summary
+    assert MARIA not in second_summary
+
+
+def test_a_cut_off_summary_keeps_nothing(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    sent, history = run_chat(
+        tmp_path,
+        [stopped_with("max_tokens")],
+        typed(MARIA),
+        three_turns(),
+        budget=400,
+        needed=by_messages,
+    )
+    assert len(sent) == 1
+    assert len(history) == 6
+    captured = capsys.readouterr()
+    assert captured.err == "askkit: the summary stopped early: max_tokens\n"
+    assert NOT_KEPT in captured.out
+
+
+def test_a_turn_within_the_budget_makes_no_summary(tmp_path: Path) -> None:
+    sent, _ = run_chat(
+        tmp_path,
+        [WRITTEN],
+        typed(MARIA),
+        three_turns(),
+        budget=450,
+        needed=by_messages,
+    )
+    assert len(sent) == 1
+    assert sent[0]["system"] == "Be brief."
+
+
+def test_askkit_chat_takes_old_turns(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    use_answers(monkeypatch, [], [WRITTEN], [MARIA])
+    main(["chat", "--old-turns", "drop"])
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[2] == "Old turns:     drop"

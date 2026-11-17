@@ -150,6 +150,22 @@ the model's context window, or the chat does not start:
 uv run askkit chat --budget 20000
 ```
 
+When a turn would go over the budget, AskKit first makes room. By
+default (`--old-turns summarise`) it folds every turn but the last two
+into a short summary, with one call to the same model at low effort, and
+sends the summary in the system prompt in their place; a later fold
+takes the summary so far in with the next turns. `--old-turns drop`
+leaves the oldest turns out instead, one at a time, until the turn
+fits: no call, but what they said is gone. Either way the last two
+turns go word for word, `chat.json` keeps every turn, and a turn that
+still does not fit is not sent. The summary lives only while the chat
+runs; a chat started again on the same file summarises anew when it
+needs to:
+
+```bash
+uv run askkit chat --budget 20000 --old-turns drop
+```
+
 `askkit extract` turns a customer's email into a support ticket, as
 JSON. The ticket is one class, `Ticket` in `python/src/askkit/extract.py`,
 a Pydantic model with three fields: `order` (a whole number, or `null`
@@ -476,6 +492,7 @@ test, as the thinking count of `ask` did.
   - `src/askkit/history.py`: a conversation saved in a file of its own.
   - `src/askkit/chat.py`: the chat loop of `askkit chat`.
   - `src/askkit/budget.py`: the chat's budget of input tokens a turn.
+  - `src/askkit/trim.py`: dropping or summarising a chat's oldest turns.
   - `notebooks/`: notebooks for exploring, saved without outputs.
   - `evals/`: the golden sets, a main and a held-out part each, the
     ask set's documents and rubric, and the eval that runs the extract

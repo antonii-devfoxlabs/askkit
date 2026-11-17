@@ -4,11 +4,18 @@ from pathlib import Path
 
 from anthropic import Anthropic, APIError
 
-from askkit.ask import Effort, answer_text, ask, stop_warning
+from askkit.ask import FINISHED, Effort, answer_text, ask, stop_warning
 from askkit.budget import input_tokens, over_budget
 from askkit.cost import call_cost
 from askkit.errors import error_message
 from askkit.history import SavedMessage, as_messages, save_history
+from askkit.trim import (
+    KEEP_TURNS,
+    OldTurns,
+    summarise,
+    turns_label,
+    with_summary,
+)
 
 # What you type to end a chat. The end of input ends it too: Ctrl-D on
 # macOS and Linux, Ctrl-Z then Enter on Windows.
@@ -22,6 +29,16 @@ NOT_SENT = (
 )
 
 
+def turn_tokens(
+    client: Anthropic,
+    model: str,
+    system: str,
+    question: str,
+    kept: list[SavedMessage],
+) -> int:
+    return input_tokens(client, model, system, question, as_messages(kept))
+
+
 def chat(
     client: Anthropic,
     path: Path,
@@ -31,11 +48,15 @@ def chat(
     system: str,
     effort: Effort | None,
     budget: int,
+    old_turns: OldTurns,
     read: Callable[[str], str],
 ) -> None:
-    # One question a turn until you stop. The whole conversation goes with
-    # every question, and a turn joins the history, in the list and in
-    # the file, only once its answer is whole.
+    # One question a turn until you stop. A turn joins the history, in the
+    # list and in the file, only once its answer is whole. The file keeps
+    # every turn; the calls send history[start:], with the summary of the
+    # turns before start in the system prompt.
+    start = 0
+    summary = ""
     while True:
         try:
             question = read("You: ").strip()
@@ -46,11 +67,55 @@ def chat(
             return
         if not question:
             continue
-        sent = as_messages(history)
+        first = start
         try:
             # Counted before the call: the count is free, and a turn over
             # the budget is never sent, so it is never paid for.
-            needed = input_tokens(client, model, system, question, sent)
+            sent_system = with_summary(system, summary)
+            needed = turn_tokens(
+                client, model, sent_system, question, history[start:]
+            )
+            keep = max(start, len(history) - 2 * KEEP_TURNS)
+            if needed > budget and old_turns == "summarise" and keep > start:
+                # Everything but the last turns goes into one summary, so
+                # the next turns fit without another summary call.
+                folded = summarise(
+                    client, model, summary, history[start:keep]
+                )
+                if folded.stop_reason not in FINISHED:
+                    # A cut-off or declined summary would lose facts, so
+                    # the turn waits and nothing changes.
+                    reason = folded.stop_reason
+                    print(
+                        f"askkit: the summary stopped early: {reason}",
+                        file=sys.stderr,
+                    )
+                    print(NOT_KEPT)
+                    print()
+                    continue
+                summary = answer_text(folded)
+                start = keep
+                cost = call_cost(
+                    model,
+                    folded.usage.input_tokens,
+                    folded.usage.output_tokens,
+                )
+                label = turns_label(first // 2 + 1, start // 2)
+                print(f"{'Summarised:':<15}{label}, ${cost:.6f}")
+                sent_system = with_summary(system, summary)
+                needed = turn_tokens(
+                    client, model, sent_system, question, history[start:]
+                )
+            while needed > budget and old_turns == "drop" and keep > start:
+                # One turn at a time, the oldest first: counting is free,
+                # so no more is dropped than the budget needs.
+                start += 2
+                needed = turn_tokens(
+                    client, model, sent_system, question, history[start:]
+                )
+            if old_turns == "drop" and start > first:
+                label = turns_label(first // 2 + 1, start // 2)
+                print(f"{'Dropped:':<15}{label}")
         except APIError as error:
             print(f"askkit: {error_message(error)}", file=sys.stderr)
             print(NOT_KEPT)
@@ -58,15 +123,16 @@ def chat(
             continue
         problem = over_budget(needed, budget)
         if problem is not None:
-            # A shorter question may still fit, but every answer that joins
-            # the history makes later turns larger: the chat is near its end.
+            # Even the last turns and the question do not fit: only a
+            # shorter question, a new file or a larger budget helps.
             print(f"askkit: {problem}", file=sys.stderr)
             print(NOT_SENT)
             print()
             continue
+        sent = as_messages(history[start:])
         try:
             response = ask(
-                client, question, model, max_tokens, system, effort, sent
+                client, question, model, max_tokens, sent_system, effort, sent
             )
         except APIError as error:
             # A failed call changes nothing, so the chat goes on and the
