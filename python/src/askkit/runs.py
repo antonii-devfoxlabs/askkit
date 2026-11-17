@@ -43,8 +43,8 @@ def add_run(
         results = Results(model=model, prompt_version=version, cases={})
         for name in faults:
             results.cases[name] = []
-    for name, case_faults in faults.items():
-        results.cases[name].append(case_faults)
+    for name, run_faults in faults.items():
+        results.cases[name].append(run_faults)
     text = results.model_dump_json(indent=2)
     path.write_text(text + "\n", encoding="utf-8")
     return results
