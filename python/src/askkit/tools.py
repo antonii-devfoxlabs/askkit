@@ -88,7 +88,7 @@ def calculate(tool_input: dict[str, object]) -> str:
         raise ValueError(
             "operation must be add, subtract, multiply or divide"
         )
-    # True and False are ints in Python, so they are refused by name.
+    # Booleans are refused by name, before the check for numbers.
     if (
         isinstance(a, bool)
         or isinstance(b, bool)
