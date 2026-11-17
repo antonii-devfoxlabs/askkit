@@ -1,3 +1,4 @@
+import gzip
 import socket
 from collections.abc import Callable, Iterator
 from itertools import count
@@ -421,6 +422,27 @@ def test_a_stated_size_that_lies_is_still_counted(
     site_answers(monkeypatch, lies)
     assert refusal({"url": PAGE_URL}) == TOO_LARGE_PAGE
     assert sum(read) == MAX_PAGE_BYTES + 10_000
+
+
+def test_a_compressed_page_is_counted_once_it_is_unpacked(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    lookup_gives(monkeypatch, [PUBLIC])
+    # 200,000 bytes of text packed into a few hundred: the size the site
+    # states is small, the page is not.
+    packed = gzip.compress(b"a" * 2 * MAX_PAGE_BYTES)
+
+    def compressed(request: httpx2.Request) -> httpx2.Response:
+        headers = {
+            "content-type": "text/html",
+            "content-encoding": "gzip",
+            "content-length": str(len(packed)),
+        }
+        return httpx2.Response(200, headers=headers, content=packed)
+
+    site_answers(monkeypatch, compressed)
+    assert len(packed) < 1_000
+    assert refusal({"url": PAGE_URL}) == TOO_LARGE_PAGE
 
 
 def test_a_site_that_does_not_answer_in_time_is_refused(
