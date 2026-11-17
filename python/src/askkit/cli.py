@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 
 from anthropic import Anthropic, APIError
-from anthropic.types import Message
+from anthropic.types import Message, ToolResultBlockParam
 from pydantic import ValidationError
 
 from askkit.analysis import fault_lines
@@ -16,6 +16,7 @@ from askkit.ask import (
     Timing,
     answer_text,
     ask,
+    messages_for,
     stop_warning,
     stream_answer,
     thinking_tokens,
@@ -74,6 +75,7 @@ from askkit.rules import email_fault, load_orders, order_fault
 from askkit.runs import Results, diff_lines, load_results
 from askkit.structured import stream_json
 from askkit.tokens import count_tokens
+from askkit.tools import TOOLS, run_tool, tool_calls
 from askkit.trim import OLD_TURNS
 
 
@@ -572,6 +574,9 @@ def main(arguments: list[str] | None = None) -> None:
         if options.history is not None:
             history = require_history(options.history)
         client = Anthropic(api_key=require_api_key())
+        # Two calls when the model asks for a tool: both are summed.
+        responses = []
+        timings = []
         try:
             reply, timing = stream_answer(
                 client,
@@ -581,7 +586,32 @@ def main(arguments: list[str] | None = None) -> None:
                 system,
                 options.effort,
                 as_messages(history),
+                TOOLS,
             )
+            if reply is not None and reply.stop_reason == "tool_use":
+                # The model asked for a tool instead of answering. AskKit
+                # checks and runs each request, then asks again with
+                # everything so far: the question, the model's own turn
+                # as it came, and the results.
+                responses.append(reply)
+                timings.append(timing)
+                results: list[ToolResultBlockParam] = []
+                for call in tool_calls(reply):
+                    result = run_tool(call)
+                    results.append(result)
+                    print(f"Tool:          {call.name}: {result['content']}")
+                sent = messages_for(question, as_messages(history))
+                sent.append({"role": "assistant", "content": reply.content})
+                reply, timing = stream_answer(
+                    client,
+                    results,
+                    options.model,
+                    options.max_tokens,
+                    system,
+                    options.effort,
+                    sent,
+                    TOOLS,
+                )
         except APIError as error:
             sys.exit(f"askkit: {error_message(error)}")
         if reply is None:
@@ -591,12 +621,14 @@ def main(arguments: list[str] | None = None) -> None:
                 print()
             print(f"Time:          {timing_line(timing, cancelled=True)}")
             sys.exit(f"askkit: {CANCELLED}")
+        responses.append(reply)
+        timings.append(timing)
         text = answer_text(reply)
         if text:
             # A blank line between the answer and its numbers.
             print()
-        print_calls([reply], options.model)
-        print(f"Time:          {timing_line(timing)}")
+        print_calls(responses, options.model)
+        print_times(timings)
         warning = stop_warning(reply)
         if warning is not None:
             if reply.stop_reason == "refusal" and text:

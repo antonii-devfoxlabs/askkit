@@ -63,10 +63,28 @@ def opening(body: dict[str, Any]) -> list[str]:
     ]
     for index, block in enumerate(body["content"]):
         if block["type"] == "thinking":
-            empty = {"type": "thinking", "thinking": "", "signature": ""}
+            empty: dict[str, Any] = {
+                "type": "thinking",
+                "thinking": "",
+                "signature": "",
+            }
             deltas = [
                 {"type": "thinking_delta", "thinking": block["thinking"]},
                 {"type": "signature_delta", "signature": block["signature"]},
+            ]
+        elif block["type"] == "tool_use":
+            # A tool's input arrives as JSON text, in pieces of its own.
+            empty = {
+                "type": "tool_use",
+                "id": block["id"],
+                "name": block["name"],
+                "input": {},
+            }
+            deltas = [
+                {
+                    "type": "input_json_delta",
+                    "partial_json": json.dumps(block["input"]),
+                }
             ]
         else:
             empty = {"type": "text", "text": ""}

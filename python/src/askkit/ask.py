@@ -3,7 +3,13 @@ from time import perf_counter
 from typing import Literal
 
 from anthropic import Anthropic, Omit, omit
-from anthropic.types import Message, MessageParam, OutputConfigParam
+from anthropic.types import (
+    Message,
+    MessageParam,
+    OutputConfigParam,
+    ToolParam,
+    ToolResultBlockParam,
+)
 
 from askkit.prices import PRICES
 
@@ -46,16 +52,19 @@ class Timing:
 
 def stream_answer(
     client: Anthropic,
-    question: str,
+    question: str | list[ToolResultBlockParam],
     model: str,
     max_tokens: int,
     system: str,
     effort: Effort | None = None,
     history: list[MessageParam] | None = None,
+    tools: list[ToolParam] | None = None,
 ) -> tuple[Message | None, Timing]:
     # The same request as ask(), printed piece by piece as the model
     # writes it, and timed from the moment it is sent. No Message when
-    # you cancel it with Ctrl-C: the stream never reached its end.
+    # you cancel it with Ctrl-C: the stream never reached its end. With
+    # tools, the model may ask for one instead of answering; the question
+    # of the next call is then the results.
     first_token: float | None = None
     # perf_counter: a clock for durations, which never goes back.
     start = perf_counter()
@@ -66,6 +75,7 @@ def stream_answer(
             system=system,
             messages=messages_for(question, history),
             output_config=effort_config(effort),
+            tools=omit if tools is None else tools,
         ) as stream:
             for text in stream.text_stream:
                 if first_token is None and text:
@@ -102,7 +112,8 @@ def effort_config(effort: Effort | None) -> OutputConfigParam | Omit:
 
 
 def messages_for(
-    question: str, history: list[MessageParam] | None = None
+    question: str | list[ToolResultBlockParam],
+    history: list[MessageParam] | None = None,
 ) -> list[MessageParam]:
     # The API remembers nothing, so every earlier message goes again,
     # oldest first, before the new question.
