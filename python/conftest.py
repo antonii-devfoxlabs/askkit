@@ -1,3 +1,6 @@
+# Here, at the top of python/, not in tests/: evals/ has a conftest of
+# its own, and mypy refuses two modules both named conftest.
+
 from itertools import count
 
 import pytest
