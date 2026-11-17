@@ -1,7 +1,7 @@
 from typing import Literal
 
 from anthropic import Anthropic, Omit, omit
-from anthropic.types import Message, OutputConfigParam
+from anthropic.types import Message, MessageParam, OutputConfigParam
 
 from askkit.prices import PRICES
 
@@ -23,16 +23,23 @@ def ask(
     max_tokens: int,
     system: str,
     effort: Effort | None = None,
+    history: list[MessageParam] | None = None,
 ) -> Message:
     # Without an effort, the field stays out and the model's default holds.
     output_config: OutputConfigParam | Omit = omit
     if effort is not None:
         output_config = {"effort": effort}
+    # The API remembers nothing, so every earlier message goes again,
+    # oldest first, before the new question.
+    messages: list[MessageParam] = []
+    if history is not None:
+        messages = list(history)
+    messages.append({"role": "user", "content": question})
     return client.messages.create(
         model=model,
         max_tokens=max_tokens,
         system=system,
-        messages=[{"role": "user", "content": question}],
+        messages=messages,
         output_config=output_config,
     )
 

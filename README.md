@@ -101,6 +101,24 @@ nothing, such as one whose quotes are in a tag the request did not ask
 for, exits the same way, unless it is "I don't know": there would be
 nothing to check it against.
 
+`--history FILE` keeps a conversation going from one run to the next.
+The API keeps nothing between two calls, so AskKit keeps the
+conversation itself: it reads the messages saved in the file (none
+the first time), sends them before the new question, and after a whole
+answer saves the question and the answer's text back to the file, as
+JSON a person can read. A cut-off or declined answer is not saved, and
+a file whose messages are out of turn is refused before any call:
+
+```bash
+cd python
+uv run askkit ask "Order 4417 came with a broken mug. Can I get a new one?" --history chat.json
+uv run askkit ask "And who pays the postage?" --history chat.json
+```
+
+Every run sends the whole conversation again, so each one's input
+tokens, and its cost, grow with it. `History:` under the stop reason
+says how many messages the file now holds.
+
 `askkit extract` turns a customer's email into a support ticket, as
 JSON. The ticket is one class, `Ticket` in `python/src/askkit/extract.py`,
 a Pydantic model with three fields: `order` (a whole number, or `null`
@@ -424,6 +442,7 @@ test, as the thinking count of `ask` did.
 - `python/`: the Python app, a uv project (Python 3.14).
   - `src/askkit/`: the package.
   - `src/askkit/templates/`: the prompts, one file per version.
+  - `src/askkit/history.py`: a conversation saved in a file of its own.
   - `notebooks/`: notebooks for exploring, saved without outputs.
   - `evals/`: the golden sets, a main and a held-out part each, the
     ask set's documents and rubric, and the eval that runs the extract

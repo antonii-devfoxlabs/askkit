@@ -41,6 +41,13 @@ from askkit.extract import (
     ticket_faults,
 )
 from askkit.golden import KINDS, Case, kind_counts, load_cases
+from askkit.history import (
+    Turn,
+    as_messages,
+    history_fault,
+    load_history,
+    save_history,
+)
 from askkit.limits import LIMITS
 from askkit.prices import PRICES
 from askkit.prompts import ASK_SYSTEM
@@ -130,6 +137,7 @@ def main(arguments: list[str] | None = None) -> None:
     ask_command.add_argument(
         "--document", type=Path, action="append", default=[]
     )
+    ask_command.add_argument("--history", type=Path)
     extract = commands.add_parser(
         "extract", help="turn an email into a ticket, as JSON"
     )
@@ -474,6 +482,18 @@ def main(arguments: list[str] | None = None) -> None:
         question = options.question
         if documents:
             question = with_documents(options.question, documents)
+        turns: list[Turn] = []
+        if options.history is not None:
+            try:
+                turns = load_history(options.history)
+            except json.JSONDecodeError, ValidationError:
+                sys.exit(
+                    f"askkit: {options.history} is not a conversation"
+                    " AskKit saved"
+                )
+            fault = history_fault(turns)
+            if fault is not None:
+                sys.exit(f"askkit: {options.history}: {fault}")
         client = Anthropic(api_key=require_api_key())
         try:
             response = ask(
@@ -483,6 +503,7 @@ def main(arguments: list[str] | None = None) -> None:
                 options.max_tokens,
                 system,
                 options.effort,
+                as_messages(turns),
             )
         except APIError as error:
             sys.exit(f"askkit: {error_message(error)}")
@@ -513,6 +534,15 @@ def main(arguments: list[str] | None = None) -> None:
                     "askkit: the answer quotes nothing from the documents,"
                     " so it cannot be checked"
                 )
+        # Saved only once the answer passed every check above, so the
+        # file never holds a cut-off or declined answer.
+        if options.history is not None:
+            turns.append(Turn(role="user", content=question))
+            turns.append(Turn(role="assistant", content=text))
+            save_history(options.history, turns)
+            print(
+                f"History:       {len(turns)} messages in {options.history}"
+            )
         return
 
     text = options.file.read_text(encoding="utf-8")
