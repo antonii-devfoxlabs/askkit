@@ -17,6 +17,7 @@ from askkit.ask import (
     stop_warning,
     stream_answer,
     thinking_tokens,
+    timing_line,
 )
 from askkit.budget import DEFAULT_BUDGET, budget_fault
 from askkit.chat import STOP, chat
@@ -537,7 +538,7 @@ def main(arguments: list[str] | None = None) -> None:
             history = require_history(options.history)
         client = Anthropic(api_key=require_api_key())
         try:
-            response = stream_answer(
+            response, timing = stream_answer(
                 client,
                 question,
                 options.model,
@@ -553,6 +554,7 @@ def main(arguments: list[str] | None = None) -> None:
             # A blank line between the answer and its numbers.
             print()
         print_calls([response], options.model)
+        print(f"Time:          {timing_line(timing)}")
         warning = stop_warning(response)
         if warning is not None:
             if response.stop_reason == "refusal" and text:

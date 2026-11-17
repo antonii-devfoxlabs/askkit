@@ -164,8 +164,11 @@ def test_the_first_run_saves_the_question_and_the_answer(
     main(["ask", MARIA, "--history", "chat.json"])
     assert sent[0]["messages"] == [{"role": "user", "content": MARIA}]
     lines = capsys.readouterr().out.splitlines()
-    assert lines[-2] == "Stop reason:   end_turn"
-    assert lines[-1] == "History:       2 messages in chat.json"
+    assert lines[-3:] == [
+        "Stop reason:   end_turn",
+        "Time:          first token 0.42 s, total 0.84 s",
+        "History:       2 messages in chat.json",
+    ]
     assert load_history(tmp_path / "chat.json") == [
         SavedMessage(role="user", content=MARIA),
         SavedMessage(role="assistant", content=ANSWER),

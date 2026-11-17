@@ -223,8 +223,9 @@ def test_ask_sends_the_document_first_and_the_question_last(
         }
     ]
     lines = capsys.readouterr().out.splitlines()
-    assert lines[-2:] == [
+    assert lines[-3:] == [
         "Stop reason:   end_turn",
+        "Time:          first token 0.42 s, total 0.84 s",
         "Quotes:        2 of 2 found in the documents",
     ]
 

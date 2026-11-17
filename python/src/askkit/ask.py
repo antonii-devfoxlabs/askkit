@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+from time import perf_counter
 from typing import Literal
 
 from anthropic import Anthropic, Omit, omit
@@ -34,6 +36,14 @@ def ask(
     )
 
 
+@dataclass
+class Timing:
+    # Seconds from sending the request: to the first piece of text (None
+    # when no text came at all) and to the end of the stream.
+    first_token: float | None
+    total: float
+
+
 def stream_answer(
     client: Anthropic,
     question: str,
@@ -42,10 +52,12 @@ def stream_answer(
     system: str,
     effort: Effort | None = None,
     history: list[MessageParam] | None = None,
-) -> Message:
+) -> tuple[Message, Timing]:
     # The same request as ask(), printed piece by piece as the model
-    # writes it.
-    shown = False
+    # writes it, and timed from the moment it is sent.
+    first_token: float | None = None
+    # perf_counter: a clock for durations, which never goes back.
+    start = perf_counter()
     try:
         with client.messages.stream(
             model=model,
@@ -55,15 +67,24 @@ def stream_answer(
             output_config=effort_config(effort),
         ) as stream:
             for text in stream.text_stream:
+                if first_token is None and text:
+                    first_token = perf_counter() - start
                 # flush: show the piece now, not when the line ends.
                 print(text, end="", flush=True)
-                shown = True
-            return stream.get_final_message()
+            response = stream.get_final_message()
+            return response, Timing(first_token, perf_counter() - start)
     finally:
         # Ends the answer's last line, also when the stream breaks off,
         # so whatever AskKit prints next starts on a line of its own.
-        if shown:
+        if first_token is not None:
             print()
+
+
+def timing_line(timing: Timing) -> str:
+    total = f"total {timing.total:.2f} s"
+    if timing.first_token is None:
+        return f"no text, {total}"
+    return f"first token {timing.first_token:.2f} s, {total}"
 
 
 def effort_config(effort: Effort | None) -> OutputConfigParam | Omit:

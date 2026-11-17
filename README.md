@@ -54,7 +54,9 @@ were checked.
 masked. `askkit ask` sends a question to a model with Anthropic's SDK and
 prints the answer as the model writes it, streamed piece by piece, then
 the tokens the call used (and how many of the output tokens were
-thinking, when the API says) and what it cost:
+thinking, when the API says), what it cost, and how long it took: the
+time to the first piece of text and the total time, both counted from
+the moment the request is sent:
 
 ```bash
 cd python
@@ -139,7 +141,8 @@ and the file is written after every such turn, so stopping at any moment
 loses at most the answer still on its way. An API error, a cut-off or a declined
 answer prints `askkit:` and why, keeps nothing, and the chat goes on, so
 the same question can be asked again. Each whole turn prints its tokens
-and cost on a `Turn N:` line; they grow with the conversation.
+and cost on a `Turn N:` line; they grow with the conversation. A `Time:`
+line under it gives the turn's time to first token and total time.
 
 Every turn of a chat is held to a budget: the most input tokens one call
 may send, 90,000 unless you give `--budget N`. Before each call AskKit

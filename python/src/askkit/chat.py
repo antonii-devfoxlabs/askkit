@@ -11,6 +11,7 @@ from askkit.ask import (
     answer_text,
     stop_warning,
     stream_answer,
+    timing_line,
 )
 from askkit.budget import input_tokens, over_budget
 from askkit.cost import call_cost
@@ -159,7 +160,7 @@ def chat(
         try:
             # The answer shows as it is written; the turn is kept only once
             # the stream has ended with a whole answer.
-            response = stream_answer(
+            response, timing = stream_answer(
                 client, question, model, max_tokens, sent_system, effort, sent
             )
         except APIError as error:
@@ -191,4 +192,5 @@ def chat(
             f"{label:<15}{usage.input_tokens:,} in ({share:.0%} of budget),"
             f" {usage.output_tokens:,} out, ${cost:.6f}"
         )
+        print(f"{'Time:':<15}{timing_line(timing)}")
         print()

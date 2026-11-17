@@ -276,9 +276,11 @@ def test_each_turn_prints_its_tokens_and_cost(
     assert capsys.readouterr().out.splitlines() == [
         ANSWER,
         "Turn 1:        118 in (30% of budget), 27 out, $0.000025",
+        "Time:          first token 0.42 s, total 0.84 s",
         "",
         ANSWER,
         "Turn 2:        118 in (30% of budget), 27 out, $0.000025",
+        "Time:          first token 0.42 s, total 0.84 s",
         "",
         "",
     ]

@@ -7,11 +7,13 @@ import pytest
 from anthropic import Anthropic, APIError
 
 from askkit.ask import (
+    Timing,
     answer_text,
     ask,
     stop_warning,
     stream_answer,
     thinking_tokens,
+    timing_line,
 )
 from askkit.cli import main
 from askkit.prompts import ASK_SYSTEM, render
@@ -248,6 +250,7 @@ def test_ask_prints_the_answer_and_its_cost(
         "Tokens:        118 in, 27 out",
         "Cost:          $0.000025",
         "Stop reason:   end_turn",
+        "Time:          first token 0.42 s, total 0.84 s",
     ]
     assert sent[0]["max_tokens"] == 1000
     assert sent[0]["system"] == ASK_SYSTEM
@@ -275,7 +278,7 @@ def test_ask_takes_the_model_and_max_tokens(
     assert sent[0]["model"] == "claude-haiku-5-5"
     assert sent[0]["max_tokens"] == 200
     lines = capsys.readouterr().out.splitlines()
-    assert lines[-2] == "Cost:          $0.000025"
+    assert lines[-3] == "Cost:          $0.000025"
 
 
 @pytest.mark.parametrize("effort", ["low", "medium", "high", "xhigh", "max"])
@@ -449,7 +452,10 @@ def test_ask_stops_with_a_warning_when_the_answer_is_cut_off(
     )
     lines = capsys.readouterr().out.splitlines()
     assert lines[0] == "Order 4417: a replacement mug."
-    assert lines[-1] == "Stop reason:   max_tokens"
+    assert lines[-2:] == [
+        "Stop reason:   max_tokens",
+        "Time:          first token 0.42 s, total 0.84 s",
+    ]
 
 
 def test_a_refusal_names_its_category() -> None:
@@ -520,6 +526,7 @@ def test_ask_marks_the_shown_part_of_a_declined_answer(
         "Tokens:        118 in, 60 out",
         "Cost:          $0.000042",
         "Stop reason:   refusal",
+        "Time:          first token 0.42 s, total 0.84 s",
     ]
     assert captured.err == (
         "askkit: the text above stopped where the model declined;"
@@ -564,7 +571,7 @@ def test_stream_answer_sends_the_request_of_ask_as_a_stream() -> None:
 def test_stream_answer_prints_the_pieces_and_returns_the_message(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    response = stream_answer(
+    response, _ = stream_answer(
         fake_client([]), "Hi", "claude-haiku-5-5", 1000, "Be brief."
     )
     assert capsys.readouterr().out == "Order 4417: a replacement mug.\n"
@@ -641,6 +648,76 @@ def test_askkit_ask_says_when_the_stream_breaks_off(
         "\nask again"
     )
     assert capsys.readouterr().out == "Order 4417:\n"
+
+
+def readings_of(
+    monkeypatch: pytest.MonkeyPatch, readings: list[float], log: list[str]
+) -> None:
+    # A clock that gives the readings in order and notes each one in the
+    # log, so a test can see when AskKit read it.
+    def clock() -> float:
+        log.append("clock")
+        return readings.pop(0)
+
+    monkeypatch.setattr("askkit.ask.perf_counter", clock)
+
+
+def test_the_clock_starts_before_the_request_is_sent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    log: list[str] = []
+    readings_of(monkeypatch, [10.0, 10.84, 13.1], log)
+
+    def answer(request: httpx2.Request) -> httpx2.Response:
+        log.append("request")
+        return replied(request, WRITTEN)
+
+    client = Anthropic(
+        api_key="sk-ant-api03-a-test-key-Ab12",
+        http_client=httpx2.Client(transport=httpx2.MockTransport(answer)),
+    )
+    stream_answer(client, "Hi", "claude-haiku-5-5", 1000, "Be brief.")
+    # Started, sent, the first piece of text, the end of the stream.
+    assert log == ["clock", "request", "clock", "clock"]
+
+
+def test_the_first_token_is_the_first_piece_of_text(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # WRITTEN thinks first: its thinking block streams before the text,
+    # and the first token is timed at the text, not at the thinking.
+    readings_of(monkeypatch, [10.0, 10.84, 13.1], [])
+    _, timing = stream_answer(
+        fake_client([]), "Hi", "claude-haiku-5-5", 1000, "Be brief."
+    )
+    assert timing.first_token == pytest.approx(0.84)
+    assert timing.total == pytest.approx(3.1)
+
+
+def test_a_stream_with_no_text_has_no_first_token(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    readings_of(monkeypatch, [10.0, 10.5], [])
+    body = stopped_with("refusal")
+    body["content"] = []
+    _, timing = stream_answer(
+        fake_client([], body), "Hi", "claude-haiku-5-5", 1000, "Be brief."
+    )
+    assert timing == Timing(first_token=None, total=0.5)
+    assert capsys.readouterr().out == ""
+
+
+def test_the_timing_line_names_both_times() -> None:
+    assert timing_line(Timing(first_token=0.84, total=3.1)) == (
+        "first token 0.84 s, total 3.10 s"
+    )
+
+
+def test_the_timing_line_says_when_no_text_came() -> None:
+    assert timing_line(Timing(first_token=None, total=0.5)) == (
+        "no text, total 0.50 s"
+    )
 
 
 def with_thinking(thinking: int, output: int) -> dict[str, Any]:
