@@ -25,11 +25,17 @@ def failures(file_name: str, results: Results) -> list[Failure]:
     return found
 
 
-def fault_field(fault: str) -> str:
-    # The words before the first colon: the field a check found wrong,
-    # such as "problem" or "wish", or "stop" for an answer cut off or
-    # declined. A schema fault starts with its field the same way.
-    return fault.split(":")[0]
+def fault_fields(fault: str) -> list[str]:
+    # The fields a fault names: the words before the colon of each part,
+    # such as "problem" or "wish", "stop" for an answer cut off or
+    # declined, "answer" for one that is not a ticket. A schema fault
+    # joins one part per broken field with "; ", so it can name two. A
+    # part with no colon is the rest of a value that held "; ".
+    fields: list[str] = []
+    for part in fault.split("; "):
+        if ":" in part and part.split(":")[0] not in fields:
+            fields.append(part.split(":")[0])
+    return fields
 
 
 def by_field(found: list[Failure]) -> dict[str, list[str]]:
@@ -39,8 +45,9 @@ def by_field(found: list[Failure]) -> dict[str, list[str]]:
     for failure in found:
         fields: list[str] = []
         for fault in failure.faults:
-            if fault_field(fault) not in fields:
-                fields.append(fault_field(fault))
+            for field in fault_fields(fault):
+                if field not in fields:
+                    fields.append(field)
         for field in fields:
             if field not in groups:
                 groups[field] = []
@@ -112,6 +119,7 @@ def fault_lines(
     lines.append("")
     lines.append("Every failed answer, to read beside its email")
     for failure in found:
-        faults = "; ".join(failure.faults)
-        lines.append(f"{failure.source:<16}{failure.case:<10}{faults}")
+        lines.append(f"{failure.source:<16}{failure.case}")
+        for fault in failure.faults:
+            lines.append(f"  {fault}")
     return lines

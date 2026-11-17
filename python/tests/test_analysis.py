@@ -7,7 +7,7 @@ from askkit.analysis import (
     by_field,
     by_kind,
     failures,
-    fault_field,
+    fault_fields,
     fault_lines,
     group_lines,
 )
@@ -60,9 +60,25 @@ def test_every_failed_answer_is_listed_run_by_run() -> None:
 
 
 def test_a_fault_names_its_field_before_the_colon() -> None:
-    assert fault_field(TOO_LONG) == "problem"
-    assert fault_field(WISH) == "wish"
-    assert fault_field("stop: the answer was cut off at 5 tokens") == "stop"
+    assert fault_fields(TOO_LONG) == ["problem"]
+    assert fault_fields(WISH) == ["wish"]
+    assert fault_fields("stop: the answer was cut off at 5 tokens") == [
+        "stop"
+    ]
+
+
+def test_a_schema_fault_names_every_field_that_broke() -> None:
+    # ticket_faults joins one part per field: the second field used to be
+    # lost, and a failure in it went uncounted.
+    fault = "order: Input should be a valid integer, not 'abc'; " + TOO_LONG
+    assert fault_fields(fault) == ["order", "problem"]
+    found = [Failure(source="v2.json run 1", case="clock", faults=[fault])]
+    assert by_field(found) == {"order": ["clock"], "problem": ["clock"]}
+
+
+def test_a_value_holding_a_semicolon_adds_no_field() -> None:
+    fault = "problem: no 'spark' in 'tray missing; cord melted'"
+    assert fault_fields(fault) == ["problem"]
 
 
 def test_an_answer_counts_once_for_each_field_it_failed() -> None:
@@ -104,7 +120,11 @@ def test_the_lines_count_the_runs_and_list_every_failed_answer() -> None:
     assert lines[0] == "5 failed answers in 2 runs of 16 cases"
     assert "problem       4        clock, toaster" in lines
     assert "two wishes    1        pans" in lines
-    assert lines[-1] == "v2.json run 2   toaster   " + "; ".join(TOASTER)
+    assert lines[-3:] == [
+        "v2.json run 2   toaster",
+        "  " + TOASTER[0],
+        "  " + TOASTER[1],
+    ]
 
 
 def test_a_run_with_no_failure_says_so_in_one_line() -> None:
@@ -139,7 +159,7 @@ def test_the_faults_command_prints_the_lines_and_refuses_a_bad_file(
     main(["faults", str(path), "--cases", str(EXTRACT / "main")])
     output = capsys.readouterr().out
     assert "wish          1        pans" in output
-    assert f"v2.json run 1   pans      {WISH}" in output
+    assert f"v2.json run 1   pans\n  {WISH}\n" in output
     held = tmp_path / "held.json"
     add_run(held, "claude-haiku-5-5", 2, {"bowl": [WISH]})
     with pytest.raises(SystemExit) as stopped:

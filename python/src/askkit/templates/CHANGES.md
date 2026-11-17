@@ -54,12 +54,13 @@ beside the prompt.
   goes in when a comparison with v2 on the golden set shows what it fixes
   and that it breaks nothing (see "Comparing two versions" in the README).
 - v4: which thing the problem starts with. Reading every failed answer
-  of v2's and v3's runs (see "Reading the failures" in the README), most
-  had one cause: the problem kept a lesser detail and lost the customer's
-  main complaint, "crumb tray missing" for a toaster that sparks and,
-  under v3's limit, "blanket not clean" for one that smells of smoke. v4
-  keeps the limit and says what to start with: a danger, otherwise what
-  the email says most about. Not in use yet, as v3: it goes in when a
+  of v2's and v3's runs with `askkit faults`, most had one cause: the
+  problem kept a lesser detail and lost the customer's main complaint,
+  "crumb tray missing" for a toaster that sparks and, under v3's limit,
+  "blanket not clean" for one that smells of smoke. v2 and v3 asked for
+  the most serious first without saying what counts as serious; v4 says
+  it (a danger, otherwise what the email says most about) and adds the
+  rest only if it fits. Not in use yet, as v3: it goes in when a
   comparison with v2 shows what it fixes and that it breaks nothing.
 
 ## retry_ticket

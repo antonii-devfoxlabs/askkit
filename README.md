@@ -330,8 +330,8 @@ diff.
 A diff names the cases that changed; it does not say why they fail.
 `askkit faults v2.json v3.json` reads every failed answer in one or more
 results files of the main part, with no call to the model, and sorts
-them by what code can tell: the field each fault names (the words before
-its first colon, `stop` for an answer cut off or declined) and the kind
+them by what code can tell: the fields each fault names (the words before
+the colon of each part, `stop` for an answer cut off or declined) and the kind
 of the case's email, the largest group first. Then it lists every failed
 answer with its faults, to be read beside its email. Write a note on
 each one, saying what went wrong in your own words; group the notes that
