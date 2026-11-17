@@ -233,7 +233,12 @@ folder with a `cases.json` and one `.txt` file per email:
 
 A case names its email by the file without `.txt` and gives `order`
 (`null` when the email has none), `wish`, its `kind` and `why` it is
-in the set. Every kind has cases in both parts. `load_cases(folder)` in
+in the set. The kinds: `plain` (one order, one problem, one wish), `no
+order`, `no wish` (no word on a replacement or a refund), `two wishes`
+(the first one counts), `quoted` (an earlier email quoted with it),
+`look-alike` (a phone number, a date or a quantity beside the order
+number), `problems` (several things went wrong) and `language` (not
+written in English). Every kind has cases in both parts. `load_cases(folder)` in
 `python/src/askkit/golden.py` reads one part and stops with a
 `ValueError` on a case without its email, an email without a case or a
 name used twice; an expected value `Ticket` would refuse stops it too.

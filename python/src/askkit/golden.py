@@ -6,13 +6,10 @@ from pydantic import BaseModel, ConfigDict
 
 from askkit.extract import Wish
 
-# The kinds of email the golden set covers. Every kind has cases in both
-# parts, so the held-out part asks the same questions as the main one.
-# plain: one order, one problem, one wish. no order, no wish: the ticket
-# needs a way out. two wishes: the first one counts. quoted: an earlier
-# email is quoted under or over the message. look-alike: a phone number,
-# a date or a quantity beside the order number. problems: several things
-# went wrong. language: not written in English.
+# The kinds of email the golden set covers, each a way an email can be
+# hard to turn into a ticket (the README says what each one means).
+# Every kind has cases in both parts, so the held-out part asks the same
+# questions as the main one.
 Kind = Literal[
     "plain",
     "no order",
