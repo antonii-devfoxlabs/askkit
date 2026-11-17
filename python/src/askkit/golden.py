@@ -8,15 +8,20 @@ from askkit.extract import Wish
 
 # The kinds of email the golden set covers. Every kind has cases in both
 # parts, so the held-out part asks the same questions as the main one.
+# plain: one order, one problem, one wish. no order, no wish: the ticket
+# needs a way out. two wishes: the first one counts. quoted: an earlier
+# email is quoted under or over the message. look-alike: a phone number,
+# a date or a quantity beside the order number. problems: several things
+# went wrong. language: not written in English.
 Kind = Literal[
     "plain",
     "no order",
-    "wish not stated",
+    "no wish",
     "two wishes",
-    "quoted email",
-    "other numbers",
-    "many problems",
-    "other language",
+    "quoted",
+    "look-alike",
+    "problems",
+    "language",
 ]
 KINDS: tuple[str, ...] = get_args(Kind)
 
