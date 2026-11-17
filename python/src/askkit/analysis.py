@@ -76,6 +76,13 @@ def group_lines(title: str, groups: dict[str, list[str]]) -> list[str]:
     return lines
 
 
+def counted(number: int, word: str) -> str:
+    # "1 run", "2 runs": a count with its word in the right number.
+    if number == 1:
+        return f"1 {word}"
+    return f"{number} {word}s"
+
+
 def fault_lines(
     files: dict[str, Results], cases: dict[str, Case]
 ) -> list[str]:
@@ -95,13 +102,8 @@ def fault_lines(
             )
         found.extend(failures(file_name, results))
         runs = runs + len(run_scores(results))
-    runs_text = f"{runs} runs"
-    if runs == 1:
-        runs_text = "1 run"
-    lines = [
-        f"{len(found)} failed answers in {runs_text} of {len(cases)} cases",
-        "",
-    ]
+    answers = counted(len(found), "failed answer")
+    lines = [f"{answers} in {counted(runs, 'run')} of {len(cases)} cases", ""]
     if not found:
         return lines[:1]
     lines.extend(group_lines("By field", by_field(found)))

@@ -113,6 +113,12 @@ def test_a_run_with_no_failure_says_so_in_one_line() -> None:
     )
     lines = fault_lines({"v2.json": results}, main_cases())
     assert lines == ["0 failed answers in 1 run of 16 cases"]
+    one = Results(
+        model="claude-haiku-5-5", prompt_version=2, cases={"pans": [[WISH]]}
+    )
+    assert fault_lines({"v4.json": one}, main_cases())[0] == (
+        "1 failed answer in 1 run of 16 cases"
+    )
 
 
 def test_held_out_results_are_refused_so_they_stay_unread() -> None:
