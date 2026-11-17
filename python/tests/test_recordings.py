@@ -8,13 +8,18 @@ from typing import Any
 
 import httpx2
 import pytest
-from anthropic import Anthropic, APIConnectionError, InternalServerError
+from anthropic import Anthropic, InternalServerError
 
 from askkit.ask import answer_text
 from askkit.checks import run_case
 from askkit.extract import extract_ticket
 from askkit.golden import load_cases
-from askkit.recordings import load_exchanges, recording, replaying
+from askkit.recordings import (
+    NotRecorded,
+    load_exchanges,
+    recording,
+    replaying,
+)
 
 PYTHON = Path(__file__).parent.parent
 MAIN = PYTHON / "evals" / "extract" / "main"
@@ -122,12 +127,8 @@ def test_a_replay_refuses_a_request_it_never_recorded(
     recorder = client_on(recording(path, upstream([TICKET])))
     extract_ticket(recorder, EMAIL, "claude-haiku-5-5", 1000)
     player = client_on(replaying(path))
-    with pytest.raises(APIConnectionError) as raised:
+    with pytest.raises(NotRecorded, match="no answer to this request"):
         extract_ticket(player, EMAIL, "claude-sonnet-5-5", 1000)
-    assert isinstance(raised.value.__cause__, LookupError)
-    assert "recording.json has no answer to this request" in str(
-        raised.value.__cause__
-    )
 
 
 def run_eval(folder: Path, *arguments: str) -> str:

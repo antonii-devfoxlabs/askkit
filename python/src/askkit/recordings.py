@@ -3,11 +3,21 @@ from pathlib import Path
 from typing import Any
 
 import httpx2
+from anthropic import AnthropicError
 
 # A recording is a JSON list of exchanges, each the body of a request
 # AskKit sent and the body of the answer the API gave it. Only bodies are
 # kept: the headers carry the API key, and a recording goes into Git.
 Exchange = dict[str, dict[str, Any]]
+
+
+class NotRecorded(AnthropicError):
+    """A request the recording has no answer to.
+
+    A kind of the SDK's own error, because the SDK passes those on as
+    they are; any other error raised in a transport reaches the caller
+    as "Connection error.", which would hide what is missing.
+    """
 
 
 def load_exchanges(path: Path) -> list[Exchange]:
@@ -61,7 +71,7 @@ def replaying(path: Path) -> httpx2.MockTransport:
         for exchange in exchanges:
             if exchange["request"] == sent:
                 return httpx2.Response(200, json=exchange["response"])
-        raise LookupError(
+        raise NotRecorded(
             f"{path.name} has no answer to this request; record it again"
             " with --record"
         )
