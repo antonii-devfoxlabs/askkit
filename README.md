@@ -84,9 +84,16 @@ for the clock; for the calculator, a known operation, two numbers that
 are not `true` or `false`, and no division by zero), runs it, prints a
 `Tool:` line with the result, and sends the result back with everything
 before it, so the model can answer. A request that fails the check runs
-nothing: the model gets an error result instead. `ask` runs one tool call per
-question; if the model asks again, `ask` stops with exit code 1. The two
-calls' tokens and cost are added up, with one `Time:` line per call.
+nothing: the model gets an error result instead.
+
+`ask` runs the tool loop (`python/src/askkit/loop.py`): call, run every
+request, send the results back, and call again, until the model answers
+instead of asking. A question whose second sum needs the first one's
+result takes two rounds and three calls. Every request of every round
+passes the checks and your permission below. After 5 rounds AskKit runs
+nothing more: if the model still asks for a tool, `ask` stops with exit
+code 1 and says so. The calls' tokens and cost are added up, with one
+`Time:` line per call.
 
 Which tools AskKit may run for you is your decision, not the model's.
 Each tool has a permission in `python/src/askkit/permissions.py`:
@@ -587,6 +594,9 @@ test, as the thinking count of `ask` did.
   - `src/askkit/permissions.py`: which tools AskKit may run for you
     (allow, ask first, or deny), and the check every request passes
     before it runs.
+  - `src/askkit/loop.py`: the tool loop, which calls the model, runs
+    what it asks for and sends the results back until it answers, for
+    at most 5 rounds.
   - `notebooks/`: notebooks for exploring, saved without outputs.
   - `evals/`: the golden sets, a main and a held-out part each, the
     ask set's documents and rubric, and the eval that runs the extract

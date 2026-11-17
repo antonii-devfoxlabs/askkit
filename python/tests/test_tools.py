@@ -351,19 +351,6 @@ def test_askkit_ask_refuses_a_tool_it_never_offered(
     )
 
 
-def test_askkit_ask_stops_when_the_model_asks_a_second_time(
-    tmp_path: Any,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.chdir(tmp_path)
-    sent: list[dict[str, Any]] = []
-    use_answers(monkeypatch, sent, [ASKED, ASKED])
-    with pytest.raises(SystemExit) as stopped:
-        main(["ask", "What is today's date?"])
-    assert stopped.value.code == "askkit: the answer stopped early: tool_use"
-    assert len(sent) == 2
-
-
 def test_askkit_ask_runs_the_calculator_and_sends_the_result_back(
     tmp_path: Any,
     monkeypatch: pytest.MonkeyPatch,

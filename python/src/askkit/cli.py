@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 
 from anthropic import Anthropic, APIError
-from anthropic.types import Message, ToolResultBlockParam
+from anthropic.types import Message, ToolResultBlockParam, ToolUseBlock
 from pydantic import ValidationError
 
 from askkit.analysis import fault_lines
@@ -16,9 +16,7 @@ from askkit.ask import (
     Timing,
     answer_text,
     ask,
-    messages_for,
     stop_warning,
-    stream_answer,
     thinking_tokens,
     timing_line,
 )
@@ -57,6 +55,7 @@ from askkit.history import (
     save_history,
 )
 from askkit.limits import LIMITS
+from askkit.loop import TOO_MANY_ROUNDS, tool_loop
 from askkit.memory import load_memory
 from askkit.permissions import offered, permissions_for, run_permitted
 from askkit.prices import PRICES
@@ -76,7 +75,7 @@ from askkit.rules import email_fault, load_orders, order_fault
 from askkit.runs import Results, diff_lines, load_results
 from askkit.structured import stream_json
 from askkit.tokens import count_tokens
-from askkit.tools import TOOLS, tool_calls
+from askkit.tools import TOOLS
 from askkit.trim import OLD_TURNS
 
 
@@ -602,11 +601,15 @@ def main(arguments: list[str] | None = None) -> None:
         permissions = permissions_for(options.confirm, options.deny)
         tools = offered(TOOLS, permissions)
         client = Anthropic(api_key=require_api_key())
-        # Two calls when the model asks for a tool: both are summed.
-        responses = []
-        timings = []
+
+        def run_and_show(call: ToolUseBlock) -> ToolResultBlockParam:
+            # Your permission first, in every round, then one line each.
+            result = run_permitted(call, permissions, confirm_on_terminal)
+            print(f"Tool:          {call.name}: {result['content']}")
+            return result
+
         try:
-            reply, timing = stream_answer(
+            answered = tool_loop(
                 client,
                 question,
                 options.model,
@@ -615,44 +618,25 @@ def main(arguments: list[str] | None = None) -> None:
                 options.effort,
                 as_messages(history),
                 tools or None,
+                run_and_show,
             )
-            if reply is not None and reply.stop_reason == "tool_use":
-                # The model asked for a tool instead of answering. AskKit
-                # checks each request, your permission included, runs it,
-                # then asks again with everything so far: the question,
-                # the model's own turn as it came, and the results.
-                responses.append(reply)
-                timings.append(timing)
-                results: list[ToolResultBlockParam] = []
-                for call in tool_calls(reply):
-                    result = run_permitted(
-                        call, permissions, confirm_on_terminal
-                    )
-                    results.append(result)
-                    print(f"Tool:          {call.name}: {result['content']}")
-                sent = messages_for(question, as_messages(history))
-                sent.append({"role": "assistant", "content": reply.content})
-                reply, timing = stream_answer(
-                    client,
-                    results,
-                    options.model,
-                    options.max_tokens,
-                    system,
-                    options.effort,
-                    sent,
-                    tools or None,
-                )
         except APIError as error:
             sys.exit(f"askkit: {error_message(error)}")
-        if reply is None:
-            # Cancelled with Ctrl-C: no stop reason and no usage came, so
-            # there are no tokens or cost to print, only the time.
-            if timing.first_token is not None:
+        timings = answered.timings
+        if answered.cancelled:
+            # Cancelled with Ctrl-C: the last call has no stop reason and
+            # no usage, so its tokens are not counted; its time is shown.
+            if timings[-1].first_token is not None:
                 print()
-            print(f"Time:          {timing_line(timing, cancelled=True)}")
+            if answered.replies:
+                print_calls(answered.replies, options.model, False)
+            print_times(timings[:-1])
+            print(
+                f"Time:          {timing_line(timings[-1], cancelled=True)}"
+            )
             sys.exit(f"askkit: {CANCELLED}")
-        responses.append(reply)
-        timings.append(timing)
+        responses = answered.replies
+        reply = responses[-1]
         text = answer_text(reply)
         if text:
             # A blank line between the answer and its numbers.
@@ -660,6 +644,9 @@ def main(arguments: list[str] | None = None) -> None:
         print_calls(responses, options.model)
         print_times(timings)
         warning = stop_warning(reply)
+        if reply.stop_reason == "tool_use":
+            # Still asking after the last round AskKit allows.
+            warning = TOO_MANY_ROUNDS
         if warning is not None:
             if reply.stop_reason == "refusal" and text:
                 print(f"askkit: {DECLINED_PART}", file=sys.stderr)
