@@ -42,7 +42,7 @@ from askkit.extract import (
 )
 from askkit.golden import KINDS, Case, kind_counts, load_cases
 from askkit.history import (
-    Turn,
+    SavedMessage,
     as_messages,
     history_fault,
     load_history,
@@ -482,18 +482,18 @@ def main(arguments: list[str] | None = None) -> None:
         question = options.question
         if documents:
             question = with_documents(options.question, documents)
-        turns: list[Turn] = []
+        history: list[SavedMessage] = []
         if options.history is not None:
             try:
-                turns = load_history(options.history)
+                history = load_history(options.history)
             except ValueError:
-                # Not JSON (JSONDecodeError) or not AskKit's messages
-                # (ValidationError): both are kinds of ValueError.
+                # Not JSON (JSONDecodeError), not a list, or not AskKit's
+                # messages (ValidationError): each is a ValueError.
                 sys.exit(
                     f"askkit: {options.history} is not a conversation"
                     " AskKit saved"
                 )
-            fault = history_fault(turns)
+            fault = history_fault(history)
             if fault is not None:
                 sys.exit(f"askkit: {options.history}: {fault}")
         client = Anthropic(api_key=require_api_key())
@@ -505,7 +505,7 @@ def main(arguments: list[str] | None = None) -> None:
                 options.max_tokens,
                 system,
                 options.effort,
-                as_messages(turns),
+                as_messages(history),
             )
         except APIError as error:
             sys.exit(f"askkit: {error_message(error)}")
@@ -539,11 +539,11 @@ def main(arguments: list[str] | None = None) -> None:
         # Saved only once the answer passed every check above, so the
         # file never holds a cut-off or declined answer.
         if options.history is not None:
-            turns.append(Turn(role="user", content=question))
-            turns.append(Turn(role="assistant", content=text))
-            save_history(options.history, turns)
+            history.append(SavedMessage(role="user", content=question))
+            history.append(SavedMessage(role="assistant", content=text))
+            save_history(options.history, history)
             print(
-                f"History:       {len(turns)} messages in {options.history}"
+                f"History:       {len(history)} messages in {options.history}"
             )
         return
 

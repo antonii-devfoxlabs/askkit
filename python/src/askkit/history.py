@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict
 # after a whole answer.
 
 
-class Turn(BaseModel):
+class SavedMessage(BaseModel):
     # One message of a saved conversation: who wrote it, and its text.
     model_config = ConfigDict(extra="forbid")
 
@@ -18,53 +18,56 @@ class Turn(BaseModel):
     content: str
 
 
-def load_history(path: Path) -> list[Turn]:
+def load_history(path: Path) -> list[SavedMessage]:
     # No file yet is a conversation that has not started.
     if not path.exists():
         return []
     data = json.loads(path.read_text(encoding="utf-8"))
-    turns: list[Turn] = []
+    if not isinstance(data, list):
+        raise ValueError(f"{path} holds no list of messages")
+    saved: list[SavedMessage] = []
     for item in data:
-        turns.append(Turn.model_validate(item))
-    return turns
+        saved.append(SavedMessage.model_validate(item))
+    return saved
 
 
-def save_history(path: Path, turns: list[Turn]) -> None:
+def save_history(path: Path, saved: list[SavedMessage]) -> None:
     data = []
-    for turn in turns:
-        data.append(turn.model_dump())
+    for message in saved:
+        data.append(message.model_dump())
     text = json.dumps(data, indent=2, ensure_ascii=False)
     path.write_text(text + "\n", encoding="utf-8")
 
 
-def history_fault(turns: list[Turn]) -> str | None:
-    # The API reads the list as turns: the user's first, then one each.
-    # A file edited by hand can break that, so it is checked before a
+def history_fault(saved: list[SavedMessage]) -> str | None:
+    # AskKit writes a question, then its answer, every time. The API
+    # would merge two user messages in a row, but in this file they mean
+    # a hand edit or a lost answer, so the order is checked before a
     # call is paid for.
     expected = "user"
     number = 1
-    for turn in turns:
-        if turn.role != expected:
+    for message in saved:
+        if message.role != expected:
             return (
                 f"message {number} should be the {expected}'s,"
-                f" not the {turn.role}'s"
+                f" not the {message.role}'s"
             )
         if expected == "user":
             expected = "assistant"
         else:
             expected = "user"
         number += 1
-    if turns and turns[-1].role != "assistant":
+    if saved and saved[-1].role != "assistant":
         return "the last message should be the assistant's answer"
     return None
 
 
-def as_messages(turns: list[Turn]) -> list[MessageParam]:
+def as_messages(saved: list[SavedMessage]) -> list[MessageParam]:
     messages: list[MessageParam] = []
-    for turn in turns:
+    for message in saved:
         # Written out per role: the SDK's types tell the two apart.
-        if turn.role == "user":
-            messages.append({"role": "user", "content": turn.content})
+        if message.role == "user":
+            messages.append({"role": "user", "content": message.content})
         else:
-            messages.append({"role": "assistant", "content": turn.content})
+            messages.append({"role": "assistant", "content": message.content})
     return messages
