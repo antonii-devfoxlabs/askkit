@@ -22,9 +22,9 @@ class Question(BaseModel):
     why: str
 
 
-# One line of the rubric: a question the grader answers yes or no about
-# every answer, with an answer that passes and one that fails, so two
-# graders read the line the same way.
+# One criterion of the rubric: a question the grader answers yes or no
+# about every answer, with an answer that passes and one that fails, so
+# two graders read it the same way.
 class Criterion(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
