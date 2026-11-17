@@ -142,7 +142,8 @@ loses at most the answer still on its way. An API error, a cut-off or a declined
 answer prints `askkit:` and why, keeps nothing, and the chat goes on, so
 the same question can be asked again. Each whole turn prints its tokens
 and cost on a `Turn N:` line; they grow with the conversation. A `Time:`
-line under it gives the turn's time to first token and total time.
+line under it gives the turn's time to first token and total time; a
+turn that is not kept prints its `Time:` line too.
 
 Every turn of a chat is held to a budget: the most input tokens one call
 may send, 90,000 unless you give `--budget N`. Before each call AskKit
