@@ -171,7 +171,7 @@ def test_a_fail_is_not_taken_without_a_note() -> None:
     grades = grade_answer(answer, rubric, read)
     assert [grade.passed for grade in grades] == [True, False, True]
     assert grades[1].note == "refund is section 1's"
-    assert read.shown[1].startswith("grounded: Is every other claim")
+    assert read.shown[1].startswith("grounded: Is all else it says")
     assert read.shown[2:4] == ["Why not? ", "Why not? "]
     assert read.shown[5].startswith("direct: ")
 

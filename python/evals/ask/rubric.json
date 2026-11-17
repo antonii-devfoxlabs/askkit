@@ -7,14 +7,14 @@
   },
   {
     "name": "grounded",
-    "asks": "Is every other claim in it from the documents, and true of this order?",
+    "asks": "Is all else it says in the documents and true of this order?",
     "passes": "We pay the return postage and email you a prepaid label.",
-    "fails": "We pay the postage and refund you in 5 working days. (Section 1's refund.)"
+    "fails": "We pay the postage and refund you. (Section 1's refund.)"
   },
   {
     "name": "direct",
-    "asks": "Does the first sentence inside <answer> answer the question?",
+    "asks": "Does the first sentence in <answer> answer the question?",
     "passes": "No: the vase was bought in the sale, and it is not broken.",
-    "fails": "Sale items have a rule of their own. (It never says yes or no.)"
+    "fails": "Sale items have a rule of their own. (No yes or no.)"
   }
 ]
