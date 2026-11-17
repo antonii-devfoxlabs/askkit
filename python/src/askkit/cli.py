@@ -144,7 +144,7 @@ def print_calls(
 
 
 # What input() raises when no one answers: no line left to read (input
-# from a pipe or a file), or Ctrl-C.
+# from a pipe or a file), or Ctrl-C (Control-C on a Mac).
 NO_ANSWER = (EOFError, KeyboardInterrupt)
 
 

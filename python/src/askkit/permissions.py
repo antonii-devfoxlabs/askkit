@@ -4,7 +4,7 @@ from typing import Literal
 
 from anthropic.types import ToolParam, ToolResultBlockParam, ToolUseBlock
 
-from askkit.tools import error_result, run_tool
+from askkit.tools import TOOLS, error_result, run_tool
 
 # What AskKit may do with a tool the model asks for: run it, ask you
 # first, or never offer it at all.
@@ -56,10 +56,11 @@ def run_permitted(
 ) -> ToolResultBlockParam:
     # Checked by AskKit before anything runs, whatever the model was told
     # or wrote: the model proposes, you decide.
-    permission = permissions.get(call.name)
-    if permission is None:
+    if call.name not in [tool["name"] for tool in TOOLS]:
         # Not one of AskKit's tools: run_tool answers that there is none.
         return run_tool(call)
+    # A tool with no permission is denied, as offered treats it.
+    permission = permissions.get(call.name, "deny")
     if permission == "deny":
         return error_result(call, f"the user has not allowed {call.name}")
     if permission == "ask" and not confirm(request_line(call)):

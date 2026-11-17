@@ -261,3 +261,17 @@ def test_askkit_ask_never_asks_about_an_allowed_tool(
     use_answers(monkeypatch, sent, [asked_for("current_time", {}), ANSWERED])
     main(["ask", "What is today's date?"])
     assert sent[1]["messages"][2]["content"][0]["content"] == NOW
+
+
+def test_a_tool_with_no_permission_never_runs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def never_run(tool_input: dict[str, object]) -> str:
+        raise AssertionError("the calculator ran")
+
+    monkeypatch.setattr("askkit.tools.calculate", never_run)
+    result = run_permitted(
+        call("calculate", PRODUCT), {"current_time": "allow"}, never_asked
+    )
+    assert result["content"] == "the user has not allowed calculate"
+    assert result.get("is_error") is True
