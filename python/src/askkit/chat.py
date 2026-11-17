@@ -9,6 +9,7 @@ from askkit.budget import input_tokens, over_budget
 from askkit.cost import call_cost
 from askkit.errors import error_message
 from askkit.history import SavedMessage, as_messages, save_history
+from askkit.memory import memory_reply, with_memory
 from askkit.trim import (
     KEEP_TURNS,
     OldTurns,
@@ -44,6 +45,8 @@ def chat(
     client: Anthropic,
     path: Path,
     history: list[SavedMessage],
+    memory: Path,
+    notes: list[str],
     model: str,
     max_tokens: int,
     system: str,
@@ -55,7 +58,8 @@ def chat(
     # One question a turn until you stop. A turn joins the history, in the
     # list and in the file, only once its answer is whole. The file keeps
     # every turn; the calls send history[start:], with the summary of the
-    # turns before start in the system prompt.
+    # turns before start in the system prompt. The notes in memory go
+    # with every call, and outlast the chat in a file of their own.
     start = 0
     summary = ""
     while True:
@@ -68,11 +72,24 @@ def chat(
             return
         if not question:
             continue
+        try:
+            reply = memory_reply(question, notes, memory)
+        except ValueError as error:
+            print(f"askkit: {error}", file=sys.stderr)
+            print()
+            continue
+        if reply is not None:
+            # A memory command is AskKit's to answer: no count, no call.
+            print(reply)
+            print()
+            continue
+        # Read again every turn: a note remembered now holds from now on.
+        rules = with_memory(system, notes)
         first = start
         try:
             # Counted before the call: the count is free, and a turn over
             # the budget is never sent, so it is never paid for.
-            sent_system = with_summary(system, summary)
+            sent_system = with_summary(rules, summary)
             needed = turn_tokens(
                 client, model, sent_system, question, history[start:]
             )
@@ -103,7 +120,7 @@ def chat(
                 )
                 label = turns_label(first // 2 + 1, start // 2)
                 print(f"{'Summarised:':<15}{label}, ${cost:.6f}")
-                sent_system = with_summary(system, summary)
+                sent_system = with_summary(rules, summary)
                 needed = turn_tokens(
                     client, model, sent_system, question, history[start:]
                 )

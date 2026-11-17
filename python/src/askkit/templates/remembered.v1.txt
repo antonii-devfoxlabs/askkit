@@ -1,0 +1,7 @@
+$system
+
+The user asked you to remember these notes in earlier chats. Follow them
+unless the user's latest message says otherwise:
+<memory>
+$notes
+</memory>

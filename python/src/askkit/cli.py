@@ -51,6 +51,7 @@ from askkit.history import (
     save_history,
 )
 from askkit.limits import LIMITS
+from askkit.memory import load_memory
 from askkit.prices import PRICES
 from askkit.prompts import ASK_SYSTEM
 from askkit.rubric import (
@@ -93,6 +94,16 @@ def require_history(path: Path) -> list[SavedMessage]:
     if fault is not None:
         sys.exit(f"askkit: {path}: {fault}")
     return history
+
+
+def require_memory(path: Path) -> list[str]:
+    # Read before the client is made, as the history is, so a broken file
+    # costs nothing.
+    try:
+        return load_memory(path)
+    except ValueError:
+        # Not JSON, or not AskKit's notes: both are ValueErrors.
+        sys.exit(f"askkit: {path} is not a memory AskKit saved")
 
 
 def print_calls(
@@ -171,6 +182,9 @@ def main(arguments: list[str] | None = None) -> None:
     chat_command.add_argument("--budget", type=int, default=DEFAULT_BUDGET)
     chat_command.add_argument(
         "--old-turns", choices=OLD_TURNS, default="summarise"
+    )
+    chat_command.add_argument(
+        "--memory", type=Path, default=Path("memory.json")
     )
     extract = commands.add_parser(
         "extract", help="turn an email into a ticket, as JSON"
@@ -580,10 +594,15 @@ def main(arguments: list[str] | None = None) -> None:
         if options.system_file is not None:
             system = options.system_file.read_text(encoding="utf-8").strip()
         history = require_history(options.history)
+        notes = require_memory(options.memory)
         client = Anthropic(api_key=require_api_key())
         print(f"History:       {len(history)} messages in {options.history}")
         print(f"Budget:        {options.budget:,} input tokens a turn")
         print(f"Old turns:     {options.old_turns}")
+        unit = "notes"
+        if len(notes) == 1:
+            unit = "note"
+        print(f"Memory:        {len(notes)} {unit} in {options.memory}")
         print(f"Type {STOP} to stop.")
         print()
         try:
@@ -591,6 +610,8 @@ def main(arguments: list[str] | None = None) -> None:
                 client,
                 options.history,
                 history,
+                options.memory,
+                notes,
                 options.model,
                 options.max_tokens,
                 system,

@@ -166,6 +166,22 @@ needs to:
 uv run askkit chat --budget 20000 --old-turns drop
 ```
 
+What should outlast a conversation goes in memory: short notes you ask
+AskKit to keep, in `memory.json` by default (`--memory FILE` for
+another), shared by every chat file. Every turn sends them in the
+system prompt, after AskKit's rules, with the line that your latest
+message wins over a note. Three commands in a chat look after them, and
+none of them calls the model:
+
+- `/remember TEXT` adds a note and saves it at once. A note holds up to
+  200 characters, memory up to 20 notes, and a note with an API key in
+  it is refused: notes go with every call.
+- `/memory` lists the notes by number.
+- `/forget N` takes note N out.
+
+Only you write memory: the model never adds a note by itself. The
+notes are plain JSON you can open, and `memory.json` is in `.gitignore`.
+
 `askkit extract` turns a customer's email into a support ticket, as
 JSON. The ticket is one class, `Ticket` in `python/src/askkit/extract.py`,
 a Pydantic model with three fields: `order` (a whole number, or `null`
@@ -483,6 +499,11 @@ test, as the thinking count of `ask` did.
   change, answers recorded and replayed, `diff` to compare two versions
   or models case by case, and `faults` to read the failures; `answer`
   and `grade` for grading `ask` answers by hand against a rubric.
+- `m06`, end of Module 6 (Conversations and Context): `ask --history`
+  and `chat`, which keep a conversation in a file, hold every turn to a
+  budget of input tokens, summarise or drop the oldest turns to stay
+  within it, and send the notes you asked AskKit to remember with every
+  chat.
 
 ## Layout
 
@@ -493,6 +514,8 @@ test, as the thinking count of `ask` did.
   - `src/askkit/chat.py`: the chat loop of `askkit chat`.
   - `src/askkit/budget.py`: the chat's budget of input tokens a turn.
   - `src/askkit/trim.py`: dropping or summarising a chat's oldest turns.
+  - `src/askkit/memory.py`: the notes every chat sends, kept between
+    chats.
   - `notebooks/`: notebooks for exploring, saved without outputs.
   - `evals/`: the golden sets, a main and a held-out part each, the
     ask set's documents and rubric, and the eval that runs the extract

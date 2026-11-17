@@ -49,6 +49,9 @@ RELEASED = {
     "earlier_turns.v1.txt": (
         "336fc685957a278165c49287f580eebd05700aeb50db9f18e0e99fa8253a73b5"
     ),
+    "remembered.v1.txt": (
+        "2f61f208d01e317554cd227af33e132a4f33f7e55f3da1f1aa2f3ac7ebae2d80"
+    ),
 }
 
 

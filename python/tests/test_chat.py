@@ -12,7 +12,8 @@ from askkit.budget import DEFAULT_BUDGET
 from askkit.chat import NOT_KEPT, NOT_SENT, chat
 from askkit.cli import main
 from askkit.history import SavedMessage, load_history, save_history
-from askkit.prompts import render
+from askkit.memory import load_memory, save_memory, with_memory
+from askkit.prompts import ASK_SYSTEM, render
 from askkit.trim import OldTurns
 
 MARIA = "Order 4417 came with a broken mug. Can I get a new one?"
@@ -83,14 +84,19 @@ def run_chat(
     needed: Needed = 118,
     counted: list[dict[str, Any]] | None = None,
     old_turns: OldTurns = "summarise",
+    notes: list[str] | None = None,
 ) -> tuple[list[dict[str, Any]], list[SavedMessage]]:
     sent: list[dict[str, Any]] = []
     if history is None:
         history = []
+    if notes is None:
+        notes = []
     chat(
         answering(sent, replies, counted, needed),
         tmp_path / "chat.json",
         history,
+        tmp_path / "memory.json",
+        notes,
         "claude-haiku-5-5",
         1000,
         "Be brief.",
@@ -252,10 +258,11 @@ def test_askkit_chat_reads_and_saves_chat_json(
     use_answers(monkeypatch, sent, [WRITTEN], [MARIA, "/exit"])
     main(["chat"])
     lines = capsys.readouterr().out.splitlines()
-    assert lines[:5] == [
+    assert lines[:6] == [
         "History:       0 messages in chat.json",
         "Budget:        90,000 input tokens a turn",
         "Old turns:     summarise",
+        "Memory:        0 notes in memory.json",
         "Type /exit to stop.",
         "",
     ]
@@ -612,3 +619,129 @@ def test_askkit_chat_takes_old_turns(
     main(["chat", "--old-turns", "drop"])
     lines = capsys.readouterr().out.splitlines()
     assert lines[2] == "Old turns:     drop"
+
+
+HAIKU = "I build with Claude Haiku 5.5: compare other models with it."
+
+
+def test_a_memory_command_makes_no_count_and_no_call(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    counted: list[dict[str, Any]] = []
+    sent, history = run_chat(
+        tmp_path,
+        [WRITTEN],
+        typed(f"/remember {HAIKU}", "/memory", MARIA),
+        counted=counted,
+    )
+    assert len(counted) == 1
+    assert len(sent) == 1
+    assert sent[0]["messages"] == [{"role": "user", "content": MARIA}]
+    assert len(history) == 2
+    assert capsys.readouterr().out.startswith(
+        f"Remembered:    note 1\n\n1. {HAIKU}\n\n"
+    )
+
+
+def test_a_note_holds_from_the_next_turn_on(tmp_path: Path) -> None:
+    counted: list[dict[str, Any]] = []
+    sent, _ = run_chat(
+        tmp_path,
+        [WRITTEN, WRITTEN],
+        typed(MARIA, f"/remember {HAIKU}", FOLLOW_UP),
+        counted=counted,
+    )
+    assert sent[0]["system"] == "Be brief."
+    remembered = with_memory("Be brief.", [HAIKU])
+    assert sent[1]["system"] == remembered
+    assert counted[1]["system"] == remembered
+    assert load_memory(tmp_path / "memory.json") == [HAIKU]
+
+
+def test_notes_from_an_earlier_chat_go_with_the_first_turn(
+    tmp_path: Path,
+) -> None:
+    sent, _ = run_chat(tmp_path, [WRITTEN], typed(MARIA), notes=[HAIKU])
+    assert sent[0]["system"] == with_memory("Be brief.", [HAIKU])
+
+
+def test_a_forgotten_note_is_no_longer_sent(tmp_path: Path) -> None:
+    sent, _ = run_chat(
+        tmp_path, [WRITTEN], typed("/forget 1", MARIA), notes=[HAIKU]
+    )
+    assert sent[0]["system"] == "Be brief."
+    assert load_memory(tmp_path / "memory.json") == []
+
+
+def test_a_refused_memory_command_says_why_and_the_chat_goes_on(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    sent, _ = run_chat(tmp_path, [WRITTEN], typed("/forget 2", MARIA))
+    assert len(sent) == 1
+    captured = capsys.readouterr()
+    assert captured.err == (
+        "askkit: memory is empty: there is nothing to forget\n"
+    )
+    assert not (tmp_path / "memory.json").exists()
+
+
+def test_the_notes_come_before_the_summary(tmp_path: Path) -> None:
+    sent, _ = run_chat(
+        tmp_path,
+        [SUMMARISED, WRITTEN],
+        typed(MARIA),
+        four_turns(),
+        budget=400,
+        needed=by_messages,
+        notes=[HAIKU],
+    )
+    # The summary call carries no notes: it only folds turns.
+    assert sent[0]["system"] == render("summarise_turns", {})
+    assert sent[1]["system"] == render(
+        "earlier_turns",
+        {"system": with_memory("Be brief.", [HAIKU]), "summary": SUMMARY},
+    )
+
+
+def test_askkit_chat_reads_memory_json(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    save_memory(tmp_path / "memory.json", [HAIKU])
+    sent: list[dict[str, Any]] = []
+    use_answers(monkeypatch, sent, [WRITTEN], [MARIA, "/exit"])
+    main(["chat", "--history", "tuesday.json"])
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[3] == "Memory:        1 note in memory.json"
+    assert sent[0]["system"] == with_memory(ASK_SYSTEM, [HAIKU])
+
+
+def test_askkit_chat_takes_another_memory_file(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    use_answers(monkeypatch, [], [], [f"/remember {HAIKU}", "/exit"])
+    main(["chat", "--memory", "work-memory.json"])
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[3] == "Memory:        0 notes in work-memory.json"
+    assert load_memory(tmp_path / "work-memory.json") == [HAIKU]
+    assert not (tmp_path / "memory.json").exists()
+
+
+def test_askkit_chat_refuses_a_broken_memory_before_any_call(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "memory.json").write_text('["a list"]', encoding="utf-8")
+    sent: list[dict[str, Any]] = []
+    use_answers(monkeypatch, sent, [WRITTEN], [MARIA])
+    with pytest.raises(SystemExit) as stopped:
+        main(["chat"])
+    assert stopped.value.code == (
+        "askkit: memory.json is not a memory AskKit saved"
+    )
+    assert sent == []

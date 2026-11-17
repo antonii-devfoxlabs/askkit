@@ -106,3 +106,12 @@ chat's own `$system` prompt, then the `$summary` in tags.
 
 - v1: the summary after the chat's rules, under a line that says what it
   is.
+
+## remembered
+
+The system prompt of every `askkit chat` turn once the user has notes in
+memory: the chat's own `$system` prompt, then the `$notes`, one per line,
+in tags.
+
+- v1: the notes after the chat's rules, under a line that says the user
+  asked for them and that the user's latest message wins over a note.

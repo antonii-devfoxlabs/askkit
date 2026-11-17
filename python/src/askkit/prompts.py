@@ -18,6 +18,7 @@ IN_USE = {
     "summarise_turns": 1,
     "fold_turns": 1,
     "earlier_turns": 1,
+    "remembered": 1,
 }
 
 
