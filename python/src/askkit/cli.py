@@ -486,7 +486,9 @@ def main(arguments: list[str] | None = None) -> None:
         if options.history is not None:
             try:
                 turns = load_history(options.history)
-            except json.JSONDecodeError, ValidationError:
+            except ValueError:
+                # Not JSON (JSONDecodeError) or not AskKit's messages
+                # (ValidationError): both are kinds of ValueError.
                 sys.exit(
                     f"askkit: {options.history} is not a conversation"
                     " AskKit saved"
