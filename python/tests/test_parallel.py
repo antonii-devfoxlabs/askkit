@@ -136,7 +136,12 @@ def test_a_no_to_one_request_still_runs_the_other(
         {
             "type": "tool_result",
             "tool_use_id": "toolu_01AskKitSum",
-            "content": "the user declined to run calculate",
+            "content": (
+                "the user declined to run calculate; do not ask for it again"
+                " with the"
+                " same input: answer without it, or ask the user what to do"
+                " instead"
+            ),
             "is_error": True,
         },
     ]

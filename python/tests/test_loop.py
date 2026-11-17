@@ -211,7 +211,12 @@ def test_a_no_in_the_second_round_runs_nothing_there(
         {
             "type": "tool_result",
             "tool_use_id": "toolu_01AskKitSum2",
-            "content": "the user declined to run calculate",
+            "content": (
+                "the user declined to run calculate; do not ask for it again"
+                " with the"
+                " same input: answer without it, or ask the user what to do"
+                " instead"
+            ),
             "is_error": True,
         }
     ]

@@ -62,7 +62,16 @@ def run_permitted(
     # A tool with no permission is denied, as offered treats it.
     permission = permissions.get(call.name, "deny")
     if permission == "deny":
-        return error_result(call, f"the user has not allowed {call.name}")
+        return error_result(
+            call,
+            f"the user has not allowed {call.name}; do not ask for it again:"
+            " answer without it, or tell the user it is turned off",
+        )
     if permission == "ask" and not confirm(request_line(call)):
-        return error_result(call, f"the user declined to run {call.name}")
+        return error_result(
+            call,
+            f"the user declined to run {call.name}; do not ask for it again"
+            " with the same input: answer without it, or ask the user what to"
+            " do instead",
+        )
     return run_tool(call)

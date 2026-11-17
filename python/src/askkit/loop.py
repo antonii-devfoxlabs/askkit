@@ -75,7 +75,11 @@ def tool_loop(
         results: list[ToolResultBlockParam] = []
         for call in tool_calls(reply):
             result = run_permitted(call, permissions, confirm)
-            print(f"Tool:          {call.name}: {result['content']}")
+            if result.get("is_error"):
+                # So you can tell a refusal or a failure from a result.
+                print(f"Tool error:    {call.name}: {result['content']}")
+            else:
+                print(f"Tool:          {call.name}: {result['content']}")
             results.append(result)
         # The next call carries everything so far: what was sent, the
         # model's turn as it came, then the results as the next message.

@@ -169,27 +169,51 @@ def test_calculate_takes_an_operation_in_capitals() -> None:
     [
         (
             {"operation": "divide", "a": 5, "b": 0},
-            "cannot divide by zero",
+            (
+                "cannot divide by zero; a number divided by zero has no"
+                " answer, so"
+                " tell the user that instead of calling again"
+            ),
         ),
         (
             {"operation": "multiply", "a": "1000", "b": 2},
-            "a and b must be numbers, such as 1000 or 0.000128",
+            (
+                "a and b must be numbers, such as 1000 or 0.000128; call it"
+                " again"
+                " with both written as numbers"
+            ),
         ),
         (
             {"operation": "add", "a": True, "b": 2},
-            "a and b must be numbers, such as 1000 or 0.000128",
+            (
+                "a and b must be numbers, such as 1000 or 0.000128; call it"
+                " again"
+                " with both written as numbers"
+            ),
         ),
         (
             {"operation": "power", "a": 2, "b": 3},
-            "operation must be add, subtract, multiply or divide",
+            (
+                "operation must be add, subtract, multiply or divide; call"
+                " it again"
+                " with one of them"
+            ),
         ),
         (
             {"operation": "multiply", "a": 1000},
-            "calculate takes exactly operation, a and b",
+            (
+                "calculate takes exactly operation, a and b; call it again"
+                " with all"
+                " three and nothing else"
+            ),
         ),
         (
             {"operation": "add", "a": 1, "b": 2, "note": "cost"},
-            "calculate takes exactly operation, a and b",
+            (
+                "calculate takes exactly operation, a and b; call it again"
+                " with all"
+                " three and nothing else"
+            ),
         ),
     ],
     ids=["zero", "text", "boolean", "power", "missing", "extra"],
@@ -243,7 +267,10 @@ def test_a_tool_askkit_never_offered_runs_nothing(
     assert run_tool(call("cancel_order", {"order": 4417})) == {
         "type": "tool_result",
         "tool_use_id": "toolu_01AskKitClock",
-        "content": "there is no tool named cancel_order",
+        "content": (
+            "there is no tool named cancel_order; the tools are current_time,"
+            " calculate"
+        ),
         "is_error": True,
     }
 
@@ -254,7 +281,9 @@ def test_the_clock_with_an_input_runs_nothing(
     monkeypatch.setattr("askkit.tools.current_time", never_run)
     result = run_tool(call("current_time", {"zone": "Europe/Kyiv"}))
     assert result["is_error"] is True
-    assert result["content"] == "current_time takes no input"
+    assert result["content"] == (
+        "current_time takes no input; call it again with an empty input, {}"
+    )
 
 
 def test_run_tool_answers_the_calculator_with_its_id() -> None:
@@ -271,7 +300,11 @@ def test_run_tool_answers_a_division_by_zero_with_an_error() -> None:
     assert run_tool(request) == {
         "type": "tool_result",
         "tool_use_id": "toolu_01AskKitClock",
-        "content": "cannot divide by zero",
+        "content": (
+            "cannot divide by zero; a number divided by zero has no answer,"
+            " so"
+            " tell the user that instead of calling again"
+        ),
         "is_error": True,
     }
 
@@ -348,7 +381,8 @@ def test_askkit_ask_refuses_a_tool_it_never_offered(
     result = sent[1]["messages"][2]["content"][0]
     assert result["is_error"] is True
     assert capsys.readouterr().out.splitlines()[0] == (
-        "Tool:          cancel_order: there is no tool named cancel_order"
+        "Tool error:    cancel_order: there is no tool named cancel_order;"
+        " the tools are current_time, calculate"
     )
 
 

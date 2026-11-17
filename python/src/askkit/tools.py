@@ -68,6 +68,14 @@ CALCULATOR: ToolParam = {
 
 TOOLS: list[ToolParam] = [CLOCK, CALCULATOR]
 
+# An error result is all the model learns about a failure, so each one
+# says what went wrong and what to do next: call again with a fixed
+# input, or tell the user, and never call again with the same one.
+TOO_LARGE = (
+    "the result is too large for a number; tell the user it is too large"
+    " to work out, instead of calling again"
+)
+
 
 def current_time() -> str:
     # The computer's clock in its own time zone, such as
@@ -76,9 +84,13 @@ def current_time() -> str:
 
 
 def calculate(tool_input: dict[str, object]) -> str:
-    # Raises ValueError, saying what is wrong, for an input it cannot use.
+    # Raises ValueError, saying what is wrong and what to do instead, for
+    # an input it cannot use.
     if set(tool_input) != {"operation", "a", "b"}:
-        raise ValueError("calculate takes exactly operation, a and b")
+        raise ValueError(
+            "calculate takes exactly operation, a and b; call it again with"
+            " all three and nothing else"
+        )
     operation = tool_input["operation"]
     a = tool_input["a"]
     b = tool_input["b"]
@@ -86,7 +98,8 @@ def calculate(tool_input: dict[str, object]) -> str:
     # case.
     if not isinstance(operation, str) or operation.lower() not in OPERATIONS:
         raise ValueError(
-            "operation must be add, subtract, multiply or divide"
+            "operation must be add, subtract, multiply or divide; call it"
+            " again with one of them"
         )
     # Booleans are refused by name, before the check for numbers.
     if (
@@ -95,22 +108,37 @@ def calculate(tool_input: dict[str, object]) -> str:
         or not isinstance(a, (int, float))
         or not isinstance(b, (int, float))
     ):
-        raise ValueError("a and b must be numbers, such as 1000 or 0.000128")
+        raise ValueError(
+            "a and b must be numbers, such as 1000 or 0.000128; call it"
+            " again with both written as numbers"
+        )
     operation = operation.lower()
     # The schema cannot say that b is not zero, so the check does.
     if operation == "divide" and b == 0:
-        raise ValueError("cannot divide by zero")
-    if operation == "add":
-        result = a + b
-    elif operation == "subtract":
-        result = a - b
-    elif operation == "multiply":
-        result = a * b
-    else:
-        result = a / b
-    # At most 15 significant digits, the most a float always keeps, so
-    # 0.1 + 0.2 comes out as 0.3, not 0.30000000000000004.
-    return format(result, ".15g")
+        raise ValueError(
+            "cannot divide by zero; a number divided by zero has no answer,"
+            " so tell the user that instead of calling again"
+        )
+    try:
+        if operation == "add":
+            result = a + b
+        elif operation == "subtract":
+            result = a - b
+        elif operation == "multiply":
+            result = a * b
+        else:
+            result = a / b
+        # At most 15 significant digits, the most a float always keeps,
+        # so 0.1 + 0.2 comes out as 0.3, not 0.30000000000000004.
+        text = format(result, ".15g")
+    except OverflowError:
+        # An integer too large to turn into a float.
+        text = "inf"
+    # A float too large to hold is inf, and inf - inf is nan: neither is
+    # a number the user can use.
+    if text in ("inf", "-inf", "nan"):
+        raise ValueError(TOO_LARGE)
+    return text
 
 
 def tool_calls(response: Message) -> list[ToolUseBlock]:
@@ -131,19 +159,44 @@ def error_result(call: ToolUseBlock, message: str) -> ToolResultBlockParam:
     }
 
 
-def run_tool(call: ToolUseBlock) -> ToolResultBlockParam:
-    # The model only asks. Nothing runs until the request is checked: a
-    # tool AskKit offered, with an input it can use. Anything else is
-    # answered with an error result, and nothing runs.
+def tool_output(call: ToolUseBlock) -> str:
+    # Runs the tool the model asked for, after checking the request.
+    # Raises ValueError, saying what is wrong and what to do instead, for
+    # a request it cannot run.
     if call.name == CLOCK["name"]:
         if call.input != {}:
-            return error_result(call, "current_time takes no input")
-        content = current_time()
-    elif call.name == CALCULATOR["name"]:
-        try:
-            content = calculate(call.input)
-        except ValueError as error:
-            return error_result(call, str(error))
-    else:
-        return error_result(call, f"there is no tool named {call.name}")
+            raise ValueError(
+                "current_time takes no input; call it again with an empty"
+                " input, {}"
+            )
+        return current_time()
+    if call.name == CALCULATOR["name"]:
+        return calculate(call.input)
+    names = []
+    for tool in TOOLS:
+        names.append(tool["name"])
+    raise ValueError(
+        f"there is no tool named {call.name}; the tools are"
+        f" {', '.join(names)}"
+    )
+
+
+def run_tool(call: ToolUseBlock) -> ToolResultBlockParam:
+    # The model only asks. Whatever happens while a request runs, it gets
+    # a result: the tool's output, or an error result the model can act
+    # on. Nothing a tool raises stops AskKit.
+    try:
+        content = tool_output(call)
+    except ValueError as error:
+        return error_result(call, str(error))
+    except Exception as error:
+        # A fault in AskKit itself, not in the request, so the model is
+        # told not to try again. Only the error's kind goes back: its own
+        # text may hold paths or values meant for you alone.
+        return error_result(
+            call,
+            f"{call.name} failed because of a fault in AskKit"
+            f" ({type(error).__name__}); do not call it again for this"
+            " request: tell the user it could not be done",
+        )
     return {"type": "tool_result", "tool_use_id": call.id, "content": content}

@@ -99,7 +99,11 @@ def test_a_denied_tool_runs_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
     assert result == {
         "type": "tool_result",
         "tool_use_id": "toolu_01AskKitClock",
-        "content": "the user has not allowed calculate",
+        "content": (
+            "the user has not allowed calculate; do not ask for it again:"
+            " answer"
+            " without it, or tell the user it is turned off"
+        ),
         "is_error": True,
     }
 
@@ -127,7 +131,10 @@ def test_a_tool_to_confirm_runs_nothing_after_a_no(
         {"calculate": "ask"},
         answer_with(False, []),
     )
-    assert result["content"] == "the user declined to run calculate"
+    assert result["content"] == (
+        "the user declined to run calculate; do not ask for it again with the"
+        " same input: answer without it, or ask the user what to do instead"
+    )
     assert result.get("is_error") is True
 
 
@@ -137,7 +144,10 @@ def test_a_tool_askkit_does_not_have_is_answered_as_unknown() -> None:
         DEFAULT_PERMISSIONS,
         never_asked,
     )
-    assert result["content"] == "there is no tool named cancel_order"
+    assert result["content"] == (
+        "there is no tool named cancel_order; the tools are current_time,"
+        " calculate"
+    )
     assert result.get("is_error") is True
 
 
@@ -220,12 +230,19 @@ def test_askkit_ask_sends_a_refusal_unless_you_say_yes(
         {
             "type": "tool_result",
             "tool_use_id": "toolu_01AskKitClock",
-            "content": "the user declined to run calculate",
+            "content": (
+                "the user declined to run calculate; do not ask for it again"
+                " with the"
+                " same input: answer without it, or ask the user what to do"
+                " instead"
+            ),
             "is_error": True,
         }
     ]
     assert capsys.readouterr().out.splitlines()[0] == (
-        "Tool:          calculate: the user declined to run calculate"
+        "Tool error:    calculate: the user declined to run calculate; do not"
+        " ask for it again with the same input: answer without it, or ask the"
+        " user what to do instead"
     )
 
 
@@ -273,5 +290,8 @@ def test_a_tool_with_no_permission_never_runs(
     result = run_permitted(
         call("calculate", PRODUCT), {"current_time": "allow"}, never_asked
     )
-    assert result["content"] == "the user has not allowed calculate"
+    assert result["content"] == (
+        "the user has not allowed calculate; do not ask for it again: answer"
+        " without it, or tell the user it is turned off"
+    )
     assert result.get("is_error") is True

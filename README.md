@@ -115,6 +115,16 @@ out of the call. Both may be given more than once; a tool both confirmed
 and denied is denied. A request that is declined or not allowed runs
 nothing: the model gets an error result that says so.
 
+An error result is all the model learns about a failure, so every one
+AskKit sends says what went wrong and what to do next: call again with
+a fixed input (`current_time takes no input; call it again with an
+empty input, {}`), or tell the user and not call again (`cannot divide
+by zero; …`, a result too large for a number, a tool you declined or
+did not allow). Nothing a tool raises stops AskKit: a fault in AskKit's
+own code goes back as an error result that names only its kind, such
+as `(OSError)`, never its text, which may hold your paths. Every error
+result prints as a `Tool error:` line instead of `Tool:`.
+
 `ask` calls Anthropic's models only, so `-m` takes the Claude models in
 the price table (Claude Haiku 5.5 by default); `--max-tokens` is the
 room for the answer (1000 by default), the model's thinking included;
@@ -596,8 +606,9 @@ test, as the thinking count of `ask` did.
   - `src/askkit/structured.py`: a JSON answer streamed, with the fields
     that have settled so far.
   - `src/askkit/tools.py`: the tools `askkit ask` offers the model (a
-    clock and a calculator), their definitions, and the check each
-    request passes before anything runs.
+    clock and a calculator), their definitions, the check each request
+    passes before anything runs, and the error results the model gets
+    when one fails.
   - `src/askkit/permissions.py`: which tools AskKit may run for you
     (allow, ask first, or deny), and the check every request passes
     before it runs.
