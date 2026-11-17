@@ -88,6 +88,19 @@ nothing: the model gets an error result instead. `ask` runs one tool call per
 question; if the model asks again, `ask` stops with exit code 1. The two
 calls' tokens and cost are added up, with one `Time:` line per call.
 
+Which tools AskKit may run for you is your decision, not the model's.
+Each tool has a permission in `python/src/askkit/permissions.py`:
+`allow` (run it), `ask` (ask you first) or `deny` (never offer it). The
+clock and the calculator are allowed by default, since they change
+nothing and send nothing anywhere. `--confirm TOOL` makes `ask` show you
+the request exactly as it would run, such as
+`Run calculate {"operation": "multiply", "a": 1284, "b": 0.000137}? [y/N]`
+on stderr, and run it only on `y` or `yes`; anything else, or no answer
+at all (input from a pipe, Ctrl-C), is a no. `--deny TOOL` leaves a tool
+out of the call. Both may be given more than once; a tool both confirmed
+and denied is denied. A request that is declined or not allowed runs
+nothing: the model gets an error result that says so.
+
 `ask` calls Anthropic's models only, so `-m` takes the Claude models in
 the price table (Claude Haiku 5.5 by default); `--max-tokens` is the
 room for the answer (1000 by default), the model's thinking included;
@@ -571,6 +584,9 @@ test, as the thinking count of `ask` did.
   - `src/askkit/tools.py`: the tools `askkit ask` offers the model (a
     clock and a calculator), their definitions, and the check each
     request passes before anything runs.
+  - `src/askkit/permissions.py`: which tools AskKit may run for you
+    (allow, ask first, or deny), and the check every request passes
+    before it runs.
   - `notebooks/`: notebooks for exploring, saved without outputs.
   - `evals/`: the golden sets, a main and a held-out part each, the
     ask set's documents and rubric, and the eval that runs the extract

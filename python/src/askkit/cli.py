@@ -58,6 +58,7 @@ from askkit.history import (
 )
 from askkit.limits import LIMITS
 from askkit.memory import load_memory
+from askkit.permissions import offered, permissions_for, run_permitted
 from askkit.prices import PRICES
 from askkit.prompts import ASK_SYSTEM, render
 from askkit.rubric import (
@@ -75,7 +76,7 @@ from askkit.rules import email_fault, load_orders, order_fault
 from askkit.runs import Results, diff_lines, load_results
 from askkit.structured import stream_json
 from askkit.tokens import count_tokens
-from askkit.tools import TOOLS, run_tool, tool_calls
+from askkit.tools import TOOLS, tool_calls
 from askkit.trim import OLD_TURNS
 
 
@@ -142,6 +143,19 @@ def print_calls(
         print(f"Stop reason:   {last.stop_reason}")
 
 
+def confirm_on_terminal(request: str) -> bool:
+    # Asked on stderr, so a program reading AskKit's answer never reads
+    # the question. Only y or yes runs the tool; anything else, or no one
+    # at the keyboard to answer, is a no.
+    print(f"Run {request}? [y/N] ", end="", file=sys.stderr, flush=True)
+    try:
+        answer = input()
+    except EOFError, KeyboardInterrupt:
+        print(file=sys.stderr)
+        return False
+    return answer.strip().lower() in ("y", "yes")
+
+
 def print_times(timings: list[Timing]) -> None:
     # One line per call, in order: the times of two calls do not add up
     # the way their tokens do.
@@ -182,6 +196,13 @@ def main(arguments: list[str] | None = None) -> None:
         "--document", type=Path, action="append", default=[]
     )
     ask_command.add_argument("--history", type=Path)
+    tool_names = [tool["name"] for tool in TOOLS]
+    ask_command.add_argument(
+        "--confirm", choices=tool_names, action="append", default=[]
+    )
+    ask_command.add_argument(
+        "--deny", choices=tool_names, action="append", default=[]
+    )
     chat_command = commands.add_parser(
         "chat", help="chat with a model until you type /exit"
     )
@@ -573,6 +594,8 @@ def main(arguments: list[str] | None = None) -> None:
         history: list[SavedMessage] = []
         if options.history is not None:
             history = require_history(options.history)
+        permissions = permissions_for(options.confirm, options.deny)
+        tools = offered(TOOLS, permissions)
         client = Anthropic(api_key=require_api_key())
         # Two calls when the model asks for a tool: both are summed.
         responses = []
@@ -586,18 +609,20 @@ def main(arguments: list[str] | None = None) -> None:
                 system,
                 options.effort,
                 as_messages(history),
-                TOOLS,
+                tools or None,
             )
             if reply is not None and reply.stop_reason == "tool_use":
                 # The model asked for a tool instead of answering. AskKit
-                # checks and runs each request, then asks again with
-                # everything so far: the question, the model's own turn
-                # as it came, and the results.
+                # checks each request, your permission included, runs it,
+                # then asks again with everything so far: the question,
+                # the model's own turn as it came, and the results.
                 responses.append(reply)
                 timings.append(timing)
                 results: list[ToolResultBlockParam] = []
                 for call in tool_calls(reply):
-                    result = run_tool(call)
+                    result = run_permitted(
+                        call, permissions, confirm_on_terminal
+                    )
                     results.append(result)
                     print(f"Tool:          {call.name}: {result['content']}")
                 sent = messages_for(question, as_messages(history))
@@ -610,7 +635,7 @@ def main(arguments: list[str] | None = None) -> None:
                     system,
                     options.effort,
                     sent,
-                    TOOLS,
+                    tools or None,
                 )
         except APIError as error:
             sys.exit(f"askkit: {error_message(error)}")
