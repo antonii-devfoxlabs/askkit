@@ -138,6 +138,18 @@ answer prints `askkit:` and why, keeps nothing, and the chat goes on, so
 the same question can be asked again. Each whole turn prints its tokens
 and cost on a `Turn N:` line; they grow with the conversation.
 
+Every turn of a chat is held to a budget: the most input tokens one call
+may send, 90,000 unless you give `--budget N`. Before each call AskKit
+counts what it would send with the API's free token count; a turn over
+the budget is not sent, and AskKit says so. The default stays under the
+100,000-token prompt above which Claude Haiku 5.5 bills the whole call
+at five times the price. `--budget` and `--max-tokens` together must fit
+the model's context window, or the chat does not start:
+
+```bash
+uv run askkit chat --budget 20000
+```
+
 `askkit extract` turns a customer's email into a support ticket, as
 JSON. The ticket is one class, `Ticket` in `python/src/askkit/extract.py`,
 a Pydantic model with three fields: `order` (a whole number, or `null`
@@ -463,6 +475,7 @@ test, as the thinking count of `ask` did.
   - `src/askkit/templates/`: the prompts, one file per version.
   - `src/askkit/history.py`: a conversation saved in a file of its own.
   - `src/askkit/chat.py`: the chat loop of `askkit chat`.
+  - `src/askkit/budget.py`: the chat's budget of input tokens a turn.
   - `notebooks/`: notebooks for exploring, saved without outputs.
   - `evals/`: the golden sets, a main and a held-out part each, the
     ask set's documents and rubric, and the eval that runs the extract

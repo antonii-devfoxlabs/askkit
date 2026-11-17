@@ -8,7 +8,8 @@ import pytest
 from anthropic import Anthropic
 from test_ask import WRITTEN, stopped_with
 
-from askkit.chat import NOT_KEPT, chat
+from askkit.budget import DEFAULT_BUDGET
+from askkit.chat import NOT_KEPT, NOT_SENT, chat
 from askkit.cli import main
 from askkit.history import SavedMessage, load_history, save_history
 
@@ -22,12 +23,24 @@ OVERLOADED = {
 
 
 def answering(
-    sent: list[dict[str, Any]], replies: list[int | dict[str, Any]]
+    sent: list[dict[str, Any]],
+    replies: list[int | dict[str, Any]],
+    counted: list[dict[str, Any]] | None = None,
+    needed: int | None = 118,
 ) -> Anthropic:
     # Each call gets the next reply: a response body, or a status code
-    # the API answers with an error.
+    # the API answers with an error. A count before a call gets needed
+    # tokens, or a 529 when needed is None; it is no call, so it is kept
+    # in counted, not in sent.
     def answer(request: httpx2.Request) -> httpx2.Response:
-        sent.append(json.loads(request.content))
+        body = json.loads(request.content)
+        if request.url.path == "/v1/messages/count_tokens":
+            if counted is not None:
+                counted.append(body)
+            if needed is None:
+                return httpx2.Response(529, json=OVERLOADED)
+            return httpx2.Response(200, json={"input_tokens": needed})
+        sent.append(body)
         reply = replies[len(sent) - 1]
         if isinstance(reply, int):
             return httpx2.Response(reply, json=OVERLOADED)
@@ -58,18 +71,22 @@ def run_chat(
     replies: list[int | dict[str, Any]],
     read: Callable[[str], str],
     history: list[SavedMessage] | None = None,
+    budget: int = DEFAULT_BUDGET,
+    needed: int | None = 118,
+    counted: list[dict[str, Any]] | None = None,
 ) -> tuple[list[dict[str, Any]], list[SavedMessage]]:
     sent: list[dict[str, Any]] = []
     if history is None:
         history = []
     chat(
-        answering(sent, replies),
+        answering(sent, replies, counted, needed),
         tmp_path / "chat.json",
         history,
         "claude-haiku-5-5",
         1000,
         "Be brief.",
         None,
+        budget,
         read,
     )
     return sent, history
@@ -172,13 +189,15 @@ def test_a_declined_answer_is_not_shown_or_kept(
 def test_each_turn_prints_its_tokens_and_cost(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    run_chat(tmp_path, [WRITTEN, WRITTEN], typed(MARIA, FOLLOW_UP))
+    run_chat(
+        tmp_path, [WRITTEN, WRITTEN], typed(MARIA, FOLLOW_UP), budget=400
+    )
     assert capsys.readouterr().out.splitlines() == [
         ANSWER,
-        "Turn 1:        118 in, 27 out, $0.000025",
+        "Turn 1:        118 in (30% of budget), 27 out, $0.000025",
         "",
         ANSWER,
-        "Turn 2:        118 in, 27 out, $0.000025",
+        "Turn 2:        118 in (30% of budget), 27 out, $0.000025",
         "",
         "",
     ]
@@ -223,8 +242,9 @@ def test_askkit_chat_reads_and_saves_chat_json(
     use_answers(monkeypatch, sent, [WRITTEN], [MARIA, "/exit"])
     main(["chat"])
     lines = capsys.readouterr().out.splitlines()
-    assert lines[:3] == [
+    assert lines[:4] == [
         "History:       0 messages in chat.json",
+        "Budget:        90,000 input tokens a turn",
         "Type /exit to stop.",
         "",
     ]
@@ -283,3 +303,96 @@ def test_askkit_chat_refuses_a_broken_file_before_any_call(
         " not the user's"
     )
     assert sent == []
+
+
+def test_the_count_carries_what_the_call_sends(tmp_path: Path) -> None:
+    counted: list[dict[str, Any]] = []
+    sent, _ = run_chat(
+        tmp_path,
+        [WRITTEN, WRITTEN],
+        typed(MARIA, FOLLOW_UP),
+        counted=counted,
+    )
+    assert len(counted) == 2
+    for count, call in zip(counted, sent, strict=True):
+        assert count["model"] == call["model"]
+        assert count["system"] == call["system"]
+        assert count["messages"] == call["messages"]
+
+
+def test_a_turn_over_the_budget_is_not_sent(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    sent, history = run_chat(
+        tmp_path, [WRITTEN], typed(MARIA), budget=100, needed=118
+    )
+    assert sent == []
+    assert history == []
+    assert not (tmp_path / "chat.json").exists()
+    captured = capsys.readouterr()
+    assert captured.err == (
+        "askkit: this turn would send 118 tokens,"
+        " over the chat's budget of 100\n"
+    )
+    assert NOT_SENT in captured.out
+
+
+def test_a_turn_at_the_budget_is_sent(tmp_path: Path) -> None:
+    sent, history = run_chat(
+        tmp_path, [WRITTEN], typed(MARIA), budget=118, needed=118
+    )
+    assert len(sent) == 1
+    assert len(history) == 2
+
+
+def test_the_chat_goes_on_after_a_turn_over_the_budget(
+    tmp_path: Path,
+) -> None:
+    # The refused turn leaves nothing behind, so /exit still ends the
+    # chat as usual.
+    sent, history = run_chat(
+        tmp_path, [], typed(MARIA, FOLLOW_UP, "/exit"), budget=100
+    )
+    assert sent == []
+    assert history == []
+
+
+def test_a_failed_count_keeps_nothing_and_sends_nothing(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    sent, history = run_chat(tmp_path, [WRITTEN], typed(MARIA), needed=None)
+    assert sent == []
+    assert history == []
+    captured = capsys.readouterr()
+    assert captured.err.startswith("askkit: Anthropic's servers are")
+    assert NOT_KEPT in captured.out
+
+
+def test_askkit_chat_takes_a_budget(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    sent: list[dict[str, Any]] = []
+    use_answers(monkeypatch, sent, [WRITTEN], [MARIA])
+    main(["chat", "--budget", "100"])
+    assert sent == []
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[1] == "Budget:        100 input tokens a turn"
+
+
+def test_askkit_chat_refuses_a_budget_the_window_cannot_hold(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    sent: list[dict[str, Any]] = []
+    use_answers(monkeypatch, sent, [WRITTEN], [MARIA])
+    with pytest.raises(SystemExit) as stopped:
+        main(["chat", "--budget", "999500"])
+    assert stopped.value.code == (
+        "askkit: --budget 999,500 and --max-tokens 1,000 come to 1,000,500"
+        " tokens, more than the 1,000,000 of claude-haiku-5-5's window"
+    )
+    assert sent == []
+    assert not (tmp_path / "chat.json").exists()

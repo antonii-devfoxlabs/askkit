@@ -5,6 +5,7 @@ from pathlib import Path
 from anthropic import Anthropic, APIError
 
 from askkit.ask import Effort, answer_text, ask, stop_warning
+from askkit.budget import input_tokens, over_budget
 from askkit.cost import call_cost
 from askkit.errors import error_message
 from askkit.history import SavedMessage, as_messages, save_history
@@ -15,6 +16,10 @@ STOP = "/exit"
 
 NOT_KEPT = "Not kept: ask again, or type /exit to stop."
 
+NOT_SENT = (
+    "Not sent: start a new chat with --history, or give a larger --budget."
+)
+
 
 def chat(
     client: Anthropic,
@@ -24,6 +29,7 @@ def chat(
     max_tokens: int,
     system: str,
     effort: Effort | None,
+    budget: int,
     read: Callable[[str], str],
 ) -> None:
     # One question a turn until you stop. The whole conversation goes with
@@ -39,15 +45,27 @@ def chat(
             return
         if not question:
             continue
+        sent = as_messages(history)
+        try:
+            # Counted before the call: the count is free, and a turn over
+            # the budget is never sent, so it is never paid for.
+            needed = input_tokens(client, model, system, question, sent)
+        except APIError as error:
+            print(f"askkit: {error_message(error)}", file=sys.stderr)
+            print(NOT_KEPT)
+            print()
+            continue
+        problem = over_budget(needed, budget)
+        if problem is not None:
+            # Every later turn would send more still, so asking again
+            # cannot help: the chat needs a new file or a larger budget.
+            print(f"askkit: {problem}", file=sys.stderr)
+            print(NOT_SENT)
+            print()
+            continue
         try:
             response = ask(
-                client,
-                question,
-                model,
-                max_tokens,
-                system,
-                effort,
-                as_messages(history),
+                client, question, model, max_tokens, system, effort, sent
             )
         except APIError as error:
             # A failed call changes nothing, so the chat goes on and the
@@ -74,8 +92,9 @@ def chat(
         usage = response.usage
         cost = call_cost(model, usage.input_tokens, usage.output_tokens)
         label = f"Turn {len(history) // 2}:"
+        share = usage.input_tokens / budget
         print(
-            f"{label:<15}{usage.input_tokens:,} in,"
+            f"{label:<15}{usage.input_tokens:,} in ({share:.0%} of budget),"
             f" {usage.output_tokens:,} out, ${cost:.6f}"
         )
         print()

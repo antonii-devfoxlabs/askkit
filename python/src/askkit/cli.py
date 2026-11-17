@@ -16,6 +16,7 @@ from askkit.ask import (
     stop_warning,
     thinking_tokens,
 )
+from askkit.budget import DEFAULT_BUDGET, budget_fault
 from askkit.chat import STOP, chat
 from askkit.classify import (
     check_classification,
@@ -166,6 +167,7 @@ def main(arguments: list[str] | None = None) -> None:
     chat_command.add_argument(
         "--history", type=Path, default=Path("chat.json")
     )
+    chat_command.add_argument("--budget", type=int, default=DEFAULT_BUDGET)
     extract = commands.add_parser(
         "extract", help="turn an email into a ticket, as JSON"
     )
@@ -565,12 +567,18 @@ def main(arguments: list[str] | None = None) -> None:
         return
 
     if options.command == "chat":
+        fault = budget_fault(
+            options.model, options.budget, options.max_tokens
+        )
+        if fault is not None:
+            sys.exit(f"askkit: {fault}")
         system = ASK_SYSTEM
         if options.system_file is not None:
             system = options.system_file.read_text(encoding="utf-8").strip()
         history = require_history(options.history)
         client = Anthropic(api_key=require_api_key())
         print(f"History:       {len(history)} messages in {options.history}")
+        print(f"Budget:        {options.budget:,} input tokens a turn")
         print(f"Type {STOP} to stop.")
         print()
         try:
@@ -582,6 +590,7 @@ def main(arguments: list[str] | None = None) -> None:
                 options.max_tokens,
                 system,
                 options.effort,
+                options.budget,
                 input,
             )
         except KeyboardInterrupt:

@@ -29,19 +29,25 @@ def ask(
     output_config: OutputConfigParam | Omit = omit
     if effort is not None:
         output_config = {"effort": effort}
+    return client.messages.create(
+        model=model,
+        max_tokens=max_tokens,
+        system=system,
+        messages=messages_for(question, history),
+        output_config=output_config,
+    )
+
+
+def messages_for(
+    question: str, history: list[MessageParam] | None = None
+) -> list[MessageParam]:
     # The API remembers nothing, so every earlier message goes again,
     # oldest first, before the new question.
     messages: list[MessageParam] = []
     if history is not None:
         messages = list(history)
     messages.append({"role": "user", "content": question})
-    return client.messages.create(
-        model=model,
-        max_tokens=max_tokens,
-        system=system,
-        messages=messages,
-        output_config=output_config,
-    )
+    return messages
 
 
 def answer_text(response: Message) -> str:
