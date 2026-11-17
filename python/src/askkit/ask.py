@@ -76,7 +76,7 @@ def stream_answer(
             return response, Timing(first_token, perf_counter() - start)
     except KeyboardInterrupt:
         # Ctrl-C while the answer streams. Leaving the with block closed
-        # the connection, so the model stops writing it.
+        # the connection, so no more of the answer comes.
         return None, Timing(first_token, perf_counter() - start)
     finally:
         # Ends the answer's last line, also when the stream breaks off,

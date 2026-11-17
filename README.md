@@ -64,9 +64,9 @@ uv run askkit ask "In one sentence, what is a context window?"
 ```
 
 Press Ctrl-C while an answer is still streaming to cancel it: AskKit
-closes the connection, so the model stops writing, prints how long the
-answer ran (`cancelled at …`), says the text above is not a whole answer
-and exits with code 1. A cancelled answer has no stop reason and no
+closes the connection, so no more of the answer comes. It prints how
+long the answer ran (`cancelled at …`), says the text above is not a
+whole answer and exits with code 1. A cancelled answer has no stop reason and no
 usage, so no tokens or cost are printed, and it is never saved.
 
 `ask` calls Anthropic's models only, so `-m` takes the Claude models in
