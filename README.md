@@ -325,6 +325,20 @@ two runs of each version with `-m held_out`, each version into a results
 file of its own. `src/askkit/runs.py` holds the results file and the
 diff.
 
+### Reading the failures
+
+A diff names the cases that changed; it does not say why they fail.
+`askkit faults v2.json v3.json` reads every failed answer in one or more
+results files of the main part, with no call to the model, and sorts
+them by what code can tell: the field each fault names (the words before
+its first colon, `stop` for an answer cut off or declined) and the kind
+of the case's email, the largest group first. Then it lists every failed
+answer with its faults, to be read beside its email. Write a note on
+each one, saying what went wrong in your own words; group the notes that
+share a cause, count each group, and write the next prompt version
+against the largest. A results file of the held-out part is refused, so
+its failures stay unread. `src/askkit/analysis.py` holds the sorting.
+
 ## Grading answers by hand
 
 An answer of `askkit ask` has no field to compare: it can be right in
@@ -399,6 +413,11 @@ test, as the thinking count of `ask` did.
   rules, repair or ask again where one right reading or a reread can
   fix them, and say what a person must do with a declined, cut-off or
   partly stated answer.
+- `m05`, end of Module 5 (First Evals): a golden set for `extract` with a
+  held-out part, code-based checks, a pytest eval run after every prompt
+  change, answers recorded and replayed, `diff` to compare two versions
+  or models case by case, and `faults` to read the failures; `answer`
+  and `grade` for grading `ask` answers by hand against a rubric.
 
 ## Layout
 

@@ -7,6 +7,7 @@ from anthropic import Anthropic, APIError
 from anthropic.types import Message
 from pydantic import ValidationError
 
+from askkit.analysis import fault_lines
 from askkit.ask import (
     EFFORTS,
     MODELS,
@@ -39,7 +40,7 @@ from askkit.extract import (
     ticket_error,
     ticket_faults,
 )
-from askkit.golden import KINDS, kind_counts, load_cases
+from askkit.golden import KINDS, Case, kind_counts, load_cases
 from askkit.limits import LIMITS
 from askkit.prices import PRICES
 from askkit.prompts import ASK_SYSTEM
@@ -55,7 +56,7 @@ from askkit.rubric import (
     load_rubric,
 )
 from askkit.rules import email_fault, load_orders, order_fault
-from askkit.runs import diff_lines, load_results
+from askkit.runs import Results, diff_lines, load_results
 from askkit.tokens import count_tokens
 
 
@@ -172,6 +173,13 @@ def main(arguments: list[str] | None = None) -> None:
     )
     diff_command.add_argument("old", type=Path)
     diff_command.add_argument("new", type=Path)
+    faults_command = commands.add_parser(
+        "faults", help="sort the failed answers of eval runs, to read them"
+    )
+    faults_command.add_argument("results", type=Path, nargs="+")
+    faults_command.add_argument(
+        "--cases", type=Path, default=Path("evals/extract/main")
+    )
     options = parser.parse_args(arguments)
 
     if options.command == "key":
@@ -206,6 +214,23 @@ def main(arguments: list[str] | None = None) -> None:
             old = load_results(options.old)
             new = load_results(options.new)
             lines = diff_lines(options.old.name, old, options.new.name, new)
+        except (OSError, ValueError) as error:
+            sys.exit(f"askkit: {error}")
+        for line in lines:
+            print(line)
+        return
+
+    if options.command == "faults":
+        # No model call either: the failures the eval stored, sorted by
+        # what code can tell, for a person to read.
+        try:
+            cases: dict[str, Case] = {}
+            for case in load_cases(options.cases):
+                cases[case.email] = case
+            files: dict[str, Results] = {}
+            for path in options.results:
+                files[path.name] = load_results(path)
+            lines = fault_lines(files, cases)
         except (OSError, ValueError) as error:
             sys.exit(f"askkit: {error}")
         for line in lines:

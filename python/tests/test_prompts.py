@@ -28,6 +28,9 @@ RELEASED = {
     "extract_ticket.v3.txt": (
         "833b51c321b0a1e8328dd9028aee1d4855d8869e5662d186abf8a7fb47666e01"
     ),
+    "extract_ticket.v4.txt": (
+        "0d32d6a38dc3ac4e72f525731a2d9190143a80ab159d4d5e191a2c99ab1d0896"
+    ),
     "quote_request.v1.txt": (
         "754bbdfd562c8534f7eb354092da4ddf3c0c43c85f62c7ea7c5937986364d903"
     ),
