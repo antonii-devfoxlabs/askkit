@@ -232,8 +232,9 @@ folder with a `cases.json` and one `.txt` file per email:
   whether it works on emails it was not written for.
 
 A case names its email by the file without `.txt` and gives `order`
-(`null` when the email has none), `wish`, its `kind` and `why` it is
-in the set. The kinds: `plain` (one order, one problem, one wish), `no
+(`null` when the email has none), `wish`, `mentions` (the patterns
+its ticket's problem must match), its `kind` and `why` it is in the
+set. The kinds: `plain` (one order, one problem, one wish), `no
 order`, `no wish` (no word on a replacement or a refund), `two wishes`
 (the first one counts), `quoted` (an earlier email quoted with it),
 `look-alike` (a phone number, a date or a quantity beside the order
@@ -251,6 +252,16 @@ checking the set's shape does not open the held-out emails.
 A held-out case whose result you read and tune for is no longer held
 out: move it to `main/` and write a new one in its place. A test holds
 a fingerprint of `held_out/`, so every change to it is made on purpose.
+
+`case_faults(answer, case)` in `python/src/askkit/checks.py` checks one
+answer against its case and returns every fault, an empty list for a
+pass. The schema comes first (the answer must be a `Ticket`, repair
+included, as `extract` checks it); then the order and the wish must
+match exactly; then each of the case's `mentions` must be found in the
+problem by `re.search`, in any capitals (`|` between words means any of
+them); and the problem must not hold an order number, four digits in a
+row. A test holds a right ticket, written by a person, for every main
+case: a check that fails one of them is stricter than the job.
 
 ## Exploring in a notebook
 

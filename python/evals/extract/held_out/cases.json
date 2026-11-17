@@ -3,6 +3,7 @@
     "email": "rug",
     "order": 1290,
     "wish": "replacement",
+    "mentions": ["rug", "stain"],
     "kind": "plain",
     "why": "One order, one problem, one wish"
   },
@@ -10,6 +11,7 @@
     "email": "gloves",
     "order": null,
     "wish": "refund",
+    "mentions": ["glove", "split|torn|rip"],
     "kind": "no order",
     "why": "A clear wish, no order number"
   },
@@ -17,6 +19,7 @@
     "email": "bowl",
     "order": 2216,
     "wish": "not stated",
+    "mentions": ["bowl", "crack"],
     "kind": "no wish",
     "why": "No word on what the customer wants"
   },
@@ -24,6 +27,7 @@
     "email": "shoes",
     "order": 6402,
     "wish": "refund",
+    "mentions": ["shoe", "small|size"],
     "kind": "two wishes",
     "why": "A refund first, a swap second"
   },
@@ -31,6 +35,7 @@
     "email": "mirror",
     "order": 8350,
     "wish": "replacement",
+    "mentions": ["mirror", "crack"],
     "kind": "quoted",
     "why": "The quote, naming another order, comes first"
   },
@@ -38,6 +43,7 @@
     "email": "frame",
     "order": 4785,
     "wish": "refund",
+    "mentions": ["frame", "glass|broke"],
     "kind": "look-alike",
     "why": "A size and a date"
   },
@@ -45,6 +51,7 @@
     "email": "table",
     "order": 7015,
     "wish": "replacement",
+    "mentions": ["table", "scratch|leg|screw"],
     "kind": "problems",
     "why": "Three problems with one table"
   },
@@ -52,6 +59,7 @@
     "email": "tasse",
     "order": 5733,
     "wish": "refund",
+    "mentions": ["cup|mug", "broke|crack"],
     "kind": "language",
     "why": "French"
   }

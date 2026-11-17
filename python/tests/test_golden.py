@@ -16,7 +16,7 @@ HELD_OUT = EXTRACT / "held_out"
 # case after reading how a prompt did on it is tuning on it, so a change
 # has to be made on purpose: the test fails until this line changes too.
 HELD_OUT_FINGERPRINT = (
-    "b0db444a27d6e42baf2f32fae0d91e0b6ee6ecdcf82263a43c8c0c2cedcd8d6c"
+    "177161aecc1176d93ea58020498281671b4c8626781dac11fee64534a9436ac8"
 )
 
 
@@ -45,6 +45,7 @@ MARIA = {
     "email": "maria",
     "order": 4417,
     "wish": "replacement",
+    "mentions": ["mug", "broke|smash|pieces|crack"],
     "kind": "plain",
     "why": "The email of lesson 1.2",
 }

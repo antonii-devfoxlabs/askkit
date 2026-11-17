@@ -25,14 +25,16 @@ KINDS: tuple[str, ...] = get_args(Kind)
 # One case of the golden set: an email, named by its file without the
 # .txt, and what a right ticket for it must hold. The order and the wish
 # use Ticket's own types, so an expected value Ticket would refuse is
-# refused here first. The problem is left out: two right tickets rarely
-# word it the same.
+# refused here first. The problem has no one right wording, so a case
+# gives patterns instead: each one must be found in the ticket's
+# problem, in any capitals, and "|" between words means any of them.
 class Case(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     email: str
     order: int | None
     wish: Wish
+    mentions: list[str]
     kind: Kind
     why: str
 

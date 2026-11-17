@@ -3,6 +3,7 @@
     "email": "maria",
     "order": 4417,
     "wish": "replacement",
+    "mentions": ["mug", "broke|smash|pieces|crack"],
     "kind": "plain",
     "why": "The email of lesson 1.2"
   },
@@ -10,6 +11,7 @@
     "email": "scarf",
     "order": 5208,
     "wish": "replacement",
+    "mentions": ["scarf", "hole"],
     "kind": "plain",
     "why": "One order, one problem, one wish"
   },
@@ -17,6 +19,7 @@
     "email": "tom",
     "order": null,
     "wish": "not stated",
+    "mentions": ["lamp", "flicker"],
     "kind": "no order",
     "why": "Lesson 2.2's email: no order, no wish"
   },
@@ -24,6 +27,7 @@
     "email": "towels",
     "order": null,
     "wish": "replacement",
+    "mentions": ["towel", "torn|rip"],
     "kind": "no order",
     "why": "A clear wish, no order number"
   },
@@ -31,6 +35,7 @@
     "email": "chair",
     "order": 6127,
     "wish": "not stated",
+    "mentions": ["chair", "leg"],
     "kind": "no wish",
     "why": "No word on what the customer wants"
   },
@@ -38,6 +43,7 @@
     "email": "jug",
     "order": 3080,
     "wish": "not stated",
+    "mentions": ["jug", "leak"],
     "kind": "no wish",
     "why": "Asks a question, not for a wish"
   },
@@ -45,6 +51,7 @@
     "email": "both",
     "order": 2954,
     "wish": "refund",
+    "mentions": ["teapot", "chip"],
     "kind": "two wishes",
     "why": "A refund first, a new teapot second"
   },
@@ -52,6 +59,7 @@
     "email": "pans",
     "order": 4630,
     "wish": "replacement",
+    "mentions": ["pan", "handle"],
     "kind": "two wishes",
     "why": "A new pan first, the money second"
   },
@@ -59,6 +67,7 @@
     "email": "reply",
     "order": 4417,
     "wish": "replacement",
+    "mentions": ["mug", "broke|smash|pieces|crack"],
     "kind": "quoted",
     "why": "Lesson 4.6: the quote names order 7302"
   },
@@ -66,6 +75,7 @@
     "email": "blanket",
     "order": 1856,
     "wish": "refund",
+    "mentions": ["blanket", "smoke|smell"],
     "kind": "quoted",
     "why": "The quote names another order"
   },
@@ -73,6 +83,7 @@
     "email": "kettle",
     "order": 6610,
     "wish": "refund",
+    "mentions": ["kettle", "work|broke|dead"],
     "kind": "look-alike",
     "why": "A phone number and a model number"
   },
@@ -80,6 +91,7 @@
     "email": "plates",
     "order": 7750,
     "wish": "replacement",
+    "mentions": ["plate", "crack"],
     "kind": "look-alike",
     "why": "Quantities and a date"
   },
@@ -87,6 +99,7 @@
     "email": "clock",
     "order": 3391,
     "wish": "refund",
+    "mentions": ["clock", "crack"],
     "kind": "problems",
     "why": "Three problems: hard to fit in 40 characters"
   },
@@ -94,6 +107,7 @@
     "email": "toaster",
     "order": 5566,
     "wish": "refund",
+    "mentions": ["toaster", "spark"],
     "kind": "problems",
     "why": "Three problems, one of them a fire risk"
   },
@@ -101,6 +115,7 @@
     "email": "taza",
     "order": 8841,
     "wish": "refund",
+    "mentions": ["cup|mug", "broke|crack"],
     "kind": "language",
     "why": "Spanish; the ticket stays in English"
   },
@@ -108,6 +123,7 @@
     "email": "lampe",
     "order": 9032,
     "wish": "replacement",
+    "mentions": ["lamp", "broke|damage"],
     "kind": "language",
     "why": "German; the wish is in a verb"
   }
