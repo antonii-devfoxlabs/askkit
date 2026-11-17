@@ -38,6 +38,7 @@ from askkit.extract import (
     ticket_error,
     ticket_faults,
 )
+from askkit.golden import KINDS, kind_counts, load_cases
 from askkit.limits import LIMITS
 from askkit.prices import PRICES
 from askkit.prompts import ASK_SYSTEM
@@ -128,10 +129,38 @@ def main(arguments: list[str] | None = None) -> None:
         "-m", "--model", choices=MODELS, default="claude-haiku-5-5"
     )
     classify.add_argument("--max-tokens", type=int, default=1000)
+    cases_command = commands.add_parser(
+        "cases", help="count a golden set's cases by kind"
+    )
+    cases_command.add_argument("folder", type=Path)
     options = parser.parse_args(arguments)
 
     if options.command == "key":
         print(f"API key: {masked(require_api_key())}")
+        return
+
+    if options.command == "cases":
+        # Counts from each part's cases.json. The held-out emails are
+        # never opened here: checking the set's shape is not reading the
+        # emails kept apart.
+        try:
+            main_cases = load_cases(options.folder / "main")
+            held_out = load_cases(options.folder / "held_out")
+        except (OSError, ValueError) as error:
+            sys.exit(f"askkit: {error}")
+        main_counts = kind_counts(main_cases)
+        held_out_counts = kind_counts(held_out)
+        print(f"{'Kind':<14}{'Main':>5}{'Held out':>10}")
+        empty: list[str] = []
+        for kind in KINDS:
+            print(
+                f"{kind:<14}{main_counts[kind]:>5}{held_out_counts[kind]:>10}"
+            )
+            if main_counts[kind] == 0 or held_out_counts[kind] == 0:
+                empty.append(kind)
+        print(f"{'Total':<14}{len(main_cases):>5}{len(held_out):>10}")
+        if empty:
+            sys.exit("askkit: no case in one part for " + ", ".join(empty))
         return
 
     if options.command == "extract":

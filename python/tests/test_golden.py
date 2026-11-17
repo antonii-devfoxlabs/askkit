@@ -5,7 +5,8 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from askkit.golden import KINDS, Case, email_text, load_cases
+from askkit.cli import main
+from askkit.golden import KINDS, Case, email_text, kind_counts, load_cases
 
 EXTRACT = Path(__file__).parent.parent / "evals" / "extract"
 MAIN = EXTRACT / "main"
@@ -114,3 +115,43 @@ def test_a_way_out_is_an_expected_value(tmp_path: Path) -> None:
     case = load_cases(folder)[0]
     assert case.order is None
     assert case.wish == "not stated"
+
+
+def test_kind_counts_shows_a_kind_with_no_case_as_zero() -> None:
+    counts = kind_counts([Case.model_validate(MARIA)])
+    assert counts["plain"] == 1
+    assert counts["language"] == 0
+    assert list(counts) == list(KINDS)
+
+
+def test_cases_counts_both_parts_by_kind(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    main(["cases", str(EXTRACT)])
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[0] == "Kind           Main  Held out"
+    assert lines[1] == "plain             2         1"
+    assert lines[-1] == "Total            16         8"
+    assert len(lines) == len(KINDS) + 2
+
+
+def test_cases_names_a_kind_missing_from_a_part(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    for part in ("main", "held_out"):
+        write_part(tmp_path / part, [MARIA])
+        (tmp_path / part / "maria.txt").write_text("4417", encoding="utf-8")
+    with pytest.raises(SystemExit) as stop:
+        main(["cases", str(tmp_path)])
+    assert str(stop.value) == (
+        "askkit: no case in one part for no order, no wish, two wishes,"
+        " quoted, look-alike, problems, language"
+    )
+    assert "plain             1         1" in capsys.readouterr().out
+
+
+def test_cases_stops_on_a_broken_set(tmp_path: Path) -> None:
+    write_part(tmp_path / "main", [MARIA])
+    with pytest.raises(SystemExit) as stop:
+        main(["cases", str(tmp_path)])
+    assert str(stop.value) == "askkit: main: no email file for 'maria'"

@@ -67,3 +67,13 @@ def load_cases(folder: Path) -> list[Case]:
 
 def email_text(folder: Path, case: Case) -> str:
     return (folder / f"{case.email}.txt").read_text(encoding="utf-8")
+
+
+def kind_counts(cases: list[Case]) -> dict[str, int]:
+    # Every kind, a kind with no case included, so a gap shows as a 0.
+    counts: dict[str, int] = {}
+    for kind in KINDS:
+        counts[kind] = 0
+    for case in cases:
+        counts[case.kind] = counts[case.kind] + 1
+    return counts

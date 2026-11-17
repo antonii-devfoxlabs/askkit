@@ -238,6 +238,11 @@ in the set. Every kind has cases in both parts. `load_cases(folder)` in
 `ValueError` on a case without its email, an email without a case or a
 name used twice; an expected value `Ticket` would refuse stops it too.
 
+`askkit cases evals/extract` (run in `python/`) prints how many cases
+of each kind are in each part, and exits with exit code 1 when a kind
+has no case in one of them. It reads only the two `cases.json` files:
+checking the set's shape does not open the held-out emails.
+
 A held-out case whose result you read and tune for is no longer held
 out: move it to `main/` and write a new one in its place. A test holds
 a fingerprint of `held_out/`, so every change to it is made on purpose.
