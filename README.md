@@ -287,6 +287,19 @@ ends with the score as pytest counts it, such as `3 failed, 13 passed,
   other run, so it runs only when a version is ready.
 - Without `ANTHROPIC_API_KEY` every case is skipped, never failed.
 
+### Recorded answers
+
+`uv run pytest evals --record` runs the eval as usual and saves every
+answer the API gives in `python/evals/extract/recording.json`: the body
+of each request beside the body of its answer, never the headers, so
+the key stays out of the file. `uv run pytest evals --replay` then runs
+the eval from that file, with no key, no call and no cost; a request
+the file has no answer to (a changed prompt, email or model) fails
+with `recording.json has no answer to this request; record it again
+with --record`. Replay a recording to try a change to a check on real
+answers for free; record again after a change to a prompt.
+`src/askkit/recordings.py` holds both transports.
+
 Run it after every change to a prompt template. `uv run pytest` and CI
 run `tests/` only, so they never call the model; the eval is apart
 because it costs money, needs a key and scores a model that can answer
@@ -376,8 +389,9 @@ test, as the thinking count of `ask` did.
   - `evals/`: the golden sets, a main and a held-out part each, the
     ask set's documents and rubric, and the eval that runs the extract
     set through the model (`uv run pytest evals`).
-  - `tests/`: pytest tests. They never call a model's API: the calls go
-    to a fake transport that answers with a recorded response.
+  - `tests/`: pytest tests. They never call a model's API: the real SDK
+    sends each call to a fake transport (`httpx2.MockTransport`) that
+    answers with a response written in the shape of the API's.
 
 ## Checks
 
