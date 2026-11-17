@@ -17,7 +17,8 @@ STOP = "/exit"
 NOT_KEPT = "Not kept: ask again, or type /exit to stop."
 
 NOT_SENT = (
-    "Not sent: start a new chat with --history, or give a larger --budget."
+    "Not sent: try a shorter question, a new --history file or a larger"
+    " --budget."
 )
 
 
@@ -57,8 +58,8 @@ def chat(
             continue
         problem = over_budget(needed, budget)
         if problem is not None:
-            # Every later turn would send more still, so asking again
-            # cannot help: the chat needs a new file or a larger budget.
+            # A shorter question may still fit, but every answer that joins
+            # the history makes later turns larger: the chat is near its end.
             print(f"askkit: {problem}", file=sys.stderr)
             print(NOT_SENT)
             print()
