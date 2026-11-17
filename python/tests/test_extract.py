@@ -291,6 +291,9 @@ def test_a_declined_ticket_says_why_in_the_apis_words(
     # read, however much of a ticket it looks like: the person gets the
     # category and the explanation instead.
     body = with_answer('{"order":8125,"problem":"account', "refusal")
+    # Declined after nine tokens of a ticket: billed for those, so the
+    # cost line counts them.
+    body["usage"] = {"input_tokens": 251, "output_tokens": 9}
     body["stop_details"] = {
         "type": "refusal",
         "category": "cyber",
@@ -311,8 +314,8 @@ def test_a_declined_ticket_says_why_in_the_apis_words(
     # only the lines about the call.
     assert capsys.readouterr().out.splitlines() == [
         "Model:         claude-haiku-5-5",
-        "Tokens:        236 in, 31 out",
-        "Cost:          $0.000039",
+        "Tokens:        251 in, 9 out",
+        "Cost:          $0.000030",
         "Stop reason:   refusal",
     ]
     # The same email to the same model is declined again: no retry.
