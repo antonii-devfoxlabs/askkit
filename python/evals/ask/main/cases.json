@@ -1,0 +1,55 @@
+[
+  {
+    "name": "postage",
+    "question": "Who pays the return postage for order 6083?",
+    "documents": ["returns-policy.txt", "order-6083.txt"],
+    "must": [
+      "The shop pays the return postage",
+      "Because it sent the wrong colour"
+    ],
+    "why": "Lesson 3.4's question: section 3 is an exception to section 1"
+  },
+  {
+    "name": "vase",
+    "question": "Can the customer send the vase from order 7302 back?",
+    "documents": ["returns-policy.txt", "order-7302.txt"],
+    "must": [
+      "No",
+      "A sale item comes back only if it is broken or wrong, and this vase is neither"
+    ],
+    "why": "Lesson 3.5's question: section 4 overrides section 1"
+  },
+  {
+    "name": "mug",
+    "question": "Does the customer of order 4417 have to send the broken mug back?",
+    "documents": ["returns-policy.txt", "order-4417.txt"],
+    "must": [
+      "No",
+      "The shop needs a photo of the mug"
+    ],
+    "why": "The answer is no, and the step that remains matters as much"
+  },
+  {
+    "name": "deadline",
+    "question": "By what date must the customer of order 6083 tell the shop about the wrong colour?",
+    "documents": ["returns-policy.txt", "order-6083.txt"],
+    "must": [
+      "By 2 December 2026, 30 days after delivery on 2 November"
+    ],
+    "why": "A date worked out from two documents"
+  },
+  {
+    "name": "gift",
+    "question": "Can a customer return a gift card?",
+    "documents": ["returns-policy.txt"],
+    "must": ["No"],
+    "why": "One sentence of the policy answers it"
+  },
+  {
+    "name": "canada",
+    "question": "Does the shop deliver to Canada?",
+    "documents": ["returns-policy.txt"],
+    "must": ["I don't know: the documents do not say"],
+    "why": "The documents do not answer it, so the way out is right"
+  }
+]

@@ -1,4 +1,5 @@
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -42,6 +43,17 @@ from askkit.golden import KINDS, kind_counts, load_cases
 from askkit.limits import LIMITS
 from askkit.prices import PRICES
 from askkit.prompts import ASK_SYSTEM
+from askkit.rubric import (
+    Answer,
+    Grade,
+    answer_faults,
+    answers_passed,
+    criterion_scores,
+    grade_answer,
+    load_answers,
+    load_questions,
+    load_rubric,
+)
 from askkit.rules import email_fault, load_orders, order_fault
 from askkit.tokens import count_tokens
 
@@ -56,7 +68,9 @@ def require_api_key() -> str:
     return key
 
 
-def print_calls(responses: list[Message], model: str) -> None:
+def print_calls(
+    responses: list[Message], model: str, stop_reason: bool = True
+) -> None:
     # One summary for every call a command made: the tokens and the cost
     # are added up, so a ticket asked for twice shows what both cost.
     input_tokens = 0
@@ -76,7 +90,10 @@ def print_calls(responses: list[Message], model: str) -> None:
         tokens += f" ({thinking:,} thinking)"
     print(f"Tokens:        {tokens}")
     print(f"Cost:          ${cost:.6f}")
-    print(f"Stop reason:   {last.stop_reason}")
+    # One stop reason says how one answer ended; a command that asked
+    # several questions names each answer's own on its line instead.
+    if stop_reason:
+        print(f"Stop reason:   {last.stop_reason}")
 
 
 def main(arguments: list[str] | None = None) -> None:
@@ -133,6 +150,22 @@ def main(arguments: list[str] | None = None) -> None:
         "cases", help="count a golden set's cases by kind"
     )
     cases_command.add_argument("folder", type=Path)
+    answer_command = commands.add_parser(
+        "answer", help="answer every question of an ask set, to grade"
+    )
+    answer_command.add_argument("folder", type=Path)
+    answer_command.add_argument("--out", type=Path, required=True)
+    answer_command.add_argument(
+        "-m", "--model", choices=MODELS, default="claude-haiku-5-5"
+    )
+    answer_command.add_argument("--max-tokens", type=int, default=1000)
+    grade_command = commands.add_parser(
+        "grade", help="grade saved answers by hand against a rubric"
+    )
+    grade_command.add_argument("answers", type=Path)
+    grade_command.add_argument("--cases", type=Path, required=True)
+    grade_command.add_argument("--rubric", type=Path, required=True)
+    grade_command.add_argument("--out", type=Path, required=True)
     options = parser.parse_args(arguments)
 
     if options.command == "key":
@@ -159,6 +192,106 @@ def main(arguments: list[str] | None = None) -> None:
         print(f"{'Total':<14}{len(main_cases):>5}{len(held_out):>10}")
         if empty:
             sys.exit("askkit: no case in one part for " + ", ".join(empty))
+        return
+
+    if options.command == "answer":
+        # Every question of one part, sent as askkit ask sends it, and the
+        # answers saved for a person to grade. What code can check is
+        # checked here, so no one spends a minute on a cut-off answer.
+        try:
+            questions = load_questions(options.folder)
+        except (OSError, ValueError) as error:
+            sys.exit(f"askkit: {error}")
+        client = Anthropic(api_key=require_api_key())
+        answers: list[Answer] = []
+        calls: list[Message] = []
+        for item in questions:
+            sources: dict[str, str] = {}
+            for name in item.documents:
+                path = options.folder.parent / "documents" / name
+                sources[name] = path.read_text(encoding="utf-8")
+            try:
+                response = ask(
+                    client,
+                    with_documents(item.question, sources),
+                    options.model,
+                    options.max_tokens,
+                    ASK_SYSTEM,
+                )
+            except APIError as error:
+                sys.exit(f"askkit: {error_message(error)}")
+            calls.append(response)
+            code_faults = answer_faults(response, sources)
+            # Of a declined answer no part is kept, as askkit ask prints
+            # none of it.
+            text = ""
+            if response.stop_reason != "refusal":
+                text = answer_text(response)
+            answers.append(
+                Answer(question=item.name, text=text, faults=code_faults)
+            )
+            state = "to grade"
+            if code_faults:
+                state = "; ".join(code_faults)
+            print(f"{item.name:<14}{state}")
+        saved = [one.model_dump() for one in answers]
+        options.out.write_text(
+            json.dumps(saved, indent=2) + "\n", encoding="utf-8"
+        )
+        print()
+        print_calls(calls, options.model, stop_reason=False)
+        print(f"Saved:         {options.out}")
+        return
+
+    if options.command == "grade":
+        try:
+            rubric = load_rubric(options.rubric)
+            questions = load_questions(options.cases)
+            answers = load_answers(options.answers)
+        except (OSError, ValueError) as error:
+            sys.exit(f"askkit: {error}")
+        asked = {}
+        for item in questions:
+            asked[item.name] = item
+        for one in answers:
+            if one.question not in asked:
+                sys.exit(
+                    f"askkit: no case {one.question!r} in {options.cases}"
+                )
+        print("Rubric")
+        for criterion in rubric:
+            print(f"  {criterion.name}: {criterion.asks}")
+            print(f"    Passes: {criterion.passes}")
+            print(f"    Fails:  {criterion.fails}")
+        grades: list[Grade] = []
+        number = 0
+        for one in answers:
+            number += 1
+            item = asked[one.question]
+            print()
+            print(f"Answer {number} of {len(answers)}: {item.name}")
+            print(f"Question: {item.question}")
+            for fact in item.must:
+                print(f"Must:     {fact}")
+            print()
+            if one.faults:
+                print("Failed by code: " + "; ".join(one.faults))
+            else:
+                print(one.text)
+                print()
+            grades.extend(grade_answer(one, rubric, input))
+        saved = [grade.model_dump() for grade in grades]
+        options.out.write_text(
+            json.dumps(saved, indent=2) + "\n", encoding="utf-8"
+        )
+        print()
+        scores = criterion_scores(grades, rubric)
+        for name in scores:
+            passed, graded = scores[name]
+            print(f"{name:<14}{passed} of {graded}")
+        passed, graded = answers_passed(grades)
+        print(f"{'All criteria':<14}{passed} of {graded} answers")
+        print(f"Saved:         {options.out}")
         return
 
     if options.command == "extract":

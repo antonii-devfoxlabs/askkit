@@ -1,0 +1,19 @@
+[
+  {
+    "name": "refund",
+    "question": "How soon does the shop refund an unused item that comes back?",
+    "documents": ["returns-policy.txt"],
+    "must": ["Within 5 working days of receiving it"],
+    "why": "A plain question one sentence answers"
+  },
+  {
+    "name": "late",
+    "question": "Is 20 November still in time to report the broken mug of order 4417?",
+    "documents": ["returns-policy.txt", "order-4417.txt"],
+    "must": [
+      "No",
+      "Broken items are reported within 14 days of delivery on 3 November, so by 17 November"
+    ],
+    "why": "A date worked out from two documents, past its limit"
+  }
+]

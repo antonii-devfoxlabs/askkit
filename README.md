@@ -263,6 +263,44 @@ them); and the problem must not hold an order number, four digits in a
 row. A test holds a right ticket, written by a person, for every main
 case: a check that fails one of them is stricter than the job.
 
+## Grading answers by hand
+
+An answer of `askkit ask` has no field to compare: it can be right in
+many wordings, and wrong in a way no word gives away. `python/evals/ask/`
+holds a golden set of questions for it, graded by a person against a
+rubric:
+
+- `documents/`: the shop's returns policy and three orders, the files
+  the questions are asked about.
+- `main/` and `held_out/`: a `cases.json` each (6 and 2 questions). A
+  case names the question, the documents it is asked with, the facts a
+  right answer `must` state, in words for the grader, and `why` it is
+  in the set. The held-out part is kept apart as the extract set's is,
+  with a fingerprint in `tests/test_rubric.py`.
+- `rubric.json`: the criteria every answer is graded on. Each is a
+  question the grader answers yes or no, with an answer that `passes`
+  and one that `fails`, so two graders read it the same way.
+
+Grading takes two commands, run in `python/`:
+
+```bash
+uv run askkit answer evals/ask/main --out answers.json
+uv run askkit grade answers.json --cases evals/ask/main --rubric evals/ask/rubric.json --out grades.json
+```
+
+`answer` sends every question of one part as `ask --document` would,
+and saves the answers. It runs `ask`'s own checks first (a whole
+answer, quotes found in the documents, a quote unless the answer is
+"I don't know") and saves what fails as the answer's faults. These are
+real, billed calls, one per question. `grade` shows the rubric, then
+each answer with its question and its must-list, and asks each
+criterion in turn: `y` or `n`, and for every `n` a note saying why. An
+answer with faults from `answer` is failed on every criterion without
+being shown: a person's time goes to what code cannot check. The grades
+are saved, and `grade` prints how many answers passed each criterion and
+how many passed all of them. The answers file names no prompt version,
+so whoever grades it does not know which version wrote it.
+
 ## Exploring in a notebook
 
 `python/notebooks/explore.ipynb` is a Jupyter notebook for trying a call
@@ -306,7 +344,8 @@ test, as the thinking count of `ask` did.
   - `src/askkit/`: the package.
   - `src/askkit/templates/`: the prompts, one file per version.
   - `notebooks/`: notebooks for exploring, saved without outputs.
-  - `evals/`: the golden sets, a main and a held-out part each.
+  - `evals/`: the golden sets, a main and a held-out part each, and the
+    ask set's documents and rubric.
   - `tests/`: pytest tests. They never call a model's API: the calls go
     to a fake transport that answers with a recorded response.
 
