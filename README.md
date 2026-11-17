@@ -52,8 +52,9 @@ were checked.
 `askkit key` checks that AskKit finds your API key in `python/.env`
 (copy `python/.env.example` and put the key after the `=`), and shows it
 masked. `askkit ask` sends a question to a model with Anthropic's SDK and
-prints the answer, the tokens the call used (and how many of the output
-tokens were thinking, when the API says) and what it cost:
+prints the answer as the model writes it, streamed piece by piece, then
+the tokens the call used (and how many of the output tokens were
+thinking, when the API says) and what it cost:
 
 ```bash
 cd python
@@ -71,8 +72,9 @@ AskKit's system prompt, the template `ask_system` (see "Prompts" below);
 Under the cost, `ask` prints the stop reason, the API's word for why
 the answer ended. When the answer is not whole (cut off at
 `--max-tokens` or at the end of the context window, or declined),
-`ask` says so and exits with exit code 1. Of a declined answer it prints
-no part, as Anthropic advises, and names the category when the API
+`ask` says so and exits with exit code 1. A declined answer may have
+shown some text before the model stopped: `ask` then says not to use it,
+as Anthropic advises, and names the category when the API
 gives one.
 When the call itself fails (a rejected key, a rate limit, Anthropic's
 servers overloaded, no connection), `ask` prints one short message
@@ -131,9 +133,10 @@ cd python
 uv run askkit chat
 ```
 
-A turn joins the history only once its answer is whole, and the file is
-written after every such turn, so stopping at any moment loses at most
-the answer still on its way. An API error, a cut-off or a declined
+Each answer is streamed, as in `ask`. A turn joins the history only once
+its answer is whole (an answer whose stream breaks off midway is not),
+and the file is written after every such turn, so stopping at any moment
+loses at most the answer still on its way. An API error, a cut-off or a declined
 answer prints `askkit:` and why, keeps nothing, and the chat goes on, so
 the same question can be asked again. Each whole turn prints its tokens
 and cost on a `Turn N:` line; they grow with the conversation.

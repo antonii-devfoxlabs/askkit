@@ -1,11 +1,18 @@
 import json
+import re
 from typing import Any
 
 import httpx2
 import pytest
-from anthropic import Anthropic
+from anthropic import Anthropic, APIError
 
-from askkit.ask import answer_text, ask, stop_warning, thinking_tokens
+from askkit.ask import (
+    answer_text,
+    ask,
+    stop_warning,
+    stream_answer,
+    thinking_tokens,
+)
 from askkit.cli import main
 from askkit.prompts import ASK_SYSTEM, render
 
@@ -26,12 +33,134 @@ WRITTEN = {
 }
 
 
+def event(name: str, data: dict[str, Any]) -> str:
+    # One server-sent event: its name, then its data as JSON.
+    return f"event: {name}\ndata: {json.dumps(data)}\n\n"
+
+
+def pieces(text: str) -> list[str]:
+    # The text in word-sized pieces, each with the spaces before it, as
+    # the API sends an answer in a stream.
+    return re.findall(r"\s*\S+|\s+$", text)
+
+
+def opening(body: dict[str, Any]) -> list[str]:
+    # A stream's first events: the message with no content yet, then each
+    # block opened, filled piece by piece, and closed.
+    start = dict(body)
+    start["content"] = []
+    start["stop_reason"] = None
+    start["usage"] = {
+        "input_tokens": body["usage"]["input_tokens"],
+        "output_tokens": 1,
+    }
+    events = [
+        event("message_start", {"type": "message_start", "message": start})
+    ]
+    for index, block in enumerate(body["content"]):
+        if block["type"] == "thinking":
+            empty = {"type": "thinking", "thinking": "", "signature": ""}
+            deltas = [
+                {"type": "thinking_delta", "thinking": block["thinking"]},
+                {"type": "signature_delta", "signature": block["signature"]},
+            ]
+        else:
+            empty = {"type": "text", "text": ""}
+            deltas = []
+            for piece in pieces(block["text"]):
+                deltas.append({"type": "text_delta", "text": piece})
+        events.append(
+            event(
+                "content_block_start",
+                {
+                    "type": "content_block_start",
+                    "index": index,
+                    "content_block": empty,
+                },
+            )
+        )
+        for delta in deltas:
+            events.append(
+                event(
+                    "content_block_delta",
+                    {
+                        "type": "content_block_delta",
+                        "index": index,
+                        "delta": delta,
+                    },
+                )
+            )
+        events.append(
+            event(
+                "content_block_stop",
+                {"type": "content_block_stop", "index": index},
+            )
+        )
+    return events
+
+
+def closing(body: dict[str, Any]) -> list[str]:
+    # A stream's last events: the stop reason and the usage, then the end.
+    return [
+        event(
+            "message_delta",
+            {
+                "type": "message_delta",
+                "delta": {
+                    "stop_reason": body["stop_reason"],
+                    "stop_sequence": None,
+                    "stop_details": body.get("stop_details"),
+                },
+                "usage": body["usage"],
+            },
+        ),
+        event("message_stop", {"type": "message_stop"}),
+    ]
+
+
+def streamed(body: dict[str, Any]) -> httpx2.Response:
+    # The written response, sent the way the API sends a stream.
+    return httpx2.Response(
+        200,
+        headers={"content-type": "text/event-stream"},
+        text="".join(opening(body) + closing(body)),
+    )
+
+
+def broken_off(body: dict[str, Any], shown: int) -> httpx2.Response:
+    # The stream ends with an error event after the first pieces of text:
+    # the overload a busy API sends in place of a 529 once it has started.
+    events = opening(body)
+    cut = events.index(
+        next(text for text in events if '"text_delta"' in text)
+    )
+    error = event(
+        "error",
+        {
+            "type": "error",
+            "error": {"type": "overloaded_error", "message": "Overloaded"},
+        },
+    )
+    return httpx2.Response(
+        200,
+        headers={"content-type": "text/event-stream"},
+        text="".join(events[: cut + shown] + [error]),
+    )
+
+
+def replied(request: httpx2.Request, body: dict[str, Any]) -> httpx2.Response:
+    # A request that asks for a stream gets one; any other gets the JSON.
+    if json.loads(request.content).get("stream"):
+        return streamed(body)
+    return httpx2.Response(200, json=body)
+
+
 def fake_client(
     sent: list[dict[str, Any]], body: dict[str, Any] = WRITTEN
 ) -> Anthropic:
     def answer(request: httpx2.Request) -> httpx2.Response:
         sent.append(json.loads(request.content))
-        return httpx2.Response(200, json=body)
+        return replied(request, body)
 
     transport = httpx2.MockTransport(answer)
     return Anthropic(
@@ -368,11 +497,13 @@ def test_a_refusal_names_what_was_declined() -> None:
     )
 
 
-def test_ask_prints_no_part_of_a_declined_answer(
+def test_ask_marks_the_shown_part_of_a_declined_answer(
     tmp_path: Any,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
+    # Streamed, the text before the refusal is on screen already, so AskKit
+    # says not to use it.
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-api03-a-test-key-Ab12")
     use_fake_client(monkeypatch, [], stopped_with("refusal"))
@@ -381,12 +512,135 @@ def test_ask_prints_no_part_of_a_declined_answer(
     assert stopped.value.code == (
         "askkit: the model declined to answer this question"
     )
-    assert capsys.readouterr().out.splitlines() == [
+    captured = capsys.readouterr()
+    assert captured.out.splitlines() == [
+        "Order 4417: a replacement mug.",
+        "",
         "Model:         claude-haiku-5-5",
         "Tokens:        118 in, 60 out",
         "Cost:          $0.000042",
         "Stop reason:   refusal",
     ]
+    assert captured.err == (
+        "askkit: the text above stopped where the model declined;"
+        " do not use it\n"
+    )
+
+
+def test_ask_prints_nothing_for_a_refusal_before_any_text(
+    tmp_path: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-api03-a-test-key-Ab12")
+    body = stopped_with("refusal")
+    body["content"] = []
+    use_fake_client(monkeypatch, [], body)
+    with pytest.raises(SystemExit):
+        main(["ask", "Hi"])
+    captured = capsys.readouterr()
+    assert captured.out.splitlines()[0] == "Model:         claude-haiku-5-5"
+    assert captured.err == ""
+
+
+def test_stream_answer_sends_the_request_of_ask_as_a_stream() -> None:
+    asked: list[dict[str, Any]] = []
+    streamed_requests: list[dict[str, Any]] = []
+    ask(
+        fake_client(asked), "Hi", "claude-haiku-5-5", 1000, "Be brief.", "low"
+    )
+    stream_answer(
+        fake_client(streamed_requests),
+        "Hi",
+        "claude-haiku-5-5",
+        1000,
+        "Be brief.",
+        "low",
+    )
+    assert streamed_requests == [{**asked[0], "stream": True}]
+
+
+def test_stream_answer_prints_the_pieces_and_returns_the_message(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    response = stream_answer(
+        fake_client([]), "Hi", "claude-haiku-5-5", 1000, "Be brief."
+    )
+    assert capsys.readouterr().out == "Order 4417: a replacement mug.\n"
+    assert answer_text(response) == "Order 4417: a replacement mug."
+    assert response.stop_reason == "end_turn"
+    assert response.usage.input_tokens == 118
+    assert response.usage.output_tokens == 27
+
+
+def test_the_stream_arrives_in_pieces() -> None:
+    # The fake sends the answer word by word, as the API does: the test
+    # above would pass on one piece too, so this one counts them.
+    shown: list[str] = []
+    client = fake_client([])
+    with client.messages.stream(
+        model="claude-haiku-5-5",
+        max_tokens=1000,
+        messages=[{"role": "user", "content": "Hi"}],
+    ) as stream:
+        for text in stream.text_stream:
+            shown.append(text)
+    assert shown == ["Order", " 4417:", " a", " replacement", " mug."]
+
+
+def test_a_large_max_tokens_needs_the_stream() -> None:
+    # Lesson 2.5: the SDK refuses an ordinary call that could take over ten
+    # minutes. Streamed, the same request goes.
+    with pytest.raises(ValueError, match="Streaming is required"):
+        ask(fake_client([]), "Hi", "claude-haiku-5-5", 64_000, "Be brief.")
+    sent: list[dict[str, Any]] = []
+    stream_answer(fake_client(sent), "Hi", "claude-haiku-5-5", 64_000, "Hi")
+    assert sent[0]["max_tokens"] == 64_000
+
+
+def test_a_stream_that_breaks_off_ends_its_line(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def answer(request: httpx2.Request) -> httpx2.Response:
+        return broken_off(WRITTEN, 2)
+
+    client = Anthropic(
+        api_key="sk-ant-api03-a-test-key-Ab12",
+        http_client=httpx2.Client(transport=httpx2.MockTransport(answer)),
+        max_retries=0,
+    )
+    with pytest.raises(APIError):
+        stream_answer(client, "Hi", "claude-haiku-5-5", 1000, "Be brief.")
+    assert capsys.readouterr().out == "Order 4417:\n"
+
+
+def test_askkit_ask_says_when_the_stream_breaks_off(
+    tmp_path: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-api03-a-test-key-Ab12")
+
+    def answer(request: httpx2.Request) -> httpx2.Response:
+        return broken_off(WRITTEN, 2)
+
+    def make(**options: Any) -> Anthropic:
+        return Anthropic(
+            api_key="sk-ant-api03-a-test-key-Ab12",
+            http_client=httpx2.Client(transport=httpx2.MockTransport(answer)),
+            max_retries=0,
+        )
+
+    monkeypatch.setattr("askkit.cli.Anthropic", make)
+    with pytest.raises(SystemExit) as stopped:
+        main(["ask", "Hi"])
+    assert stopped.value.code == (
+        "askkit: the answer broke off midway (overloaded_error): Overloaded;"
+        "\nask again"
+    )
+    assert capsys.readouterr().out == "Order 4417:\n"
 
 
 def with_thinking(thinking: int, output: int) -> dict[str, Any]:

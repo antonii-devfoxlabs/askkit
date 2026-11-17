@@ -25,17 +25,53 @@ def ask(
     effort: Effort | None = None,
     history: list[MessageParam] | None = None,
 ) -> Message:
-    # Without an effort, the field stays out and the model's default holds.
-    output_config: OutputConfigParam | Omit = omit
-    if effort is not None:
-        output_config = {"effort": effort}
     return client.messages.create(
         model=model,
         max_tokens=max_tokens,
         system=system,
         messages=messages_for(question, history),
-        output_config=output_config,
+        output_config=effort_config(effort),
     )
+
+
+def stream_answer(
+    client: Anthropic,
+    question: str,
+    model: str,
+    max_tokens: int,
+    system: str,
+    effort: Effort | None = None,
+    history: list[MessageParam] | None = None,
+) -> Message:
+    # The same request as ask(), with the answer printed piece by piece
+    # while the model writes it, so the first words show in under a
+    # second rather than after the whole answer is done.
+    shown = False
+    try:
+        with client.messages.stream(
+            model=model,
+            max_tokens=max_tokens,
+            system=system,
+            messages=messages_for(question, history),
+            output_config=effort_config(effort),
+        ) as stream:
+            for text in stream.text_stream:
+                # flush: show the piece now, not when the line is full.
+                print(text, end="", flush=True)
+                shown = True
+            return stream.get_final_message()
+    finally:
+        # Ends the answer's last line, also when the stream breaks off,
+        # so whatever AskKit prints next starts on a line of its own.
+        if shown:
+            print()
+
+
+def effort_config(effort: Effort | None) -> OutputConfigParam | Omit:
+    # Without an effort, the field stays out and the model's default holds.
+    if effort is None:
+        return omit
+    return {"effort": effort}
 
 
 def messages_for(
@@ -98,3 +134,10 @@ def stop_warning(
             warning += f". {details.explanation}"
         return warning
     return f"the answer stopped early: {reason}"
+
+
+# Streamed, a declined answer may have shown some text before the model
+# stopped. Anthropic advises discarding such a part, so AskKit says so.
+DECLINED_PART = (
+    "the text above stopped where the model declined; do not use it"
+)

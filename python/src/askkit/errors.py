@@ -38,6 +38,16 @@ def error_message(error: anthropic.APIError) -> str:
             f" {AFTER_RETRIES};"
             f"\ntry again later (request ID {error.request_id})"
         )
+    if (
+        isinstance(error, anthropic.APIStatusError)
+        and error.status_code == 200
+    ):
+        # An error event inside a stream: the answer had begun (200), so
+        # the SDK does not send the request again.
+        return (
+            f"the answer broke off midway ({error.type}):"
+            f" {error.api_message};\nask again"
+        )
     if isinstance(error, anthropic.APIStatusError):
         return (
             f"the API answered {error.status_code} ({error.type}):"

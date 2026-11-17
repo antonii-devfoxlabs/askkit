@@ -6,7 +6,7 @@ from typing import Any
 import httpx2
 import pytest
 from anthropic import Anthropic
-from test_ask import WRITTEN, stopped_with
+from test_ask import WRITTEN, broken_off, replied, stopped_with
 
 from askkit.budget import DEFAULT_BUDGET
 from askkit.chat import NOT_KEPT, NOT_SENT, chat
@@ -53,7 +53,7 @@ def answering(
         reply = replies[len(sent) - 1]
         if isinstance(reply, int):
             return httpx2.Response(reply, json=OVERLOADED)
-        return httpx2.Response(200, json=reply)
+        return replied(request, reply)
 
     return Anthropic(
         api_key="sk-ant-api03-a-test-key-Ab12",
@@ -190,15 +190,80 @@ def test_a_cut_off_answer_is_shown_warned_and_not_kept(
     )
 
 
-def test_a_declined_answer_is_not_shown_or_kept(
+def test_a_declined_answer_is_marked_and_not_kept(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    # Streamed, the text before the refusal is on screen already, so the
+    # chat says not to use it.
     _, history = run_chat(tmp_path, [stopped_with("refusal")], typed(MARIA))
     assert history == []
     captured = capsys.readouterr()
-    assert ANSWER not in captured.out
+    assert captured.out.startswith(ANSWER + "\n" + NOT_KEPT)
+    assert captured.err == (
+        "askkit: the text above stopped where the model declined;"
+        " do not use it\n"
+        "askkit: the model declined to answer this question\n"
+    )
+
+
+def test_a_refusal_before_any_text_shows_nothing(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    body = stopped_with("refusal")
+    body["content"] = []
+    _, history = run_chat(tmp_path, [body], typed(MARIA))
+    assert history == []
+    captured = capsys.readouterr()
+    assert captured.out.startswith(NOT_KEPT)
     assert captured.err == (
         "askkit: the model declined to answer this question\n"
+    )
+
+
+def test_every_turn_asks_for_a_stream(tmp_path: Path) -> None:
+    sent, _ = run_chat(tmp_path, [WRITTEN], typed(MARIA))
+    assert sent[0]["stream"] is True
+
+
+def test_a_stream_that_breaks_off_is_not_kept(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    sent: list[dict[str, Any]] = []
+
+    def answer(request: httpx2.Request) -> httpx2.Response:
+        if request.url.path == "/v1/messages/count_tokens":
+            return httpx2.Response(200, json={"input_tokens": 118})
+        sent.append(json.loads(request.content))
+        return broken_off(WRITTEN, 2)
+
+    client = Anthropic(
+        api_key="sk-ant-api03-a-test-key-Ab12",
+        http_client=httpx2.Client(transport=httpx2.MockTransport(answer)),
+        max_retries=0,
+    )
+    history: list[SavedMessage] = []
+    chat(
+        client,
+        tmp_path / "chat.json",
+        history,
+        tmp_path / "memory.json",
+        [],
+        "claude-haiku-5-5",
+        1000,
+        "Be brief.",
+        None,
+        DEFAULT_BUDGET,
+        "summarise",
+        typed(MARIA),
+    )
+    assert history == []
+    captured = capsys.readouterr()
+    # The two pieces shown before the break end their line, so the next
+    # line AskKit prints starts on a line of its own.
+    assert captured.out.startswith("Order 4417:\n" + NOT_KEPT)
+    assert captured.err == (
+        "askkit: the answer broke off midway (overloaded_error): Overloaded;"
+        "\nask again\n"
     )
 
 

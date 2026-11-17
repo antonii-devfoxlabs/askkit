@@ -9,11 +9,13 @@ from pydantic import ValidationError
 
 from askkit.analysis import fault_lines
 from askkit.ask import (
+    DECLINED_PART,
     EFFORTS,
     MODELS,
     answer_text,
     ask,
     stop_warning,
+    stream_answer,
     thinking_tokens,
 )
 from askkit.budget import DEFAULT_BUDGET, budget_fault
@@ -535,7 +537,7 @@ def main(arguments: list[str] | None = None) -> None:
             history = require_history(options.history)
         client = Anthropic(api_key=require_api_key())
         try:
-            response = ask(
+            response = stream_answer(
                 client,
                 question,
                 options.model,
@@ -547,13 +549,14 @@ def main(arguments: list[str] | None = None) -> None:
         except APIError as error:
             sys.exit(f"askkit: {error_message(error)}")
         text = answer_text(response)
-        # Anthropic advises discarding the part of a declined answer.
-        if response.stop_reason != "refusal":
-            print(text)
+        if text:
+            # A blank line between the answer and its numbers.
             print()
         print_calls([response], options.model)
         warning = stop_warning(response)
         if warning is not None:
+            if response.stop_reason == "refusal" and text:
+                print(f"askkit: {DECLINED_PART}", file=sys.stderr)
             sys.exit(f"askkit: {warning}")
         if documents:
             quotes = quotes_in(text)

@@ -5,6 +5,7 @@ from typing import Any
 import httpx2
 import pytest
 from anthropic import Anthropic
+from test_ask import replied
 
 from askkit.cli import main
 from askkit.documents import (
@@ -178,7 +179,7 @@ def use_fake_client(
 ) -> None:
     def answer(request: httpx2.Request) -> httpx2.Response:
         sent.append(json.loads(request.content))
-        return httpx2.Response(200, json=recorded(text))
+        return replied(request, recorded(text))
 
     def make(**options: Any) -> Anthropic:
         return Anthropic(

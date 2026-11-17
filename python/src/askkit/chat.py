@@ -4,7 +4,14 @@ from pathlib import Path
 
 from anthropic import Anthropic, APIError
 
-from askkit.ask import FINISHED, Effort, answer_text, ask, stop_warning
+from askkit.ask import (
+    DECLINED_PART,
+    FINISHED,
+    Effort,
+    answer_text,
+    stop_warning,
+    stream_answer,
+)
 from askkit.budget import input_tokens, over_budget
 from askkit.cost import call_cost
 from askkit.errors import error_message
@@ -150,7 +157,9 @@ def chat(
             continue
         sent = as_messages(history[start:])
         try:
-            response = ask(
+            # The answer shows as it is written; the turn is kept only once
+            # the stream has ended with a whole answer.
+            response = stream_answer(
                 client, question, model, max_tokens, sent_system, effort, sent
             )
         except APIError as error:
@@ -161,11 +170,10 @@ def chat(
             print()
             continue
         text = answer_text(response)
-        # Anthropic advises discarding the part of a declined answer.
-        if response.stop_reason != "refusal":
-            print(text)
         warning = stop_warning(response)
         if warning is not None:
+            if response.stop_reason == "refusal" and text:
+                print(f"askkit: {DECLINED_PART}", file=sys.stderr)
             print(f"askkit: {warning}", file=sys.stderr)
             print(NOT_KEPT)
             print()
