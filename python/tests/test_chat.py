@@ -211,7 +211,7 @@ def test_a_declined_answer_is_marked_and_not_kept(
     )
 
 
-def test_a_refusal_before_any_text_shows_nothing(
+def test_a_refusal_before_any_text_shows_only_its_time(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     body = stopped_with("refusal")
