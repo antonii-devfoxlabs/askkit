@@ -34,9 +34,10 @@ def turn_tokens(
     model: str,
     system: str,
     question: str,
-    kept: list[SavedMessage],
+    sent_history: list[SavedMessage],
 ) -> int:
-    return input_tokens(client, model, system, question, as_messages(kept))
+    messages = as_messages(sent_history)
+    return input_tokens(client, model, system, question, messages)
 
 
 def chat(
@@ -77,8 +78,8 @@ def chat(
             )
             keep = max(start, len(history) - 2 * KEEP_TURNS)
             if needed > budget and old_turns == "summarise" and keep > start:
-                # Everything but the last turns goes into one summary, so
-                # the next turns fit without another summary call.
+                # Everything but the last turns goes into one summary: at a
+                # real budget, many turns then fit before the next fold.
                 folded = summarise(
                     client, model, summary, history[start:keep]
                 )
