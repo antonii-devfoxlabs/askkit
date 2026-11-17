@@ -45,7 +45,7 @@ def chat(
     client: Anthropic,
     path: Path,
     history: list[SavedMessage],
-    memory: Path,
+    memory_path: Path,
     notes: list[str],
     model: str,
     max_tokens: int,
@@ -73,7 +73,7 @@ def chat(
         if not question:
             continue
         try:
-            reply = memory_reply(question, notes, memory)
+            reply = memory_reply(question, notes, memory_path)
         except ValueError as error:
             print(f"askkit: {error}", file=sys.stderr)
             print()
@@ -83,13 +83,14 @@ def chat(
             print(reply)
             print()
             continue
-        # Read again every turn: a note remembered now holds from now on.
-        rules = with_memory(system, notes)
+        # Built every turn: a note remembered now is sent from the next
+        # question on.
+        system_with_notes = with_memory(system, notes)
         first = start
         try:
             # Counted before the call: the count is free, and a turn over
             # the budget is never sent, so it is never paid for.
-            sent_system = with_summary(rules, summary)
+            sent_system = with_summary(system_with_notes, summary)
             needed = turn_tokens(
                 client, model, sent_system, question, history[start:]
             )
@@ -120,7 +121,7 @@ def chat(
                 )
                 label = turns_label(first // 2 + 1, start // 2)
                 print(f"{'Summarised:':<15}{label}, ${cost:.6f}")
-                sent_system = with_summary(rules, summary)
+                sent_system = with_summary(system_with_notes, summary)
                 needed = turn_tokens(
                     client, model, sent_system, question, history[start:]
                 )

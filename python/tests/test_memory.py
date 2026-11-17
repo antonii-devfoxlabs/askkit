@@ -107,7 +107,7 @@ def test_forget_takes_the_note_out_by_its_number(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize(
-    "line", ["/forget", "/forget 0", "/forget 3", "/forget one"]
+    "line", ["/forget", "/forget 0", "/forget 3", "/forget one", "/forget ²"]
 )
 def test_forget_needs_the_number_of_a_note(tmp_path: Path, line: str) -> None:
     notes = [HAIKU, BRIEF]

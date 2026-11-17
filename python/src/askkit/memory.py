@@ -93,7 +93,7 @@ def memory_reply(line: str, notes: list[str], path: Path) -> str | None:
         chosen = line.removeprefix(FORGET).strip()
         if not notes:
             raise ValueError("memory is empty: there is nothing to forget")
-        if not chosen.isdigit() or not 1 <= int(chosen) <= len(notes):
+        if not chosen.isdecimal() or not 1 <= int(chosen) <= len(notes):
             raise ValueError(
                 f"give the number of a note from {SHOW}, 1 to {len(notes)}"
             )
