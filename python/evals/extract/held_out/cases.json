@@ -1,0 +1,58 @@
+[
+  {
+    "email": "rug",
+    "order": 1290,
+    "wish": "replacement",
+    "kind": "plain",
+    "why": "One order, one problem, one wish"
+  },
+  {
+    "email": "gloves",
+    "order": null,
+    "wish": "refund",
+    "kind": "no order",
+    "why": "A clear wish, no order number"
+  },
+  {
+    "email": "bowl",
+    "order": 2216,
+    "wish": "not stated",
+    "kind": "wish not stated",
+    "why": "No word on what the customer wants"
+  },
+  {
+    "email": "shoes",
+    "order": 6402,
+    "wish": "refund",
+    "kind": "two wishes",
+    "why": "A refund first, a swap second"
+  },
+  {
+    "email": "mirror",
+    "order": 8350,
+    "wish": "replacement",
+    "kind": "quoted email",
+    "why": "The quote, naming another order, comes first"
+  },
+  {
+    "email": "frame",
+    "order": 4785,
+    "wish": "refund",
+    "kind": "other numbers",
+    "why": "A size and a date"
+  },
+  {
+    "email": "table",
+    "order": 7015,
+    "wish": "replacement",
+    "kind": "many problems",
+    "why": "Three problems with one table"
+  },
+  {
+    "email": "tasse",
+    "order": 5733,
+    "wish": "refund",
+    "kind": "other language",
+    "why": "French"
+  }
+]

@@ -219,6 +219,29 @@ made it, and the two versions can be compared. A test fails when a sent
 version changes by one byte. A `$` meant as a dollar sign is written
 `$$`.
 
+## The golden set
+
+`python/evals/extract/` holds the golden set for `extract`: emails, each
+with what a right ticket for it must hold, written by a person from the
+email, never copied from a model's answer. It has two parts, each a
+folder with a `cases.json` and one `.txt` file per email:
+
+- `main/`: 16 cases, the ones you read and change the prompt for.
+- `held_out/`: 8 cases, drawn before any prompt was tuned and never
+  read while one is. They are run once a version is ready, to see
+  whether it works on emails it was not written for.
+
+A case names its email by the file without `.txt` and gives `order`
+(`null` when the email has none), `wish`, its `kind` and `why` it is
+in the set. Every kind has cases in both parts. `load_cases(folder)` in
+`python/src/askkit/golden.py` reads one part and stops with a
+`ValueError` on a case without its email, an email without a case or a
+name used twice; an expected value `Ticket` would refuse stops it too.
+
+A held-out case whose result you read and tune for is no longer held
+out: move it to `main/` and write a new one in its place. A test holds
+a fingerprint of `held_out/`, so every change to it is made on purpose.
+
 ## Exploring in a notebook
 
 `python/notebooks/explore.ipynb` is a Jupyter notebook for trying a call
@@ -262,6 +285,7 @@ test, as the thinking count of `ask` did.
   - `src/askkit/`: the package.
   - `src/askkit/templates/`: the prompts, one file per version.
   - `notebooks/`: notebooks for exploring, saved without outputs.
+  - `evals/`: the golden sets, a main and a held-out part each.
   - `tests/`: pytest tests. They never call a model's API: the calls go
     to a fake transport that answers with a recorded response.
 
