@@ -166,12 +166,12 @@ def test_an_empty_rubric_is_refused(tmp_path: Path) -> None:
 
 def test_a_fail_is_not_taken_without_a_note() -> None:
     rubric = load_rubric(RUBRIC)
-    answer = Answer(question="postage", text=REFUND_POSTAGE, faults=[])
+    answer = Answer(case="postage", text=REFUND_POSTAGE, faults=[])
     read = replies("y", "n", "", "refund is section 1's", "maybe", "y")
     grades = grade_answer(answer, rubric, read)
     assert [grade.passed for grade in grades] == [True, False, True]
     assert grades[1].note == "refund is section 1's"
-    assert read.shown[1].startswith("grounded: Is all else it says")
+    assert read.shown[1].startswith("grounded: Is the rest of it")
     assert read.shown[2:4] == ["Why not? ", "Why not? "]
     assert read.shown[5].startswith("direct: ")
 
@@ -179,7 +179,7 @@ def test_a_fail_is_not_taken_without_a_note() -> None:
 def test_an_answer_code_failed_is_not_shown_to_the_grader() -> None:
     rubric = load_rubric(RUBRIC)
     faults = ["the answer quotes nothing from the documents"]
-    answer = Answer(question="postage", text="We pay.", faults=faults)
+    answer = Answer(case="postage", text="We pay.", faults=faults)
     read = replies()
     grades = grade_answer(answer, rubric, read)
     assert read.shown == []
@@ -190,17 +190,17 @@ def test_an_answer_code_failed_is_not_shown_to_the_grader() -> None:
 def test_scores_count_each_criterion_and_whole_answers() -> None:
     rubric = load_rubric(RUBRIC)
     grades = [
-        Grade(question="postage", criterion="must", passed=True, note=""),
+        Grade(case="postage", criterion="must", passed=True, note=""),
         Grade(
-            question="postage",
+            case="postage",
             criterion="grounded",
             passed=False,
             note="refund",
         ),
-        Grade(question="postage", criterion="direct", passed=True, note=""),
-        Grade(question="gift", criterion="must", passed=True, note=""),
-        Grade(question="gift", criterion="grounded", passed=True, note=""),
-        Grade(question="gift", criterion="direct", passed=True, note=""),
+        Grade(case="postage", criterion="direct", passed=True, note=""),
+        Grade(case="gift", criterion="must", passed=True, note=""),
+        Grade(case="gift", criterion="grounded", passed=True, note=""),
+        Grade(case="gift", criterion="direct", passed=True, note=""),
     ]
     assert criterion_scores(grades, rubric) == {
         "must": (2, 2),
@@ -298,7 +298,7 @@ def test_answer_saves_every_answer_with_its_code_faults(
     )
     answers = load_answers(Path("answers.json"))
     assert answers[0] == Answer(
-        question="postage", text=REFUND_POSTAGE, faults=[]
+        case="postage", text=REFUND_POSTAGE, faults=[]
     )
     assert answers[1].faults == [
         "the answer quotes nothing from the documents"
@@ -326,9 +326,9 @@ def test_grade_asks_each_line_and_saves_the_grades(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     answers = [
-        Answer(question="postage", text=REFUND_POSTAGE, faults=[]),
+        Answer(case="postage", text=REFUND_POSTAGE, faults=[]),
         Answer(
-            question="gift",
+            case="gift",
             text="<answer>No.</answer>",
             faults=["the answer quotes nothing from the documents"],
         ),
@@ -374,7 +374,7 @@ def test_grade_asks_each_line_and_saves_the_grades(
     ]
     grades = json.loads(Path("grades.json").read_text(encoding="utf-8"))
     assert grades[1] == {
-        "question": "postage",
+        "case": "postage",
         "criterion": "grounded",
         "passed": False,
         "note": "promises section 1's refund",
@@ -384,7 +384,7 @@ def test_grade_asks_each_line_and_saves_the_grades(
 def test_grade_refuses_an_answer_to_a_question_not_in_the_set(
     ask_set: Path,
 ) -> None:
-    answer = Answer(question="canada", text="I don't know.", faults=[])
+    answer = Answer(case="canada", text="I don't know.", faults=[])
     Path("answers.json").write_text(
         json.dumps([answer.model_dump()]), encoding="utf-8"
     )

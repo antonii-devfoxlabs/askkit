@@ -7,7 +7,7 @@
   },
   {
     "name": "grounded",
-    "asks": "Is all else it says in the documents and true of this order?",
+    "asks": "Is the rest of it in the documents and true of this order?",
     "passes": "We pay the return postage and email you a prepaid label.",
     "fails": "We pay the postage and refund you. (Section 1's refund.)"
   },

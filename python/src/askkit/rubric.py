@@ -34,22 +34,22 @@ class Criterion(BaseModel):
     fails: str
 
 
-# What the model wrote for one question, and what code already found
+# What the model wrote for one case's question, and what code already found
 # wrong with it, so the grader's time goes only to what code cannot see.
 class Answer(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    question: str
+    case: str
     text: str
     faults: list[str]
 
 
-# One grader's yes or no on one criterion for one answer. A fail has a
+# One grader's yes or no on one criterion for one case's answer. A fail has a
 # note saying why: it is what tells you what to change.
 class Grade(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    question: str
+    case: str
     criterion: str
     passed: bool
     note: str
@@ -120,7 +120,7 @@ def grade_answer(
                 note = read("Why not? ").strip()
         grades.append(
             Grade(
-                question=answer.question,
+                case=answer.case,
                 criterion=criterion.name,
                 passed=passed,
                 note=note,
@@ -149,13 +149,13 @@ def criterion_scores(
 def answers_passed(grades: list[Grade]) -> tuple[int, int]:
     # An answer passes only when it passes every criterion.
     failed: list[str] = []
-    questions: list[str] = []
+    cases: list[str] = []
     for grade in grades:
-        if grade.question not in questions:
-            questions.append(grade.question)
-        if not grade.passed and grade.question not in failed:
-            failed.append(grade.question)
-    return len(questions) - len(failed), len(questions)
+        if grade.case not in cases:
+            cases.append(grade.case)
+        if not grade.passed and grade.case not in failed:
+            failed.append(grade.case)
+    return len(cases) - len(failed), len(cases)
 
 
 def load_answers(path: Path) -> list[Answer]:

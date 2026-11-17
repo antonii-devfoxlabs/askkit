@@ -228,7 +228,7 @@ def main(arguments: list[str] | None = None) -> None:
             if response.stop_reason != "refusal":
                 text = answer_text(response)
             answers.append(
-                Answer(question=item.name, text=text, faults=code_faults)
+                Answer(case=item.name, text=text, faults=code_faults)
             )
             state = "to grade"
             if code_faults:
@@ -254,10 +254,8 @@ def main(arguments: list[str] | None = None) -> None:
         for item in questions:
             asked[item.name] = item
         for one in answers:
-            if one.question not in asked:
-                sys.exit(
-                    f"askkit: no case {one.question!r} in {options.cases}"
-                )
+            if one.case not in asked:
+                sys.exit(f"askkit: no case {one.case!r} in {options.cases}")
         print("Rubric")
         for criterion in rubric:
             print(f"  {criterion.name}: {criterion.asks}")
@@ -267,7 +265,7 @@ def main(arguments: list[str] | None = None) -> None:
         number = 0
         for one in answers:
             number += 1
-            item = asked[one.question]
+            item = asked[one.case]
             print()
             print(f"Answer {number} of {len(answers)}: {item.name}")
             print(f"Question: {item.question}")
