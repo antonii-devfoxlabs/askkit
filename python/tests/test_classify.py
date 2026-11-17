@@ -6,13 +6,13 @@ import httpx2
 import pytest
 from anthropic import Anthropic
 from pydantic import ValidationError
+from test_ask import replied
 
 from askkit.classify import (
     CLASSIFICATION_SCHEMA,
     QUEUES,
     check_classification,
     classification_error,
-    classify_email,
     repair_queue,
 )
 from askkit.cli import main
@@ -51,7 +51,7 @@ def use_fake_client(
 ) -> None:
     def answer(request: httpx2.Request) -> httpx2.Response:
         sent.append(json.loads(request.content))
-        return httpx2.Response(200, json=body)
+        return replied(request, body)
 
     def make(api_key: str) -> Anthropic:
         transport = httpx2.MockTransport(answer)
@@ -96,18 +96,12 @@ def test_every_queue_is_defined_in_the_template() -> None:
         assert any(line.startswith(f"- {queue}: ") for line in lines), queue
 
 
-def test_classify_email_sends_the_schema_beside_the_email() -> None:
+def test_classify_streams_the_schema_beside_the_email(
+    email_file: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     sent: list[dict[str, Any]] = []
-
-    def answer(request: httpx2.Request) -> httpx2.Response:
-        sent.append(json.loads(request.content))
-        return httpx2.Response(200, json=ANSWER)
-
-    client = Anthropic(
-        api_key="sk-ant-api03-a-test-key-Ab12",
-        http_client=httpx2.Client(transport=httpx2.MockTransport(answer)),
-    )
-    classify_email(client, GIFT, "claude-haiku-5-5", 1000)
+    use_fake_client(monkeypatch, sent)
+    main(["classify", str(email_file)])
     assert sent == [
         {
             "model": "claude-haiku-5-5",
@@ -120,6 +114,7 @@ def test_classify_email_sends_the_schema_beside_the_email() -> None:
                     "schema": CLASSIFICATION_SCHEMA,
                 }
             },
+            "stream": True,
         }
     ]
 
@@ -168,6 +163,7 @@ def test_classify_prints_the_queue_and_the_call(
         "Tokens:        214 in, 12 out",
         "Cost:          $0.000027",
         "Stop reason:   end_turn",
+        "Time:          first token 0.42 s, total 0.84 s",
     ]
     assert sent[0]["messages"][0]["content"] == GIFT
 
@@ -216,7 +212,7 @@ def test_a_cut_off_answer_is_not_read(
         "askkit: the answer was cut off at 12 tokens;"
         " give it a larger --max-tokens"
     )
-    assert capsys.readouterr().out.splitlines()[-1] == (
+    assert capsys.readouterr().out.splitlines()[-2] == (
         "Stop reason:   max_tokens"
     )
 
@@ -238,7 +234,7 @@ def test_a_declined_email_names_what_was_declined(
     assert stopped.value.code == (
         "askkit: the model declined to sort this email into a queue"
     )
-    assert capsys.readouterr().out.splitlines()[-1] == (
+    assert capsys.readouterr().out.splitlines()[-2] == (
         "Stop reason:   refusal"
     )
 
@@ -258,3 +254,18 @@ def test_a_queue_not_on_the_list_goes_to_a_person(
     )
     assert len(sent) == 1
     assert '"queue"' not in capsys.readouterr().out
+
+
+def test_classify_takes_a_max_tokens_only_a_stream_may_send(
+    email_file: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # The SDK refuses an ordinary call that could take over ten minutes
+    # (lesson 2.5), so with this much room the answer must stream.
+    sent: list[dict[str, Any]] = []
+    use_fake_client(monkeypatch, sent)
+    main(["classify", str(email_file), "--max-tokens", "64000"])
+    assert sent[0]["max_tokens"] == 64_000
+    assert sent[0]["stream"] is True
+    assert '  "queue": "other"' in capsys.readouterr().out.splitlines()

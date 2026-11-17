@@ -13,3 +13,6 @@ def steady_clock(monkeypatch: pytest.MonkeyPatch) -> None:
     # its first token at 0.42 s and ends at 0.84 s.
     readings = count(start=0.0, step=0.42)
     monkeypatch.setattr("askkit.ask.perf_counter", lambda: next(readings))
+    monkeypatch.setattr(
+        "askkit.structured.perf_counter", lambda: next(readings)
+    )

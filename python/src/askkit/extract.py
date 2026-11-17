@@ -2,7 +2,7 @@ import json
 from typing import Any, Literal, get_args
 
 from anthropic import Anthropic, transform_schema
-from anthropic.types import Message
+from anthropic.types import Message, MessageParam
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from askkit.prompts import render
@@ -35,6 +35,24 @@ class Ticket(BaseModel):
 TICKET_SCHEMA: dict[str, Any] = transform_schema(Ticket)
 
 
+def ticket_messages(
+    email: str, answer: str | None = None, faults: str | None = None
+) -> list[MessageParam]:
+    # The email alone, or, to ask again, the email, the failed answer and
+    # its faults, so the model knows what to change. A retry ends on the
+    # user turn: an assistant turn last is a prefill, which the API refuses.
+    messages: list[MessageParam] = [{"role": "user", "content": email}]
+    if answer is not None and faults is not None:
+        messages.append({"role": "assistant", "content": answer})
+        messages.append(
+            {
+                "role": "user",
+                "content": render("retry_ticket", {"faults": faults}),
+            }
+        )
+    return messages
+
+
 def extract_ticket(
     client: Anthropic,
     email: str,
@@ -42,42 +60,14 @@ def extract_ticket(
     max_tokens: int,
     version: int | None = None,
 ) -> Message:
-    # version picks the prompt file; None sends the one in IN_USE. The eval
-    # passes another one to score a version before it is put in use.
+    # The eval's call, not streamed: nobody watches it. version picks the
+    # prompt file; None sends the one in IN_USE. The eval passes another
+    # one to score a version before it is put in use.
     return client.messages.create(
         model=model,
         max_tokens=max_tokens,
         system=render("extract_ticket", {}, version),
-        messages=[{"role": "user", "content": email}],
-        output_config={
-            "format": {"type": "json_schema", "schema": TICKET_SCHEMA}
-        },
-    )
-
-
-def retry_ticket(
-    client: Anthropic,
-    email: str,
-    answer: str,
-    faults: str,
-    model: str,
-    max_tokens: int,
-) -> Message:
-    # The same request, plus the failed answer and its faults, so the
-    # model knows what to change. It ends on the user turn: an assistant
-    # turn last is a prefill, which the API refuses.
-    return client.messages.create(
-        model=model,
-        max_tokens=max_tokens,
-        system=render("extract_ticket", {}),
-        messages=[
-            {"role": "user", "content": email},
-            {"role": "assistant", "content": answer},
-            {
-                "role": "user",
-                "content": render("retry_ticket", {"faults": faults}),
-            },
-        ],
+        messages=ticket_messages(email),
         output_config={
             "format": {"type": "json_schema", "schema": TICKET_SCHEMA}
         },

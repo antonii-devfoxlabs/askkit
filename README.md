@@ -212,8 +212,18 @@ cd python
 uv run askkit extract email.txt
 ```
 
-It prints the ticket, then the same lines as `ask`. It reads the stop
-reason first: an answer cut off at `--max-tokens` (1000 by default) or
+The answer streams, as in `ask`: the SDK refuses an ordinary call whose
+`--max-tokens` could take over ten minutes to write, and a stream also
+shows the ticket filling in. Each field is printed on the error output
+once it has **settled**, once a comma or the closing brace follows it,
+as a `Settled:` line: a preview for a person, which nothing in AskKit
+uses (`settled_fields` and `stream_json` in
+`python/src/askkit/structured.py`). The ticket itself is read only from
+the whole answer, once the stream has ended, and only after the checks
+below. Ctrl-C while it streams cancels it, and no ticket is printed.
+
+It prints the ticket, then the same lines as `ask`, with a `Time:` line
+for each call. It reads the stop reason first: an answer cut off at `--max-tokens` (1000 by default) or
 declined may not match the schema, so it is not read, and `extract`
 says why and exits with exit code 1; neither is asked for again, since
 the same room or the same email stops the same way. A finished answer
@@ -290,8 +300,8 @@ cd python
 uv run askkit classify gift.txt
 ```
 
-It prints the classification as JSON, then the same lines as `ask`. The
-email is cleaned first, as for `extract`. A queue that differs from an
+It streams as `extract` does, prints the classification as JSON, then
+the same lines as `ask`, with a `Time:` line. The email is cleaned first, as for `extract`. A queue that differs from an
 allowed one only in its capitals is repaired, and a `Repaired:` line says
 so; any other answer is not asked for again, since the schema leaves
 nothing else to go wrong, and `classify` exits with exit code 1 for a
@@ -520,6 +530,11 @@ test, as the thinking count of `ask` did.
   budget of input tokens, summarise or drop the oldest turns to stay
   within it, and send the notes you asked AskKit to remember with every
   chat.
+- `m07`, end of Module 7 (Streaming and Latency): `ask`, `chat`,
+  `extract` and `classify` stream their answers and print the time to
+  the first token and the total time; Ctrl-C cancels only the answer
+  that is streaming; `extract` and `classify` preview each settled
+  field and use the answer only once it is whole and checked.
 
 ## Layout
 
@@ -532,6 +547,8 @@ test, as the thinking count of `ask` did.
   - `src/askkit/trim.py`: dropping or summarising a chat's oldest turns.
   - `src/askkit/memory.py`: the notes every chat sends, kept between
     chats.
+  - `src/askkit/structured.py`: a JSON answer streamed, with the fields
+    that have settled so far.
   - `notebooks/`: notebooks for exploring, saved without outputs.
   - `evals/`: the golden sets, a main and a held-out part each, the
     ask set's documents and rubric, and the eval that runs the extract

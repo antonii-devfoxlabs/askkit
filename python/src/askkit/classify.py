@@ -1,12 +1,10 @@
 import json
 from typing import Any, Literal, get_args
 
-from anthropic import Anthropic, transform_schema
-from anthropic.types import Message
+from anthropic import transform_schema
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from askkit.extract import ticket_faults
-from askkit.prompts import render
 
 # The queues of the shop's support inbox, one per team. "other" is the
 # queue for an email that meets none of the first three conditions:
@@ -26,23 +24,6 @@ class Classification(BaseModel):
 
 
 CLASSIFICATION_SCHEMA: dict[str, Any] = transform_schema(Classification)
-
-
-def classify_email(
-    client: Anthropic, email: str, model: str, max_tokens: int
-) -> Message:
-    return client.messages.create(
-        model=model,
-        max_tokens=max_tokens,
-        system=render("classify_email", {}),
-        messages=[{"role": "user", "content": email}],
-        output_config={
-            "format": {
-                "type": "json_schema",
-                "schema": CLASSIFICATION_SCHEMA,
-            }
-        },
-    )
 
 
 def repair_queue(text: str) -> tuple[str, str] | None:

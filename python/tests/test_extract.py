@@ -6,7 +6,9 @@ import httpx2
 import pytest
 from anthropic import Anthropic, transform_schema
 from pydantic import ValidationError
+from test_ask import Interrupted, cancelling_client, replied
 
+from askkit.ask import CANCELLED
 from askkit.cli import main
 from askkit.extract import (
     TICKET_SCHEMA,
@@ -16,9 +18,9 @@ from askkit.extract import (
     extract_ticket,
     not_stated,
     repair_ticket,
-    retry_ticket,
     ticket_error,
     ticket_faults,
+    ticket_messages,
 )
 from askkit.prompts import render
 
@@ -65,7 +67,7 @@ def use_fake_answers(
     # more than once.
     def answer(request: httpx2.Request) -> httpx2.Response:
         sent.append(json.loads(request.content))
-        return httpx2.Response(200, json=bodies[len(sent) - 1])
+        return replied(request, bodies[len(sent) - 1])
 
     def make(api_key: str) -> Anthropic:
         transport = httpx2.MockTransport(answer)
@@ -83,7 +85,7 @@ def use_fake_client(
 ) -> None:
     def answer(request: httpx2.Request) -> httpx2.Response:
         sent.append(json.loads(request.content))
-        return httpx2.Response(200, json=body)
+        return replied(request, body)
 
     def make(api_key: str) -> Anthropic:
         transport = httpx2.MockTransport(answer)
@@ -221,6 +223,7 @@ def test_extract_prints_the_ticket_and_the_call(
         "Tokens:        236 in, 31 out",
         "Cost:          $0.000039",
         "Stop reason:   end_turn",
+        "Time:          first token 0.42 s, total 0.84 s",
     ]
     assert sent[0]["messages"][0]["content"] == EMAIL
 
@@ -262,6 +265,7 @@ def test_a_cut_off_answer_is_not_parsed(
         "Tokens:        236 in, 31 out",
         "Cost:          $0.000039",
         "Stop reason:   max_tokens",
+        "Time:          first token 0.42 s, total 0.84 s",
     ]
 
 
@@ -279,7 +283,7 @@ def test_a_declined_answer_is_not_parsed(
     )
     out = capsys.readouterr().out
     assert "I can't" not in out
-    assert out.splitlines()[-1] == "Stop reason:   refusal"
+    assert out.splitlines()[-2] == "Stop reason:   refusal"
 
 
 def test_a_declined_ticket_says_why_in_the_apis_words(
@@ -317,6 +321,7 @@ def test_a_declined_ticket_says_why_in_the_apis_words(
         "Tokens:        251 in, 9 out",
         "Cost:          $0.000030",
         "Stop reason:   refusal",
+        "Time:          first token 0.42 s, total 0.84 s",
     ]
     # The same email to the same model is declined again: no retry.
     assert len(sent) == 1
@@ -357,6 +362,7 @@ def test_a_ticket_with_a_way_out_says_what_to_ask_for(
         "Tokens:        236 in, 31 out",
         "Cost:          $0.000039",
         "Stop reason:   end_turn",
+        "Time:          first token 0.42 s, total 0.84 s",
         "Not stated:    order, wish",
     ]
 
@@ -404,6 +410,7 @@ def test_a_wish_in_other_capitals_is_repaired(
         "Tokens:        236 in, 31 out",
         "Cost:          $0.000039",
         "Stop reason:   end_turn",
+        "Time:          first token 0.42 s, total 0.84 s",
         "Repaired:      wish 'not Stated' to 'not stated'",
         "Not stated:    order, wish",
     ]
@@ -503,21 +510,8 @@ def test_check_ticket_says_nothing_was_repaired_for_a_good_answer() -> None:
     assert change is None
 
 
-def test_retry_ticket_sends_the_answer_and_its_faults() -> None:
-    sent: list[dict[str, Any]] = []
-
-    def answer(request: httpx2.Request) -> httpx2.Response:
-        sent.append(json.loads(request.content))
-        return httpx2.Response(200, json=WRITTEN)
-
-    client = Anthropic(
-        api_key="sk-ant-api03-a-test-key-Ab12",
-        http_client=httpx2.Client(transport=httpx2.MockTransport(answer)),
-    )
-    retry_ticket(
-        client, EMAIL, TOO_LONG, TOO_LONG_FAULT, "claude-haiku-5-5", 1000
-    )
-    assert sent[0]["messages"] == [
+def test_ticket_messages_ask_again_with_the_answer_and_its_faults() -> None:
+    assert ticket_messages(EMAIL, TOO_LONG, TOO_LONG_FAULT) == [
         {"role": "user", "content": EMAIL},
         {"role": "assistant", "content": TOO_LONG},
         {
@@ -525,8 +519,10 @@ def test_retry_ticket_sends_the_answer_and_its_faults() -> None:
             "content": render("retry_ticket", {"faults": TOO_LONG_FAULT}),
         },
     ]
-    assert sent[0]["system"] == render("extract_ticket", {})
-    assert sent[0]["output_config"]["format"]["schema"] == TICKET_SCHEMA
+
+
+def test_ticket_messages_of_a_first_call_hold_the_email_alone() -> None:
+    assert ticket_messages(EMAIL) == [{"role": "user", "content": EMAIL}]
 
 
 def test_a_broken_ticket_is_asked_for_again_with_its_faults(
@@ -552,6 +548,8 @@ def test_a_broken_ticket_is_asked_for_again_with_its_faults(
         "Tokens:        548 in, 60 out",
         "Cost:          $0.000085",
         "Stop reason:   end_turn",
+        "Time:          first token 0.42 s, total 0.84 s",
+        "Time:          first token 0.42 s, total 0.84 s",
         f"Asked again:   {TOO_LONG_FAULT}",
         "Not stated:    order, wish",
     ]
@@ -586,6 +584,8 @@ def test_a_ticket_broken_twice_goes_to_a_person(
         "Tokens:        548 in, 62 out",
         "Cost:          $0.000086",
         "Stop reason:   end_turn",
+        "Time:          first token 0.42 s, total 0.84 s",
+        "Time:          first token 0.42 s, total 0.84 s",
         f"Asked again:   {TOO_LONG_FAULT}",
     ]
 
@@ -667,6 +667,8 @@ def test_a_valid_but_wrong_order_is_asked_for_again(
         "Tokens:        548 in, 62 out",
         "Cost:          $0.000086",
         "Stop reason:   end_turn",
+        "Time:          first token 0.42 s, total 0.84 s",
+        "Time:          first token 0.42 s, total 0.84 s",
         f"Asked again:   {SWAPPED_FAULT}",
     ]
     assert len(sent) == 2
@@ -719,6 +721,7 @@ def test_an_order_the_shop_lacks_goes_to_a_person_at_once(
         "Tokens:        236 in, 31 out",
         "Cost:          $0.000039",
         "Stop reason:   end_turn",
+        "Time:          first token 0.42 s, total 0.84 s",
     ]
 
 
@@ -819,6 +822,57 @@ def test_an_email_with_nothing_quoted_says_nothing_was_left_out(
     use_fake_answers(monkeypatch, sent, [with_answer(RIGHT, "end_turn")])
     main(["extract", str(maria)])
     assert (
-        capsys.readouterr().out.splitlines()[-1] == "Stop reason:   end_turn"
+        capsys.readouterr().out.splitlines()[-2] == "Stop reason:   end_turn"
     )
     assert sent[0]["messages"][0]["content"] == EMAIL
+
+
+def test_extract_takes_a_max_tokens_only_a_stream_may_send(
+    email_file: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # The SDK refuses an ordinary call that could take over ten minutes
+    # (lesson 2.5), so with this much room the ticket must stream.
+    sent: list[dict[str, Any]] = []
+    use_fake_client(monkeypatch, sent)
+    main(["extract", str(email_file), "--max-tokens", "64000"])
+    assert sent[0]["max_tokens"] == 64_000
+    assert sent[0]["stream"] is True
+    assert '  "order": 4417,' in capsys.readouterr().out.splitlines()
+
+
+def test_extract_previews_settled_fields_apart_from_the_ticket(
+    email_file: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    use_fake_client(monkeypatch, [])
+    main(["extract", str(email_file)])
+    captured = capsys.readouterr()
+    assert captured.err.splitlines() == [
+        "Settled:       order 4417",
+        'Settled:       problem "mug broken"',
+        'Settled:       wish "replacement"',
+    ]
+    assert "Settled" not in captured.out
+
+
+def test_extract_cancelled_with_ctrl_c_prints_no_ticket(
+    email_file: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    stream = Interrupted(WRITTEN, 1)
+
+    def make(api_key: str) -> Anthropic:
+        return cancelling_client(stream)
+
+    monkeypatch.setattr("askkit.cli.Anthropic", make)
+    with pytest.raises(SystemExit) as stopped:
+        main(["extract", str(email_file)])
+    assert stopped.value.code == f"askkit: {CANCELLED}"
+    assert stream.closed
+    assert capsys.readouterr().out.splitlines() == [
+        "Time:          first token 0.42 s, cancelled at 0.84 s"
+    ]

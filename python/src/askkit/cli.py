@@ -13,6 +13,7 @@ from askkit.ask import (
     DECLINED_PART,
     EFFORTS,
     MODELS,
+    Timing,
     answer_text,
     ask,
     stop_warning,
@@ -23,9 +24,9 @@ from askkit.ask import (
 from askkit.budget import DEFAULT_BUDGET, budget_fault
 from askkit.chat import STOP, chat
 from askkit.classify import (
+    CLASSIFICATION_SCHEMA,
     check_classification,
     classification_error,
-    classify_email,
 )
 from askkit.clean import clean_email
 from askkit.compare import compare_models
@@ -39,12 +40,12 @@ from askkit.documents import (
 )
 from askkit.errors import error_message
 from askkit.extract import (
+    TICKET_SCHEMA,
     check_ticket,
-    extract_ticket,
     not_stated,
-    retry_ticket,
     ticket_error,
     ticket_faults,
+    ticket_messages,
 )
 from askkit.golden import KINDS, Case, kind_counts, load_cases
 from askkit.history import (
@@ -57,7 +58,7 @@ from askkit.history import (
 from askkit.limits import LIMITS
 from askkit.memory import load_memory
 from askkit.prices import PRICES
-from askkit.prompts import ASK_SYSTEM
+from askkit.prompts import ASK_SYSTEM, render
 from askkit.rubric import (
     Answer,
     Grade,
@@ -71,6 +72,7 @@ from askkit.rubric import (
 )
 from askkit.rules import email_fault, load_orders, order_fault
 from askkit.runs import Results, diff_lines, load_results
+from askkit.structured import stream_json
 from askkit.tokens import count_tokens
 from askkit.trim import OLD_TURNS
 
@@ -136,6 +138,13 @@ def print_calls(
     # several questions names each answer's own on its line instead.
     if stop_reason:
         print(f"Stop reason:   {last.stop_reason}")
+
+
+def print_times(timings: list[Timing]) -> None:
+    # One line per call, in order: the times of two calls do not add up
+    # the way their tokens do.
+    for timing in timings:
+        print(f"Time:          {timing_line(timing)}")
 
 
 def main(arguments: list[str] | None = None) -> None:
@@ -413,34 +422,44 @@ def main(arguments: list[str] | None = None) -> None:
         notes: list[str] = []
         if left_out:
             notes.append(f"Left out:      {left_out} quoted lines")
+        timings: list[Timing] = []
         answer = ""
         faults = ""
         rejection = ""
         for attempt in range(options.retries + 1):
+            messages = ticket_messages(email)
+            if attempt > 0:
+                notes.append(f"Asked again:   {faults}")
+                messages = ticket_messages(email, answer, faults)
             try:
-                if attempt == 0:
-                    response = extract_ticket(
-                        client, email, options.model, options.max_tokens
-                    )
-                else:
-                    notes.append(f"Asked again:   {faults}")
-                    response = retry_ticket(
-                        client,
-                        email,
-                        answer,
-                        faults,
-                        options.model,
-                        options.max_tokens,
-                    )
+                reply, timing = stream_json(
+                    client,
+                    options.model,
+                    options.max_tokens,
+                    render("extract_ticket", {}),
+                    messages,
+                    TICKET_SCHEMA,
+                )
             except APIError as error:
                 sys.exit(f"askkit: {error_message(error)}")
+            if reply is None:
+                # Cancelled with Ctrl-C: the fields shown are a preview of
+                # a ticket that never came, and nothing is used.
+                if responses:
+                    print_calls(responses, options.model)
+                print_times(timings)
+                print(f"Time:          {timing_line(timing, cancelled=True)}")
+                sys.exit(f"askkit: {CANCELLED}")
+            response = reply
             responses.append(response)
+            timings.append(timing)
             # A cut-off or declined answer may not match the schema, so the
             # stop reason is read before the JSON is. Neither is asked for
             # again: the same room or the same email gives the same stop.
             warning = stop_warning(response, "turn this email into a ticket")
             if warning is not None:
                 print_calls(responses, options.model)
+                print_times(timings)
                 sys.exit(f"askkit: {warning}")
             answer = answer_text(response)
             # Ticket checks every field again here, in our own code: the
@@ -467,6 +486,7 @@ def main(arguments: list[str] | None = None) -> None:
                 fault = order_fault(ticket, orders)
                 if fault is not None:
                     print_calls(responses, options.model)
+                    print_times(timings)
                     for note in notes:
                         print(note)
                     sys.exit(
@@ -481,12 +501,14 @@ def main(arguments: list[str] | None = None) -> None:
             print(ticket.model_dump_json(indent=2))
             print()
             print_calls(responses, options.model)
+            print_times(timings)
             for note in notes:
                 print(note)
             return
         # Every answer broke the contract or a rule: no ticket, and exit
         # code 1, so whatever runs AskKit hands the email to a person.
         print_calls(responses, options.model)
+        print_times(timings)
         for note in notes:
             print(note)
         sys.exit(f"askkit: {rejection}")
@@ -499,14 +521,24 @@ def main(arguments: list[str] | None = None) -> None:
         )
         client = Anthropic(api_key=require_api_key())
         try:
-            response = classify_email(
-                client, email, options.model, options.max_tokens
+            reply, timing = stream_json(
+                client,
+                options.model,
+                options.max_tokens,
+                render("classify_email", {}),
+                [{"role": "user", "content": email}],
+                CLASSIFICATION_SCHEMA,
             )
         except APIError as error:
             sys.exit(f"askkit: {error_message(error)}")
+        if reply is None:
+            print(f"Time:          {timing_line(timing, cancelled=True)}")
+            sys.exit(f"askkit: {CANCELLED}")
+        response = reply
         warning = stop_warning(response, "sort this email into a queue")
         if warning is not None:
             print_calls([response], options.model)
+            print_times([timing])
             sys.exit(f"askkit: {warning}")
         try:
             classification, change = check_classification(
@@ -514,10 +546,12 @@ def main(arguments: list[str] | None = None) -> None:
             )
         except ValidationError as error:
             print_calls([response], options.model)
+            print_times([timing])
             sys.exit(f"askkit: {classification_error(error)}")
         print(classification.model_dump_json(indent=2))
         print()
         print_calls([response], options.model)
+        print_times([timing])
         if left_out:
             print(f"Left out:      {left_out} quoted lines")
         if change is not None:
