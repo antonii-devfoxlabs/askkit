@@ -69,15 +69,22 @@ long the answer ran (`cancelled at …`), says the text above is not a
 whole answer and exits with code 1. A cancelled answer has no stop reason and no
 usage, so no tokens or cost are printed, and it is never saved.
 
-`ask` offers the model one tool, a clock (`current_time`, in
-`python/src/askkit/tools.py`), because a model has no clock of its own.
-The model never runs anything: when an answer depends on today's date
-or the time now, it stops with the stop reason `tool_use` and asks for
-the clock instead of answering. AskKit checks the request (a tool it
-offered, with no input), runs it, prints a `Tool:` line with the result,
-and sends the result back with everything before it, so the model can
-answer. A request for any other tool, or with an input, runs nothing:
-the model gets an error result instead. `ask` runs one tool call per
+`ask` offers the model two tools, defined in
+`python/src/askkit/tools.py`: a clock (`current_time`), because a model
+has no clock of its own, and a calculator (`calculate`: one of `add`,
+`subtract`, `multiply` or `divide` on two numbers `a` and `b`), because
+a model writing a number token by token can get it wrong. The model
+never runs anything: when an answer depends on today's date or needs a
+sum, it stops with the stop reason `tool_use` and asks for a tool
+instead of answering. Each definition's description says when to call
+the tool and when not, and both are strict (`"strict": true`), so the
+API holds the model's input to the tool's schema. AskKit still checks
+every request (a tool it offered, with an input it can use: no input
+for the clock; for the calculator, a known operation, two numbers that
+are not `true` or `false`, and no division by zero), runs it, prints a
+`Tool:` line with the result, and sends the result back with everything
+before it, so the model can answer. A request that fails the check runs
+nothing: the model gets an error result instead. `ask` runs one tool call per
 question; if the model asks again, `ask` stops with exit code 1. The two
 calls' tokens and cost are added up, with one `Time:` line per call.
 
@@ -561,8 +568,9 @@ test, as the thinking count of `ask` did.
     chats.
   - `src/askkit/structured.py`: a JSON answer streamed, with the fields
     that have settled so far.
-  - `src/askkit/tools.py`: the tools `askkit ask` offers the model, and
-    the check each request passes before anything runs.
+  - `src/askkit/tools.py`: the tools `askkit ask` offers the model (a
+    clock and a calculator), their definitions, and the check each
+    request passes before anything runs.
   - `notebooks/`: notebooks for exploring, saved without outputs.
   - `evals/`: the golden sets, a main and a held-out part each, the
     ask set's documents and rubric, and the eval that runs the extract
