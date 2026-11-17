@@ -176,6 +176,8 @@ def chat(
             if response.stop_reason == "refusal" and text:
                 print(f"askkit: {DECLINED_PART}", file=sys.stderr)
             print(f"askkit: {warning}", file=sys.stderr)
+            # Not kept, but the wait was real, so its times are shown too.
+            print(f"{'Time:':<15}{timing_line(timing)}")
             print(NOT_KEPT)
             print()
             continue

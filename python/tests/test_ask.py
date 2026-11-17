@@ -1,5 +1,6 @@
 import json
 import re
+from collections.abc import Iterator
 from typing import Any
 
 import httpx2
@@ -681,15 +682,39 @@ def test_the_clock_starts_before_the_request_is_sent(
     assert log == ["clock", "request", "clock", "clock"]
 
 
-def test_the_first_token_is_the_first_piece_of_text(
+def test_the_first_token_is_timed_after_the_text_arrives(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # WRITTEN thinks first: its thinking block streams before the text,
-    # and the first token is timed at the text, not at the thinking.
-    readings_of(monkeypatch, [10.0, 10.84, 13.1], [])
-    _, timing = stream_answer(
-        fake_client([]), "Hi", "claude-haiku-5-5", 1000, "Be brief."
+    # WRITTEN thinks first. The fake API notes in the log when it sends the
+    # thinking and the first text, beside the clock's readings, so the test
+    # sees which of them the first-token reading followed.
+    log: list[str] = []
+    readings_of(monkeypatch, [10.0, 10.84, 13.1], log)
+
+    def sent_one_by_one() -> Iterator[bytes]:
+        for text in opening(WRITTEN) + closing(WRITTEN):
+            if '"thinking_delta"' in text:
+                log.append("thinking")
+            elif '"text_delta"' in text and "text" not in log:
+                log.append("text")
+            yield text.encode()
+
+    def answer(request: httpx2.Request) -> httpx2.Response:
+        log.append("request")
+        return httpx2.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            content=sent_one_by_one(),
+        )
+
+    client = Anthropic(
+        api_key="sk-ant-api03-a-test-key-Ab12",
+        http_client=httpx2.Client(transport=httpx2.MockTransport(answer)),
     )
+    _, timing = stream_answer(
+        client, "Hi", "claude-haiku-5-5", 1000, "Be brief."
+    )
+    assert log == ["clock", "request", "thinking", "text", "clock", "clock"]
     assert timing.first_token == pytest.approx(0.84)
     assert timing.total == pytest.approx(3.1)
 

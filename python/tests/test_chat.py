@@ -174,6 +174,10 @@ def history_roles(tmp_path: Path) -> list[str]:
     return roles
 
 
+# The line the tests' steady clock gives a streamed answer with text.
+TIMED = "Time:          first token 0.42 s, total 0.84 s\n"
+
+
 def test_a_cut_off_answer_is_shown_warned_and_not_kept(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -183,7 +187,8 @@ def test_a_cut_off_answer_is_shown_warned_and_not_kept(
     assert history == []
     assert not (tmp_path / "chat.json").exists()
     captured = capsys.readouterr()
-    assert captured.out.startswith(ANSWER + "\n" + NOT_KEPT)
+    # The turn is not kept, but how long it took is still shown.
+    assert captured.out.startswith(ANSWER + "\n" + TIMED + NOT_KEPT)
     assert captured.err == (
         "askkit: the answer was cut off at 60 tokens;"
         " give it a larger --max-tokens\n"
@@ -198,7 +203,7 @@ def test_a_declined_answer_is_marked_and_not_kept(
     _, history = run_chat(tmp_path, [stopped_with("refusal")], typed(MARIA))
     assert history == []
     captured = capsys.readouterr()
-    assert captured.out.startswith(ANSWER + "\n" + NOT_KEPT)
+    assert captured.out.startswith(ANSWER + "\n" + TIMED + NOT_KEPT)
     assert captured.err == (
         "askkit: the text above stopped where the model declined;"
         " do not use it\n"
@@ -214,7 +219,9 @@ def test_a_refusal_before_any_text_shows_nothing(
     _, history = run_chat(tmp_path, [body], typed(MARIA))
     assert history == []
     captured = capsys.readouterr()
-    assert captured.out.startswith(NOT_KEPT)
+    assert captured.out.startswith(
+        "Time:          no text, total 0.42 s\n" + NOT_KEPT
+    )
     assert captured.err == (
         "askkit: the model declined to answer this question\n"
     )
