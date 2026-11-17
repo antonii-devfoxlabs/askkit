@@ -17,7 +17,7 @@ KEEP_TURNS = 2
 
 # The summary call may think before it writes, and max_tokens covers the
 # thinking too, so it gets room for several thousand tokens (Anthropic's
-# compaction guide, checked on 2026-11-17).
+# page on compaction on demand, checked on 2026-11-17).
 SUMMARY_MAX_TOKENS = 4_000
 
 
