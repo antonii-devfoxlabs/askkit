@@ -44,8 +44,8 @@ def stream_answer(
     history: list[MessageParam] | None = None,
 ) -> Message:
     # The same request as ask(), with the answer printed piece by piece
-    # while the model writes it, so the first words show in under a
-    # second rather than after the whole answer is done.
+    # while the model writes it, so the first words show while the rest
+    # is still being written, not after the whole answer is done.
     shown = False
     try:
         with client.messages.stream(
