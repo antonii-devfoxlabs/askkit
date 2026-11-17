@@ -48,8 +48,7 @@ def both_at_once() -> dict[str, Any]:
 def one_round() -> list[dict[str, Any]]:
     answered = deepcopy(ANSWERED)
     answered["content"][0]["text"] = (
-        "Today is Tuesday, 17 November 2026, and 1,284 calls cost"
-        " $0.175908, about $0.18."
+        "Today is 17 November 2026, and 1,284 calls cost about $0.18."
     )
     answered["usage"] = {"input_tokens": 741, "output_tokens": 34}
     return [both_at_once(), answered]
