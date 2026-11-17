@@ -108,7 +108,7 @@ def calculate(tool_input: dict[str, object]) -> str:
         result = a * b
     else:
         result = a / b
-    # At most 15 significant digits, all a float keeps exactly, so
+    # At most 15 significant digits, the most a float always keeps, so
     # 0.1 + 0.2 comes out as 0.3, not 0.30000000000000004.
     return format(result, ".15g")
 
