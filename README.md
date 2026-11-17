@@ -316,13 +316,14 @@ chance, not the version. A file takes runs of one model and one prompt
 version over the same cases only, and never from `--replay`, which
 repeats one run. `askkit diff v2.json v3.json` then reads two files side
 by side, with no call to the model: every case that failed a run of
-either, how many of its runs passed, and `fixed` or `broke` only when
+either, how many of its runs passed, and `fixed` or `broken` only when
 every run of both agrees (`unsure` when one version's runs disagree),
 then each run's score. Change one thing between the two files, and put
 a version in `IN_USE` only when the diff shows what it fixed and that
-it broke nothing; then run both on the held-out part once (`-m
-held_out`, a results file of its own). `src/askkit/runs.py` holds the
-results file and the diff.
+it broke nothing. Then, once, check the choice on the held-out part:
+two runs of each version with `-m held_out`, each version into a results
+file of its own. `src/askkit/runs.py` holds the results file and the
+diff.
 
 ## Grading answers by hand
 

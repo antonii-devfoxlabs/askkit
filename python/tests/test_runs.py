@@ -60,7 +60,7 @@ def test_a_run_of_other_cases_is_refused(tmp_path: Path) -> None:
 
 def test_a_case_is_fixed_or_broken_only_when_every_run_agrees() -> None:
     assert verdict([FAULT, FAULT], [[], []]) == "fixed"
-    assert verdict([[], []], [FAULT, FAULT]) == "broke"
+    assert verdict([[], []], [FAULT, FAULT]) == "broken"
     assert verdict([[], FAULT], [[], []]) == "unsure"
     assert verdict([FAULT, FAULT], [[], FAULT]) == "unsure"
     assert verdict([FAULT], [FAULT, FAULT]) == "fails in both"

@@ -62,7 +62,7 @@ def verdict(old: list[list[str]], new: list[list[str]]) -> str:
     # What one case says about the change. A version's runs that disagree
     # on a case make it "unsure": that case cannot tell the versions
     # apart, whatever the other version did. Only a case that holds in
-    # every run of both is a fix or a break.
+    # every run of both is fixed or broken.
     old_passes = passes(old)
     new_passes = passes(new)
     if old_passes not in (0, len(old)) or new_passes not in (0, len(new)):
@@ -70,7 +70,7 @@ def verdict(old: list[list[str]], new: list[list[str]]) -> str:
     if old_passes == 0 and new_passes == len(new):
         return "fixed"
     if old_passes == len(old) and new_passes == 0:
-        return "broke"
+        return "broken"
     if new_passes == 0:
         return "fails in both"
     return "passes in both"
