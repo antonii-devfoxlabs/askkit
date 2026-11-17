@@ -6,8 +6,15 @@ from typing import Any
 import httpx2
 import pytest
 from anthropic import Anthropic
-from test_ask import WRITTEN, broken_off, replied, stopped_with
+from test_ask import (
+    WRITTEN,
+    Interrupted,
+    broken_off,
+    replied,
+    stopped_with,
+)
 
+from askkit.ask import CANCELLED
 from askkit.budget import DEFAULT_BUDGET
 from askkit.chat import NOT_KEPT, NOT_SENT, chat
 from askkit.cli import main
@@ -373,6 +380,60 @@ def test_ctrl_c_keeps_every_whole_turn(
     lines = capsys.readouterr().out.splitlines()
     assert lines[-1] == "History:       2 messages in chat.json"
     assert len(load_history(tmp_path / "chat.json")) == 2
+
+
+def test_ctrl_c_during_an_answer_cancels_only_that_answer(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # Ctrl-C while the first answer streams: that answer stops and is not
+    # kept, and the chat asks for the next question, whose answer is.
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-api03-a-test-key-Ab12")
+    stream = Interrupted(WRITTEN, 2)
+    sent: list[dict[str, Any]] = []
+
+    def answer(request: httpx2.Request) -> httpx2.Response:
+        if request.url.path == "/v1/messages/count_tokens":
+            return httpx2.Response(200, json={"input_tokens": 118})
+        sent.append(json.loads(request.content))
+        if len(sent) == 1:
+            return httpx2.Response(
+                200,
+                headers={"content-type": "text/event-stream"},
+                stream=stream,
+            )
+        return replied(request, WRITTEN)
+
+    def make(**options: Any) -> Anthropic:
+        return Anthropic(
+            api_key="sk-ant-api03-a-test-key-Ab12",
+            http_client=httpx2.Client(transport=httpx2.MockTransport(answer)),
+        )
+
+    monkeypatch.setattr("askkit.cli.Anthropic", make)
+    monkeypatch.setattr(
+        "askkit.cli.input", typed(MARIA, FOLLOW_UP, "/exit"), raising=False
+    )
+    main(["chat"])
+    captured = capsys.readouterr()
+    assert stream.closed
+    assert captured.out.splitlines()[6:] == [
+        "Order 4417:",
+        "Time:          first token 0.42 s, cancelled at 0.84 s",
+        NOT_KEPT,
+        "",
+        ANSWER,
+        "Turn 1:        118 in (0% of budget), 27 out, $0.000025",
+        "Time:          first token 0.42 s, total 0.84 s",
+        "",
+        "History:       2 messages in chat.json",
+    ]
+    assert captured.err == f"askkit: {CANCELLED}\n"
+    # The cancelled question was never kept; the second one was.
+    saved = load_history(tmp_path / "chat.json")
+    assert [message.content for message in saved] == [FOLLOW_UP, ANSWER]
 
 
 def test_askkit_chat_refuses_a_broken_file_before_any_call(

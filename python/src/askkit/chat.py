@@ -5,6 +5,7 @@ from pathlib import Path
 from anthropic import Anthropic, APIError
 
 from askkit.ask import (
+    CANCELLED,
     DECLINED_PART,
     FINISHED,
     Effort,
@@ -167,6 +168,14 @@ def chat(
             # A failed call changes nothing, so the chat goes on and the
             # same question can simply be asked again.
             print(f"askkit: {error_message(error)}", file=sys.stderr)
+            print(NOT_KEPT)
+            print()
+            continue
+        if response is None:
+            # Ctrl-C during the answer cancels only this answer: the chat
+            # goes on, and Ctrl-C at the "You: " prompt still ends it.
+            print(f"askkit: {CANCELLED}", file=sys.stderr)
+            print(f"{'Time:':<15}{timing_line(timing, cancelled=True)}")
             print(NOT_KEPT)
             print()
             continue

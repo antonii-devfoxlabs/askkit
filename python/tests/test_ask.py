@@ -8,6 +8,7 @@ import pytest
 from anthropic import Anthropic, APIError
 
 from askkit.ask import (
+    CANCELLED,
     Timing,
     answer_text,
     ask,
@@ -576,6 +577,7 @@ def test_stream_answer_prints_the_pieces_and_returns_the_message(
         fake_client([]), "Hi", "claude-haiku-5-5", 1000, "Be brief."
     )
     assert capsys.readouterr().out == "Order 4417: a replacement mug.\n"
+    assert response is not None
     assert answer_text(response) == "Order 4417: a replacement mug."
     assert response.stop_reason == "end_turn"
     assert response.usage.input_tokens == 118
@@ -649,6 +651,123 @@ def test_askkit_ask_says_when_the_stream_breaks_off(
         "\nask again"
     )
     assert capsys.readouterr().out == "Order 4417:\n"
+
+
+class Interrupted(httpx2.SyncByteStream):
+    # A stream you cancel with Ctrl-C after the first pieces of text: the
+    # read after them raises KeyboardInterrupt, as Python does when you
+    # press it. It notes every event it sent and whether it was closed.
+    def __init__(self, body: dict[str, Any], shown: int) -> None:
+        self.events = opening(body) + closing(body)
+        cut = self.events.index(
+            next(text for text in self.events if '"text_delta"' in text)
+        )
+        self.stop = cut + shown
+        self.sent = 0
+        self.closed = False
+
+    def __iter__(self) -> Iterator[bytes]:
+        for text in self.events:
+            if self.sent == self.stop:
+                raise KeyboardInterrupt
+            self.sent += 1
+            yield text.encode()
+
+    def close(self) -> None:
+        self.closed = True
+
+
+def cancelling_client(stream: Interrupted) -> Anthropic:
+    def answer(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(
+            200, headers={"content-type": "text/event-stream"}, stream=stream
+        )
+
+    return Anthropic(
+        api_key="sk-ant-api03-a-test-key-Ab12",
+        http_client=httpx2.Client(transport=httpx2.MockTransport(answer)),
+    )
+
+
+def test_ctrl_c_closes_the_stream_and_returns_no_message(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    stream = Interrupted(WRITTEN, 2)
+    response, timing = stream_answer(
+        cancelling_client(stream), "Hi", "claude-haiku-5-5", 1000, "Hi"
+    )
+    assert response is None
+    assert timing == Timing(first_token=0.42, total=0.84)
+    # The connection is closed, and nothing after the cancel is read.
+    assert stream.closed
+    assert stream.sent == stream.stop
+    assert capsys.readouterr().out == "Order 4417:\n"
+
+
+def test_ctrl_c_before_any_text_prints_no_empty_line(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    stream = Interrupted(WRITTEN, 0)
+    response, timing = stream_answer(
+        cancelling_client(stream), "Hi", "claude-haiku-5-5", 1000, "Hi"
+    )
+    assert response is None
+    assert timing == Timing(first_token=None, total=0.42)
+    assert stream.closed
+    assert capsys.readouterr().out == ""
+
+
+def test_askkit_ask_says_the_cancelled_answer_is_not_whole(
+    tmp_path: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-api03-a-test-key-Ab12")
+    stream = Interrupted(WRITTEN, 2)
+
+    def make(**options: Any) -> Anthropic:
+        return cancelling_client(stream)
+
+    monkeypatch.setattr("askkit.cli.Anthropic", make)
+    with pytest.raises(SystemExit) as stopped:
+        main(["ask", "Hi", "--history", "chat.json"])
+    assert stopped.value.code == f"askkit: {CANCELLED}"
+    assert capsys.readouterr().out == (
+        "Order 4417:\n"
+        "\n"
+        "Time:          first token 0.42 s, cancelled at 0.84 s\n"
+    )
+    # A cancelled answer is never saved.
+    assert not (tmp_path / "chat.json").exists()
+
+
+def test_the_timing_line_says_when_the_answer_was_cancelled() -> None:
+    timing = Timing(first_token=0.84, total=1.6)
+    assert timing_line(timing, cancelled=True) == (
+        "first token 0.84 s, cancelled at 1.60 s"
+    )
+    timing = Timing(first_token=None, total=0.3)
+    assert timing_line(timing, cancelled=True) == (
+        "no text, cancelled at 0.30 s"
+    )
+
+
+def test_get_final_message_after_a_break_reads_the_whole_answer() -> None:
+    # Why AskKit leaves the with block to cancel: inside it, a break out
+    # of text_stream stops nothing, and get_final_message() goes on
+    # reading every event to the end of the answer.
+    stream = Interrupted(WRITTEN, 1_000)
+    with cancelling_client(stream).messages.stream(
+        model="claude-haiku-5-5",
+        max_tokens=1000,
+        messages=[{"role": "user", "content": "Hi"}],
+    ) as opened:
+        for _text in opened.text_stream:
+            break
+        response = opened.get_final_message()
+    assert stream.sent == len(stream.events)
+    assert answer_text(response) == "Order 4417: a replacement mug."
 
 
 def readings_of(

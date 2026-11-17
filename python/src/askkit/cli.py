@@ -9,6 +9,7 @@ from pydantic import ValidationError
 
 from askkit.analysis import fault_lines
 from askkit.ask import (
+    CANCELLED,
     DECLINED_PART,
     EFFORTS,
     MODELS,
@@ -538,7 +539,7 @@ def main(arguments: list[str] | None = None) -> None:
             history = require_history(options.history)
         client = Anthropic(api_key=require_api_key())
         try:
-            response, timing = stream_answer(
+            reply, timing = stream_answer(
                 client,
                 question,
                 options.model,
@@ -549,15 +550,22 @@ def main(arguments: list[str] | None = None) -> None:
             )
         except APIError as error:
             sys.exit(f"askkit: {error_message(error)}")
-        text = answer_text(response)
+        if reply is None:
+            # Cancelled with Ctrl-C: no stop reason and no usage came, so
+            # there are no tokens or cost to print, only the time.
+            if timing.first_token is not None:
+                print()
+            print(f"Time:          {timing_line(timing, cancelled=True)}")
+            sys.exit(f"askkit: {CANCELLED}")
+        text = answer_text(reply)
         if text:
             # A blank line between the answer and its numbers.
             print()
-        print_calls([response], options.model)
+        print_calls([reply], options.model)
         print(f"Time:          {timing_line(timing)}")
-        warning = stop_warning(response)
+        warning = stop_warning(reply)
         if warning is not None:
-            if response.stop_reason == "refusal" and text:
+            if reply.stop_reason == "refusal" and text:
                 print(f"askkit: {DECLINED_PART}", file=sys.stderr)
             sys.exit(f"askkit: {warning}")
         if documents:

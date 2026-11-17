@@ -52,9 +52,10 @@ def stream_answer(
     system: str,
     effort: Effort | None = None,
     history: list[MessageParam] | None = None,
-) -> tuple[Message, Timing]:
+) -> tuple[Message | None, Timing]:
     # The same request as ask(), printed piece by piece as the model
-    # writes it, and timed from the moment it is sent.
+    # writes it, and timed from the moment it is sent. No Message when
+    # you cancel it with Ctrl-C: the stream never reached its end.
     first_token: float | None = None
     # perf_counter: a clock for durations, which never goes back.
     start = perf_counter()
@@ -73,6 +74,10 @@ def stream_answer(
                 print(text, end="", flush=True)
             response = stream.get_final_message()
             return response, Timing(first_token, perf_counter() - start)
+    except KeyboardInterrupt:
+        # Ctrl-C while the answer streams. Leaving the with block closed
+        # the connection, so the model stops writing it.
+        return None, Timing(first_token, perf_counter() - start)
     finally:
         # Ends the answer's last line, also when the stream breaks off,
         # so whatever AskKit prints next starts on a line of its own.
@@ -80,8 +85,10 @@ def stream_answer(
             print()
 
 
-def timing_line(timing: Timing) -> str:
+def timing_line(timing: Timing, cancelled: bool = False) -> str:
     total = f"total {timing.total:.2f} s"
+    if cancelled:
+        total = f"cancelled at {timing.total:.2f} s"
     if timing.first_token is None:
         return f"no text, {total}"
     return f"first token {timing.first_token:.2f} s, {total}"
@@ -161,3 +168,8 @@ def stop_warning(
 DECLINED_PART = (
     "the text above stopped where the model declined; do not use it"
 )
+
+
+# Printed after an answer cancelled with Ctrl-C: its text stops midway,
+# with no stop reason and no usage, so nothing may use it as an answer.
+CANCELLED = "cancelled; the text above is not a whole answer"

@@ -63,6 +63,12 @@ cd python
 uv run askkit ask "In one sentence, what is a context window?"
 ```
 
+Press Ctrl-C while an answer is still streaming to cancel it: AskKit
+closes the connection, so the model stops writing, prints how long the
+answer ran (`cancelled at …`), says the text above is not a whole answer
+and exits with code 1. A cancelled answer has no stop reason and no
+usage, so no tokens or cost are printed, and it is never saved.
+
 `ask` calls Anthropic's models only, so `-m` takes the Claude models in
 the price table (Claude Haiku 5.5 by default); `--max-tokens` is the
 room for the answer (1000 by default), the model's thinking included;
@@ -125,7 +131,7 @@ says how many messages the file now holds.
 
 `askkit chat` asks question after question in one run, until you type
 `/exit` or end the input (Ctrl-D on macOS and Linux, Ctrl-Z then Enter
-on Windows); Ctrl-C stops it too. It keeps the conversation in
+on Windows); Ctrl-C at the `You:` prompt stops it too. It keeps the conversation in
 `chat.json` by default (`--history FILE` for another), reads it when it
 starts, and sends the whole conversation with every question. It takes
 the same `-m`, `--max-tokens`, `--effort` and `--system-file` as `ask`:
@@ -143,7 +149,10 @@ answer prints `askkit:` and why, keeps nothing, and the chat goes on, so
 the same question can be asked again. Each whole turn prints its tokens
 and cost on a `Turn N:` line; they grow with the conversation. A `Time:`
 line under it gives the turn's time to first token and total time; a
-turn that is not kept prints its `Time:` line too.
+turn that is not kept prints its `Time:` line too. Ctrl-C while an
+answer streams cancels only that answer: it is not kept, its `Time:`
+line says when it was cancelled, and the chat asks for the next
+question.
 
 Every turn of a chat is held to a budget: the most input tokens one call
 may send, 90,000 unless you give `--budget N`. Before each call AskKit
