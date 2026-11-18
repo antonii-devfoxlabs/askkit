@@ -5,6 +5,7 @@ from anthropic import Anthropic
 from anthropic.types import (
     Message,
     MessageParam,
+    ToolChoiceParam,
     ToolParam,
     ToolResultBlockParam,
 )
@@ -26,6 +27,24 @@ TOO_MANY_ROUNDS = (
     f"the model still asked for a tool after {MAX_ROUNDS} rounds;"
     " nothing more ran"
 )
+
+
+TOOL_LIMIT = f"{MAX_ROUNDS} rounds ran; the next call may not ask for a tool"
+
+
+def tool_choice_for(
+    rounds: int, use_tool: str | None
+) -> ToolChoiceParam | None:
+    # What the next call lets the model do with the tools. None leaves the
+    # field out, and the model decides for itself ("auto").
+    if rounds == MAX_ROUNDS:
+        # The last call AskKit allows: the model answers with what it has.
+        return {"type": "none"}
+    if rounds == 0 and use_tool is not None:
+        # Forced only on the first call. A call forced every round could
+        # never end with an answer, only with the round limit.
+        return {"type": "tool", "name": use_tool}
+    return None
 
 
 @dataclass
@@ -50,10 +69,12 @@ def tool_loop(
     permissions: dict[str, Permission],
     confirm: Callable[[str], bool],
     sites: tuple[str, ...] = (),
+    use_tool: str | None = None,
 ) -> Answered:
     # Call, run every request, send the results back, and call again,
     # until the model answers instead of asking. Every request of every
-    # round passes your permission before anything runs.
+    # round passes your permission before anything runs. With use_tool,
+    # the first call must ask for that tool.
     replies: list[Message] = []
     timings: list[Timing] = []
     sent = history
@@ -69,11 +90,15 @@ def tool_loop(
             effort,
             sent,
             tools,
+            tool_choice_for(rounds, use_tool) if tools else None,
         )
         timings.append(timing)
         if reply is None:
             return Answered(replies, timings, cancelled=True)
         replies.append(reply)
+        # The call after the last round is sent with tool_choice "none",
+        # so a request for a tool can only come back from it if the API
+        # did not hold to that; nothing more runs then either.
         if reply.stop_reason != "tool_use" or rounds == MAX_ROUNDS:
             return Answered(replies, timings, cancelled=False)
         rounds += 1
@@ -94,6 +119,8 @@ def tool_loop(
         sent = messages_for(content, sent)
         sent.append({"role": "assistant", "content": reply.content})
         content = results
+        if rounds == MAX_ROUNDS:
+            print(f"Tool limit:    {TOOL_LIMIT}")
 
 
 def requests_line(replies: list[Message]) -> str | None:

@@ -91,10 +91,21 @@ nothing: the model gets an error result instead.
 request, send the results back, and call again, until the model answers
 instead of asking. A question whose second sum needs the first one's
 result takes two rounds and three calls. Every request of every round
-passes the checks and your permission below. After 5 rounds AskKit runs
-nothing more: if the model still asks for a tool, `ask` stops with exit
-code 1 and says so. The calls' tokens and cost are added up, with one
-`Time:` line per call.
+passes the checks and your permission below. After 5 rounds the next
+call is sent with `tool_choice` `none`: the tools are still described,
+but the model may not ask for one, so it answers with what it has
+(`Tool limit:` says so). If it asks anyway, AskKit runs nothing and `ask`
+stops with exit code 1. The calls' tokens and cost are added up, with
+one `Time:` line per call.
+
+By default the model decides for itself whether to ask for a tool.
+`--use-tool TOOL` makes the first call ask for that tool
+(`tool_choice` `{"type": "tool", "name": TOOL}`); every later call is
+free again, so the model can answer once it has the result. A forced
+call writes no text and does no thinking first, and the tool must be
+offered: a denied tool, or `fetch_page` with no `--allow-site`, is
+refused before anything is sent. The request still passes your
+permission, so `--confirm` still asks.
 
 When requests do not depend on each other, such as today's date and a
 sum, the model can ask for several in one turn. AskKit runs them one
@@ -640,7 +651,8 @@ test, as the thinking count of `ask` did.
     before it runs.
   - `src/askkit/loop.py`: the tool loop, which calls the model, runs
     what it asks for and sends the results back until it answers, for
-    at most 5 rounds, and counts the requests and rounds a question took.
+    at most 5 rounds, sets each call's `tool_choice`, and counts the
+    requests and rounds a question took.
   - `notebooks/`: notebooks for exploring, saved without outputs.
   - `evals/`: the golden sets, a main and a held-out part each, the
     ask set's documents and rubric, and the eval that runs the extract

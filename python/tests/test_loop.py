@@ -232,8 +232,10 @@ def test_the_loop_stops_after_the_last_round(
     answers = [next(responses) for _ in range(MAX_ROUNDS + 2)]
     ran = counted_runs(monkeypatch)
     answered = loop_with(client_for(sent, answers))
-    # One call per round, then one more whose request is never run.
+    # One call per round, then one more whose request is never run. That
+    # last call carries tool_choice "none"; this stand-in asks anyway.
     assert len(sent) == MAX_ROUNDS + 1
+    assert sent[MAX_ROUNDS]["tool_choice"] == {"type": "none"}
     assert len(ran) == MAX_ROUNDS
     assert len(answered.replies) == MAX_ROUNDS + 1
     assert answered.replies[-1].stop_reason == "tool_use"
@@ -247,6 +249,7 @@ def test_askkit_ask_says_why_it_stopped_asking(
 ) -> None:
     monkeypatch.chdir(tmp_path)
     sent: list[dict[str, Any]] = []
+    # A stand-in that asks even when the last call forbids it.
     bodies = [asked(number, PRODUCT, 618) for number in range(1, 8)]
     use_answers(monkeypatch, sent, bodies)
     with pytest.raises(SystemExit) as stopped:

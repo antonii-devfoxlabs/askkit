@@ -7,6 +7,7 @@ from anthropic.types import (
     Message,
     MessageParam,
     OutputConfigParam,
+    ToolChoiceParam,
     ToolParam,
     ToolResultBlockParam,
 )
@@ -59,12 +60,14 @@ def stream_answer(
     effort: Effort | None = None,
     history: list[MessageParam] | None = None,
     tools: list[ToolParam] | None = None,
+    tool_choice: ToolChoiceParam | None = None,
 ) -> tuple[Message | None, Timing]:
     # The same request as ask(), printed piece by piece as the model
     # writes it, and timed from the moment it is sent. No Message when
     # you cancel it with Ctrl-C: the stream never reached its end. With
     # tools, the model may ask for one instead of answering; the question
-    # of the next call is then the results.
+    # of the next call is then the results. Without a tool_choice, the
+    # model decides for itself whether to ask.
     first_token: float | None = None
     # perf_counter: a clock for durations, which never goes back.
     start = perf_counter()
@@ -76,6 +79,7 @@ def stream_answer(
             messages=messages_for(question, history),
             output_config=effort_config(effort),
             tools=omit if tools is None else tools,
+            tool_choice=omit if tool_choice is None else tool_choice,
         ) as stream:
             for text in stream.text_stream:
                 if first_token is None and text:

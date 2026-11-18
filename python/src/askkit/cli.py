@@ -210,6 +210,7 @@ def main(arguments: list[str] | None = None) -> None:
     ask_command.add_argument(
         "--allow-site", action="append", default=[], metavar="HOST"
     )
+    ask_command.add_argument("--use-tool", choices=tool_names)
     chat_command = commands.add_parser(
         "chat", help="chat with a model until you type /exit"
     )
@@ -608,6 +609,17 @@ def main(arguments: list[str] | None = None) -> None:
             # model is not offered the tool at all.
             permissions["fetch_page"] = "deny"
         tools = offered(TOOLS, permissions)
+        offered_names = [tool["name"] for tool in tools]
+        if options.use_tool is not None and (
+            options.use_tool not in offered_names
+        ):
+            # The API refuses a choice that names a tool the call does not
+            # offer, so AskKit says why before anything is sent.
+            sys.exit(
+                f"askkit: --use-tool {options.use_tool} names a tool that is"
+                " not offered; take it out of --deny, or, for fetch_page,"
+                " allow a site with --allow-site"
+            )
         client = Anthropic(api_key=require_api_key())
         try:
             answered = tool_loop(
@@ -622,6 +634,7 @@ def main(arguments: list[str] | None = None) -> None:
                 permissions,
                 confirm_on_terminal,
                 sites,
+                options.use_tool,
             )
         except APIError as error:
             sys.exit(f"askkit: {error_message(error)}")
@@ -653,7 +666,8 @@ def main(arguments: list[str] | None = None) -> None:
         print_times(timings)
         warning = stop_warning(reply)
         if reply.stop_reason == "tool_use":
-            # Still asking after the last round AskKit allows.
+            # Still asking, although the last call carried tool_choice
+            # "none": the API did not hold the model to it.
             warning = TOO_MANY_ROUNDS
         if warning is not None:
             if reply.stop_reason == "refusal" and text:
