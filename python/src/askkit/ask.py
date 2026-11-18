@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from dataclasses import dataclass
 from time import perf_counter
 from typing import Literal
@@ -8,11 +9,12 @@ from anthropic.types import (
     MessageParam,
     OutputConfigParam,
     ToolChoiceParam,
-    ToolParam,
     ToolResultBlockParam,
+    ToolUnionParam,
 )
 
 from askkit.prices import PRICES
+from askkit.server_tools import server_line
 
 # Anthropic's SDK reaches only Anthropic's models.
 MODELS: list[str] = []
@@ -53,13 +55,13 @@ class Timing:
 
 def stream_answer(
     client: Anthropic,
-    question: str | list[ToolResultBlockParam],
+    question: str | list[ToolResultBlockParam] | None,
     model: str,
     max_tokens: int,
     system: str,
     effort: Effort | None = None,
     history: list[MessageParam] | None = None,
-    tools: list[ToolParam] | None = None,
+    tools: Sequence[ToolUnionParam] | None = None,
     tool_choice: ToolChoiceParam | None = None,
 ) -> tuple[Message | None, Timing]:
     # The same request as ask(), printed piece by piece as the model
@@ -69,6 +71,8 @@ def stream_answer(
     # of the next call is then the results. Without a tool_choice, the
     # model decides for itself whether to ask.
     first_token: float | None = None
+    # mid_line: text was printed and its line not ended yet.
+    mid_line = False
     # perf_counter: a clock for durations, which never goes back.
     start = perf_counter()
     try:
@@ -81,11 +85,22 @@ def stream_answer(
             tools=omit if tools is None else tools,
             tool_choice=omit if tool_choice is None else tool_choice,
         ) as stream:
-            for text in stream.text_stream:
-                if first_token is None and text:
-                    first_token = perf_counter() - start
-                # flush: show the piece now, not when the line ends.
-                print(text, end="", flush=True)
+            for event in stream:
+                if event.type == "text":
+                    if first_token is None and event.text:
+                        first_token = perf_counter() - start
+                    # flush: show the piece now, not when the line ends.
+                    print(event.text, end="", flush=True)
+                    mid_line = mid_line or bool(event.text)
+                elif event.type == "content_block_stop":
+                    # A search the API ran inside this reply gets a line
+                    # of its own, between the text before it and after it.
+                    line = server_line(event.content_block)
+                    if line is not None:
+                        if mid_line:
+                            print()
+                        print(line, flush=True)
+                        mid_line = False
             response = stream.get_final_message()
             return response, Timing(first_token, perf_counter() - start)
     except KeyboardInterrupt:
@@ -95,7 +110,7 @@ def stream_answer(
     finally:
         # Ends the answer's last line, also when the stream breaks off,
         # so whatever AskKit prints next starts on a line of its own.
-        if first_token is not None:
+        if mid_line:
             print()
 
 
@@ -116,15 +131,17 @@ def effort_config(effort: Effort | None) -> OutputConfigParam | Omit:
 
 
 def messages_for(
-    question: str | list[ToolResultBlockParam],
+    question: str | list[ToolResultBlockParam] | None,
     history: list[MessageParam] | None = None,
 ) -> list[MessageParam]:
     # The API remembers nothing, so every earlier message goes again,
-    # oldest first, before the new question.
+    # oldest first, before the new question. No question: the history
+    # ends with a turn the model was in the middle of, and goes as it is.
     messages: list[MessageParam] = []
     if history is not None:
         messages = list(history)
-    messages.append({"role": "user", "content": question})
+    if question is not None:
+        messages.append({"role": "user", "content": question})
     return messages
 
 

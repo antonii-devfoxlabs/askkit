@@ -17,3 +17,8 @@ LONG_PROMPT_PRICES: dict[str, dict[str, float]] = {
     "claude-haiku-5-5": {"over": 100_000, "input": 0.50, "output": 2.50},
     "gpt-6-luna": {"over": 272_000, "input": 0.20, "output": 0.75},
 }
+
+# US dollars per search with Anthropic's web search tool, on top of the
+# tokens its results add: $10 per 1,000 searches, checked on 2026-11-18
+# on the same pricing page. A search that fails is not billed.
+SEARCH_PRICE = 10 / 1000

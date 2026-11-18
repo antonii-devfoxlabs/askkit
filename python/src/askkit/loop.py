@@ -1,4 +1,4 @@
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
 from anthropic import Anthropic
@@ -6,11 +6,17 @@ from anthropic.types import (
     Message,
     MessageParam,
     ToolChoiceParam,
-    ToolParam,
     ToolResultBlockParam,
+    ToolUnionParam,
 )
 
-from askkit.ask import Effort, Timing, messages_for, stream_answer
+from askkit.ask import (
+    Effort,
+    Timing,
+    answer_text,
+    messages_for,
+    stream_answer,
+)
 from askkit.permissions import Permission, run_permitted
 from askkit.tools import tool_calls
 
@@ -30,6 +36,11 @@ TOO_MANY_ROUNDS = (
 
 
 TOOL_LIMIT = f"{MAX_ROUNDS} rounds ran; the next call may not ask for a tool"
+
+# The most times one question continues a turn the API paused. A tool
+# that runs on Anthropic's servers runs in a loop there too, and the API
+# may pause that loop and hand the turn back unfinished (pause_turn).
+MAX_PAUSES = 3
 
 
 def tool_choice_for(
@@ -65,7 +76,7 @@ def tool_loop(
     system: str,
     effort: Effort | None,
     history: list[MessageParam],
-    tools: list[ToolParam] | None,
+    tools: Sequence[ToolUnionParam] | None,
     permissions: dict[str, Permission],
     confirm: Callable[[str], bool],
     sites: tuple[str, ...] = (),
@@ -78,9 +89,12 @@ def tool_loop(
     replies: list[Message] = []
     timings: list[Timing] = []
     sent = history
-    content: str | list[ToolResultBlockParam] = question
+    content: str | list[ToolResultBlockParam] | None = question
     rounds = 0
+    pauses = 0
     while True:
+        # A paused turn goes on unforced: its reply has already begun.
+        forced = use_tool if content is not None else None
         reply, timing = stream_answer(
             client,
             content,
@@ -90,12 +104,21 @@ def tool_loop(
             effort,
             sent,
             tools,
-            tool_choice_for(rounds, use_tool) if tools else None,
+            tool_choice_for(rounds, forced) if tools else None,
         )
         timings.append(timing)
         if reply is None:
             return Answered(replies, timings, cancelled=True)
         replies.append(reply)
+        if reply.stop_reason == "pause_turn" and pauses < MAX_PAUSES:
+            # The API paused its own loop. The paused turn goes back as
+            # it came, with no new message, and the API carries on where
+            # it stopped. The same tools go too: a search may still wait.
+            pauses += 1
+            sent = messages_for(content, sent)
+            sent.append({"role": "assistant", "content": reply.content})
+            content = None
+            continue
         # The call after the last round is sent with tool_choice "none",
         # so a request for a tool can only come back from it if the API
         # did not hold to that; nothing more runs then either.
@@ -127,7 +150,11 @@ def requests_line(replies: list[Message]) -> str | None:
     # How many tool requests a question ran, and in how many rounds. Every
     # reply but the last asked for tools that ran, one round each; the
     # last one answered, or asked once too often and ran nothing.
-    rounds = replies[:-1]
+    rounds: list[Message] = []
+    for reply in replies[:-1]:
+        # A paused turn ran no tool of yours, so it is not a round.
+        if reply.stop_reason == "tool_use":
+            rounds.append(reply)
     if not rounds:
         return None
     requests = 0
@@ -136,3 +163,15 @@ def requests_line(replies: list[Message]) -> str | None:
     if len(rounds) == 1:
         return f"{requests} in 1 round"
     return f"{requests} in {len(rounds)} rounds"
+
+
+def final_text(replies: list[Message]) -> str:
+    # The answer's words. A turn the API paused and then continued is
+    # one answer in several replies, so their text is joined.
+    parts: list[str] = []
+    for reply in reversed(replies[:-1]):
+        if reply.stop_reason != "pause_turn":
+            break
+        parts.insert(0, answer_text(reply))
+    parts.append(answer_text(replies[-1]))
+    return "".join(parts)

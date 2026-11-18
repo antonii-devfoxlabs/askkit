@@ -72,10 +72,11 @@ def opening(body: dict[str, Any]) -> list[str]:
                 {"type": "thinking_delta", "thinking": block["thinking"]},
                 {"type": "signature_delta", "signature": block["signature"]},
             ]
-        elif block["type"] == "tool_use":
-            # A tool's input arrives as JSON text, in pieces of its own.
+        elif block["type"] in ("tool_use", "server_tool_use"):
+            # A tool's input arrives as JSON text, in pieces of its own,
+            # whether your code runs the tool or the API does.
             empty = {
-                "type": "tool_use",
+                "type": block["type"],
                 "id": block["id"],
                 "name": block["name"],
                 "input": {},
@@ -86,9 +87,18 @@ def opening(body: dict[str, Any]) -> list[str]:
                     "partial_json": json.dumps(block["input"]),
                 }
             ]
+        elif block["type"] == "web_search_tool_result":
+            # A search's results arrive whole, in the block's first event.
+            empty = block
+            deltas = []
         else:
             empty = {"type": "text", "text": ""}
             deltas = []
+            # A text that cites a source gets each citation before it.
+            for citation in block.get("citations") or []:
+                deltas.append(
+                    {"type": "citations_delta", "citation": citation}
+                )
             for piece in pieces(block["text"]):
                 deltas.append({"type": "text_delta", "text": piece})
         events.append(

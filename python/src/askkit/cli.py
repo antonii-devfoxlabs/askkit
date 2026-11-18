@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 
 from anthropic import Anthropic, APIError
-from anthropic.types import Message
+from anthropic.types import Message, ToolUnionParam
 from pydantic import ValidationError
 
 from askkit.analysis import fault_lines
@@ -55,10 +55,15 @@ from askkit.history import (
     save_history,
 )
 from askkit.limits import LIMITS
-from askkit.loop import TOO_MANY_ROUNDS, requests_line, tool_loop
+from askkit.loop import (
+    TOO_MANY_ROUNDS,
+    final_text,
+    requests_line,
+    tool_loop,
+)
 from askkit.memory import load_memory
 from askkit.permissions import offered, permissions_for
-from askkit.prices import PRICES
+from askkit.prices import PRICES, SEARCH_PRICE
 from askkit.prompts import ASK_SYSTEM, render
 from askkit.rubric import (
     Answer,
@@ -73,6 +78,7 @@ from askkit.rubric import (
 )
 from askkit.rules import email_fault, load_orders, order_fault
 from askkit.runs import Results, diff_lines, load_results
+from askkit.server_tools import cited_urls, searches, web_search
 from askkit.structured import stream_json
 from askkit.tokens import count_tokens
 from askkit.tools import TOOLS
@@ -130,11 +136,16 @@ def print_calls(
             thinking = (thinking or 0) + thought
     last = responses[-1]
     cost = call_cost(model, input_tokens, output_tokens)
+    searched = searches(responses)
+    # Searches are billed on top of the tokens their results add.
+    cost += searched * SEARCH_PRICE
     print(f"Model:         {last.model}")
     tokens = f"{input_tokens:,} in, {output_tokens:,} out"
     if thinking is not None:
         tokens += f" ({thinking:,} thinking)"
     print(f"Tokens:        {tokens}")
+    if searched:
+        print(f"Searches:      {searched}, ${searched * SEARCH_PRICE:.2f}")
     print(f"Cost:          ${cost:.6f}")
     # One stop reason says how one answer ended; a command that asked
     # several questions names each answer's own on its line instead.
@@ -211,6 +222,9 @@ def main(arguments: list[str] | None = None) -> None:
         "--allow-site", action="append", default=[], metavar="HOST"
     )
     ask_command.add_argument("--use-tool", choices=tool_names)
+    ask_command.add_argument(
+        "--search-site", action="append", default=[], metavar="DOMAIN"
+    )
     chat_command = commands.add_parser(
         "chat", help="chat with a model until you type /exit"
     )
@@ -608,8 +622,13 @@ def main(arguments: list[str] | None = None) -> None:
             # With no site allowed, every fetch would be refused, so the
             # model is not offered the tool at all.
             permissions["fetch_page"] = "deny"
-        tools = offered(TOOLS, permissions)
-        offered_names = [tool["name"] for tool in tools]
+        client_tools = offered(TOOLS, permissions)
+        offered_names = [tool["name"] for tool in client_tools]
+        tools: list[ToolUnionParam] = list(client_tools)
+        if options.search_site:
+            # Anthropic runs the search, so no check of AskKit's sees the
+            # request: naming the sites is your permission, given ahead.
+            tools.append(web_search(tuple(options.search_site)))
         if options.use_tool is not None and (
             options.use_tool not in offered_names
         ):
@@ -653,10 +672,12 @@ def main(arguments: list[str] | None = None) -> None:
             sys.exit(f"askkit: {CANCELLED}")
         responses = answered.replies
         reply = responses[-1]
-        text = answer_text(reply)
+        text = final_text(responses)
         if text:
             # A blank line between the answer and its numbers.
             print()
+        for url in cited_urls(responses):
+            print(f"Source:        {url}")
         print_calls(responses, options.model)
         requests = requests_line(responses)
         if requests is not None:

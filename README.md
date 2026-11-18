@@ -159,6 +159,20 @@ that says what to do next; a fetched page prints as its size, such as
 `Tool:          fetch_page: 36,371 characters`. Tests never reach the
 network: every look-up and every site is a stand-in.
 
+`--search-site DOMAIN` (given more than once for several) also offers
+Anthropic's web search (`python/src/askkit/server_tools.py`). This tool
+runs on Anthropic's servers, not in AskKit: the model asks, the API
+searches, and the request, the results and the answer come back in one
+reply, so no permission check of AskKit's ever sees the request. Its
+limits go into the definition instead: results only from the domains
+you name (`allowed_domains`), and at most 3 searches a call
+(`max_uses`). Each search prints a `Search:` line as it runs, a failed
+one a `Search error:` line with its error code; every page the answer
+cites prints as a `Source:` line under it; and the searches are billed
+on top of the tokens, $10 per 1,000, shown on a `Searches:` line and
+added to `Cost:`. When the API pauses its own loop (`pause_turn`),
+AskKit sends the paused turn back as it came, at most 3 times.
+
 `ask` calls Anthropic's models only, so `-m` takes the Claude models in
 the price table (Claude Haiku 5.5 by default); `--max-tokens` is the
 room for the answer (1000 by default), the model's thinking included;
@@ -625,6 +639,13 @@ test, as the thinking count of `ask` did.
   the first token and the total time; Ctrl-C cancels only the answer
   that is streaming; `extract` and `classify` preview each settled
   field and use the answer only once it is whole and checked.
+- `m08`, end of Module 8 (Tool Use): `ask` offers a clock, a calculator
+  and a web fetch that reaches only the sites you allow, never a
+  private address, and reads at most 100,000 bytes; it runs them in a
+  loop of at most 5 rounds, each request checked against your
+  permissions first, with error results the model can act on; it can
+  force the first call's tool, and with `--search-site` it offers
+  Anthropic's web search, run on Anthropic's servers.
 
 ## Layout
 
@@ -643,6 +664,9 @@ test, as the thinking count of `ask` did.
     clock, a calculator and a web fetch), their definitions, the check each request
     passes before anything runs, and the error results the model gets
     when one fails.
+  - `src/askkit/server_tools.py`: Anthropic's web search, which runs on
+    Anthropic's servers: its definition, the lines it prints, its
+    searches counted and the pages the answer cites.
   - `src/askkit/fetch.py`: the web fetch, which reaches only the sites
     you allow, never a private address, and reads at most 100,000 bytes
     of text within 10 seconds.
