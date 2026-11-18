@@ -402,3 +402,29 @@ def test_grade_refuses_an_answer_to_a_question_not_in_the_set(
             ]
         )
     assert exit_info.value.code == f"askkit: no case 'canada' in {ask_set}"
+
+
+def test_answer_refuses_a_max_tokens_too_large_to_wait_for(
+    ask_set: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The SDK will not send a call that is not streamed when its answer
+    # could take longer than ten minutes; askkit answer waits for each
+    # whole answer, so it says so instead of failing with a traceback.
+    def make(api_key: str) -> Anthropic:
+        return fake_client(response_body(REFUND_POSTAGE))
+
+    monkeypatch.setattr("askkit.cli.Anthropic", make)
+    with pytest.raises(SystemExit) as stopped:
+        main(
+            [
+                "answer",
+                str(ask_set),
+                "--out",
+                "answers.json",
+                "--max-tokens",
+                "64000",
+            ]
+        )
+    message = str(stopped.value.code)
+    assert message.startswith("askkit: --max-tokens 64,000 is too large")
+    assert not Path("answers.json").exists()

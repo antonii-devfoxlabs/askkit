@@ -377,6 +377,15 @@ def main(arguments: list[str] | None = None) -> None:
                 )
             except APIError as error:
                 sys.exit(f"askkit: {error_message(error)}")
+            except ValueError:
+                # The SDK sends no call that is not streamed when its
+                # answer could take over ten minutes, and askkit answer
+                # waits for each whole answer.
+                sys.exit(
+                    f"askkit: --max-tokens {options.max_tokens:,} is too"
+                    " large for an answer askkit answer waits for; give it"
+                    " a smaller --max-tokens"
+                )
             calls.append(response)
             code_faults = answer_faults(response, sources)
             # Of a declined answer no part is kept, as askkit ask prints
