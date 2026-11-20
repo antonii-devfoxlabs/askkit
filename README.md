@@ -564,7 +564,8 @@ and the request gets a key of its own. The answers are files in
 `.askkit-cache/` in the folder you run AskKit from, left out of Git,
 since an answer can hold what a customer wrote; the request itself is not
 stored, only its key. An answer is kept for 30 days (`MAX_AGE` in
-`python/src/askkit/response_cache.py`), then asked for again. A kept
+`python/src/askkit/response_cache.py`), then asked for again, and
+every answer kept removes the files past that age. A kept
 answer goes through the same checks as a new one, and an answer that
 stopped early or failed a check is never kept. `--fresh` asks the model
 anyway and keeps the new answer in place of the old one:

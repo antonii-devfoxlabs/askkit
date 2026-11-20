@@ -8,14 +8,14 @@ from typing import Any
 from anthropic.types import Message
 
 # Where AskKit keeps the answers it has paid for: one file per request,
-# in a folder of the folder you run it from. .gitignore leaves it out,
-# since a kept answer can hold what a customer wrote.
+# in a folder inside the folder you run AskKit from. .gitignore leaves
+# it out, since a kept answer can hold what a customer wrote.
 CACHE_FOLDER = Path(".askkit-cache")
 
 # How long a kept answer is given back. The key changes when anything
 # sent changes, but not when the serving behind a model ID does (lesson
 # 10.6), and a kept answer can hold a customer's details: after 30 days
-# the answer is asked for again, and the new one replaces it.
+# it is asked for again, and the next answer kept removes the old file.
 MAX_AGE = timedelta(days=30)
 
 
@@ -60,9 +60,24 @@ def kept_answer(folder: Path, key: str, now: datetime) -> Kept | None:
 def keep_answer(
     folder: Path, key: str, response: Message, now: datetime
 ) -> None:
-    # Stores an answer that passed every check, replacing an older one.
-    # The request itself is not stored, only its key.
+    # Stores an answer that passed every check, replacing an older one,
+    # and removes every answer past MAX_AGE, so none stays on the disk
+    # long after it can be given back. The request itself is not stored,
+    # only its key.
     folder.mkdir(exist_ok=True)
     data = {"stored": now.isoformat(), "response": response.to_dict()}
     path = folder / f"{key}.json"
     path.write_text(json.dumps(data), encoding="utf-8")
+    remove_expired(folder, now)
+
+
+def remove_expired(folder: Path, now: datetime) -> int:
+    # Deletes the kept answers older than MAX_AGE, and files AskKit cannot
+    # read back, which would never be given back either. Returns how many
+    # files it removed.
+    removed = 0
+    for path in folder.glob("*.json"):
+        if kept_answer(folder, path.stem, now) is None:
+            path.unlink(missing_ok=True)
+            removed += 1
+    return removed

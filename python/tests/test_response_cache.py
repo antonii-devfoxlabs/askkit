@@ -13,6 +13,7 @@ from askkit.response_cache import (
     MAX_AGE,
     keep_answer,
     kept_answer,
+    remove_expired,
     request_key,
 )
 
@@ -255,3 +256,21 @@ def test_a_kept_answer_meets_the_checks_of_today(
     with pytest.raises(SystemExit) as stopped:
         main(["read", str(INVOICE)])
     assert "a person checks the invoice" in str(stopped.value)
+
+
+def test_keeping_an_answer_removes_the_expired_ones(tmp_path: Path) -> None:
+    old_key = request_key(REQUEST)
+    keep_answer(tmp_path, old_key, answer_message(), FIRST_RUN)
+    (tmp_path / "broken.json").write_text("{", encoding="utf-8")
+    later = FIRST_RUN + MAX_AGE + timedelta(days=1)
+    new_key = request_key({**REQUEST, "max_tokens": 10})
+    keep_answer(tmp_path, new_key, answer_message(), later)
+    assert [path.stem for path in tmp_path.iterdir()] == [new_key]
+
+
+def test_answers_within_their_age_are_left_alone(tmp_path: Path) -> None:
+    key = request_key(REQUEST)
+    keep_answer(tmp_path, key, answer_message(), FIRST_RUN)
+    assert remove_expired(tmp_path, FIRST_RUN + MAX_AGE) == 0
+    assert remove_expired(tmp_path, FIRST_RUN + MAX_AGE * 2) == 1
+    assert list(tmp_path.iterdir()) == []
