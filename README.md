@@ -583,6 +583,31 @@ cheaper thing to beat.
 `askkit compare` still prices the high-volume model of each provider;
 Sonnet 5.5 is in `prices.py` and `limits.py` for routing.
 
+## Retries and timeouts in a run of questions
+
+`askkit answer` sends one call per question, and a question that fails
+used to end the run with the SDK's three tries spent in about a second
+and a half. It now retries each question's call itself:
+
+```bash
+cd python
+uv run askkit answer evals/ask/main --out answers.json --tries 5 --timeout 60
+```
+
+A call that fails with a 408, 409, 429, a status of 500 or more, a
+timeout or no connection is sent again, up to `--tries` requests in all
+(5 by default), and no retry starts more than two minutes after the
+first send. Before each retry AskKit waits a random time between nothing
+and a limit that doubles from one second up to thirty ("full jitter"),
+or exactly as long as the API's `retry-after` header asks. The SDK's own
+retries are off for these calls, so one try is one request. Each request
+may wait `--timeout` seconds (60 by default) for its answer; a
+`--max-tokens` that could take longer at the SDK's slowest pace (128,000
+tokens an hour) is refused before any call. A run that retried prints a
+`Retries:` line with the reasons and the time spent waiting. Only the
+failed question is sent again, never the questions before it.
+`src/askkit/retry.py` holds the policy.
+
 ## Prompts
 
 Every prompt AskKit sends is a template file in
@@ -870,6 +895,8 @@ test, as the thinking count of `ask` did.
     system prompt and the question.
   - `src/askkit/routing.py`: the small and the large model, and when a
     ticket goes to the large one.
+  - `src/askkit/retry.py`: which failed calls are sent again, how long
+    AskKit waits before each retry, and the timeout of `askkit answer`.
   - `src/askkit/costmodel.py`: a cost model of the app's features, and
     what each one costs a month.
   - `samples/`: images, an invoice PDF, a voice message and a month of

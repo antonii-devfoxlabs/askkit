@@ -274,7 +274,7 @@ def test_answer_saves_every_answer_with_its_code_faults(
         sent.append(json.loads(request.content))
         return httpx2.Response(200, json=bodies[len(sent) - 1])
 
-    def make(api_key: str) -> Anthropic:
+    def make(api_key: str, **options: Any) -> Anthropic:
         transport = httpx2.MockTransport(reply)
         return Anthropic(
             api_key=api_key, http_client=httpx2.Client(transport=transport)
@@ -310,7 +310,7 @@ def test_a_declined_answer_is_saved_without_its_text(
 ) -> None:
     body = response_body("<quote>If we", "refusal")
 
-    def make(api_key: str) -> Anthropic:
+    def make(api_key: str, **options: Any) -> Anthropic:
         return fake_client(body)
 
     monkeypatch.setattr("askkit.cli.Anthropic", make)
@@ -407,10 +407,10 @@ def test_grade_refuses_an_answer_to_a_question_not_in_the_set(
 def test_answer_refuses_a_max_tokens_too_large_to_wait_for(
     ask_set: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # The SDK will not send a call that is not streamed when its answer
-    # could take longer than ten minutes; askkit answer waits for each
-    # whole answer, so it says so instead of failing with a traceback.
-    def make(api_key: str) -> Anthropic:
+    # askkit answer waits for each whole answer, at most --timeout
+    # seconds; an answer that may take longer is refused before any call,
+    # instead of timing out after the tokens were paid for.
+    def make(api_key: str, **options: Any) -> Anthropic:
         return fake_client(response_body(REFUND_POSTAGE))
 
     monkeypatch.setattr("askkit.cli.Anthropic", make)
@@ -426,5 +426,5 @@ def test_answer_refuses_a_max_tokens_too_large_to_wait_for(
             ]
         )
     message = str(stopped.value.code)
-    assert message.startswith("askkit: --max-tokens 64,000 is too large")
+    assert message.startswith("askkit: --max-tokens 64,000 may take up to")
     assert not Path("answers.json").exists()

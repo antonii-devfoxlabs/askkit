@@ -3,10 +3,14 @@ import anthropic
 AFTER_RETRIES = "after the SDK's retries"
 
 
-def error_message(error: anthropic.APIError) -> str:
-    # Most specific first: the spend cap's error is a kind of
-    # RateLimitError, OverloadedError a kind of InternalServerError,
-    # and APITimeoutError a kind of APIConnectionError.
+def error_message(
+    error: anthropic.APIError, after: str = AFTER_RETRIES
+) -> str:
+    # after says what was tried before giving up: the SDK's retries, or
+    # a command's own (askkit answer). Most specific first: the spend
+    # cap's error is a kind of RateLimitError, OverloadedError a kind of
+    # InternalServerError, and APITimeoutError a kind of
+    # APIConnectionError.
     if isinstance(error, anthropic.AuthenticationError):
         return "the API key was rejected (401); put a working key in .env"
     if isinstance(error, anthropic.PermissionDeniedError):
@@ -23,19 +27,19 @@ def error_message(error: anthropic.APIError) -> str:
         return f"the monthly spend cap was reached (429): {error.api_message}"
     if isinstance(error, anthropic.RateLimitError):
         return (
-            f"the rate limit was reached (429) {AFTER_RETRIES};"
+            f"the rate limit was reached (429) {after};"
             "\nwait a minute and try again"
         )
     if isinstance(error, anthropic.OverloadedError):
         return (
-            f"Anthropic's servers are overloaded (529) {AFTER_RETRIES};"
+            f"Anthropic's servers are overloaded (529) {after};"
             "\ntry again in a few minutes"
             f" (request ID {error.request_id})"
         )
     if isinstance(error, anthropic.InternalServerError):
         return (
             f"Anthropic's side failed ({error.status_code})"
-            f" {AFTER_RETRIES};"
+            f" {after};"
             f"\ntry again later (request ID {error.request_id})"
         )
     if (
@@ -54,5 +58,5 @@ def error_message(error: anthropic.APIError) -> str:
             f" {error.api_message}"
         )
     if isinstance(error, anthropic.APITimeoutError):
-        return f"no answer in time {AFTER_RETRIES}; try again"
-    return f"could not reach the API {AFTER_RETRIES};\ncheck your connection"
+        return f"no answer in time {after}; try again"
+    return f"could not reach the API {after};\ncheck your connection"

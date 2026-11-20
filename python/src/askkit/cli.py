@@ -1,10 +1,12 @@
 import argparse
 import json
 import sys
+from dataclasses import replace
+from functools import partial
 from pathlib import Path
 
 import openai
-from anthropic import Anthropic, APIError
+from anthropic import Anthropic, APIError, Timeout
 from anthropic.types import Message, ToolUnionParam
 from openai import OpenAI
 from pydantic import ValidationError
@@ -88,6 +90,16 @@ from askkit.pdfs import document_block, is_pdf
 from askkit.permissions import offered, permissions_for
 from askkit.prices import PRICES, SEARCH_PRICE
 from askkit.prompts import ASK_SYSTEM, render
+from askkit.retry import (
+    ANSWER_POLICY,
+    ANSWER_TIMEOUT,
+    CONNECT_TIMEOUT,
+    Retry,
+    after_tries,
+    retries_line,
+    timeout_fault,
+    with_retries,
+)
 from askkit.routing import call_model
 from askkit.rubric import (
     Answer,
@@ -342,6 +354,12 @@ def main(arguments: list[str] | None = None) -> None:
         "-m", "--model", choices=MODELS, default="claude-haiku-5-5"
     )
     answer_command.add_argument("--max-tokens", type=int, default=1000)
+    answer_command.add_argument(
+        "--tries", type=int, default=ANSWER_POLICY.tries
+    )
+    answer_command.add_argument(
+        "--timeout", type=float, default=ANSWER_TIMEOUT
+    )
     grade_command = commands.add_parser(
         "grade", help="grade saved answers by hand against a rubric"
     )
@@ -475,37 +493,55 @@ def main(arguments: list[str] | None = None) -> None:
         # Every question of one part, sent as askkit ask sends it, and the
         # answers saved for a person to grade. What code can check is
         # checked here, so no one spends a minute on a cut-off answer.
+        fault = timeout_fault(
+            options.tries, options.timeout, options.max_tokens
+        )
+        if fault is not None:
+            sys.exit(f"askkit: {fault}")
         try:
             questions = load_questions(options.folder)
         except (OSError, ValueError) as error:
             sys.exit(f"askkit: {error}")
-        client = Anthropic(api_key=require_api_key())
+        policy = replace(ANSWER_POLICY, tries=options.tries)
+        # AskKit retries these calls itself, so the SDK does not: its own
+        # two retries inside each of AskKit's tries would send up to
+        # three times as many requests. connect: seconds to reach the
+        # API; the timeout: the longest wait for the answer.
+        client = Anthropic(
+            api_key=require_api_key(),
+            max_retries=0,
+            timeout=Timeout(options.timeout, connect=CONNECT_TIMEOUT),
+        )
         answers: list[Answer] = []
         calls: list[Message] = []
+        retries: list[Retry] = []
         for item in questions:
             sources: dict[str, str] = {}
             for name in item.documents:
                 path = options.folder.parent / "documents" / name
                 sources[name] = path.read_text(encoding="utf-8")
+            question = with_documents(item.question, sources)
+            tried: list[Retry] = []
             try:
-                response = ask(
+                # One question's call is retried, never the run: the
+                # answers before it are not asked for, or paid for, again.
+                # partial(ask, ...) is ask with its arguments filled in,
+                # a call with_retries can make as often as it needs.
+                send = partial(
+                    ask,
                     client,
-                    with_documents(item.question, sources),
+                    question,
                     options.model,
                     options.max_tokens,
                     ASK_SYSTEM,
                 )
+                response = with_retries(send, policy, tried)
             except APIError as error:
-                sys.exit(f"askkit: {error_message(error)}")
-            except ValueError:
-                # The SDK sends no call that is not streamed when its
-                # answer could take over ten minutes, and askkit answer
-                # waits for each whole answer.
+                tries = after_tries(len(tried) + 1)
                 sys.exit(
-                    f"askkit: --max-tokens {options.max_tokens:,} is too"
-                    " large for an answer askkit answer waits for; give it"
-                    " a smaller --max-tokens"
+                    f"askkit: {item.name}: {error_message(error, tries)}"
                 )
+            retries.extend(tried)
             calls.append(response)
             code_faults = answer_faults(response, sources)
             # Of a declined answer no part is kept, as askkit ask prints
@@ -526,6 +562,8 @@ def main(arguments: list[str] | None = None) -> None:
         )
         print()
         print_calls(calls, options.model, stop_reason=False)
+        if retries:
+            print(retries_line(retries))
         print(f"Saved:         {options.out}")
         return
 
