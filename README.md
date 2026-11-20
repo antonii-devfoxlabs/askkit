@@ -552,6 +552,34 @@ Every command that calls a model prints a `Cache:` line when the cache
 read or wrote anything, and its `Tokens:` and `Cost:` count each kind of
 input at its own price.
 
+## Answers kept on your side
+
+`askkit read` and `askkit classify` keep every answer that passed their
+checks, and give it back when the same request comes again: nothing is
+sent and nothing is paid. The key is a SHA-256 hash of the whole request
+as it would be sent (`json_request` in
+`python/src/askkit/structured.py`): the model ID, `max_tokens`, the
+template's text, the schema and the email or the PDF. Change any of them
+and the request gets a key of its own. The answers are files in
+`.askkit-cache/` in the folder you run AskKit from, left out of Git,
+since an answer can hold what a customer wrote; the request itself is not
+stored, only its key. An answer is kept for 30 days (`MAX_AGE` in
+`python/src/askkit/response_cache.py`), then asked for again. A kept
+answer goes through the same checks as a new one, and an answer that
+stopped early or failed a check is never kept. `--fresh` asks the model
+anyway and keeps the new answer in place of the old one:
+
+```bash
+cd python
+uv run askkit read samples/invoice.pdf
+uv run askkit read samples/invoice.pdf
+```
+
+The second run prints the same invoice, then
+`Answer:        kept on <date> UTC; nothing was sent` and what it saved.
+The eval never reads the cache: it calls the model through its own
+functions, so two runs of it are two samples.
+
 ## Sending a ticket to a larger model
 
 Claude Sonnet 5.5 costs twenty times Claude Haiku 5.5 a token, so
@@ -948,6 +976,8 @@ test, as the thinking count of `ask` did.
     model of a chain, and OpenAI's answer in Claude's shape.
   - `src/askkit/models.py`: the default model, and the day each model
     AskKit calls retires.
+  - `src/askkit/response_cache.py`: the answers `read` and `classify`
+    keep, by a hash of the whole request, for 30 days.
   - `src/askkit/retry.py`: which failed calls are sent again, how long
     AskKit waits before each retry, and the timeout of `askkit answer`.
   - `src/askkit/costmodel.py`: a cost model of the app's features, and

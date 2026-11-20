@@ -29,6 +29,26 @@ def settled_fields(text: str) -> dict[str, Any]:
     return settled
 
 
+def json_request(
+    model: str,
+    max_tokens: int,
+    system: str,
+    messages: list[MessageParam],
+    schema: dict[str, Any],
+) -> dict[str, Any]:
+    # Every field stream_json sends, in one dict. The response cache makes
+    # its key from this same dict, so nothing sent is left out of the key.
+    return {
+        "model": model,
+        "max_tokens": max_tokens,
+        "system": system,
+        "messages": messages,
+        "output_config": {
+            "format": {"type": "json_schema", "schema": schema}
+        },
+    }
+
+
 def stream_json(
     client: Anthropic,
     model: str,
@@ -49,13 +69,7 @@ def stream_json(
     start = perf_counter()
     try:
         with client.messages.stream(
-            model=model,
-            max_tokens=max_tokens,
-            system=system,
-            messages=messages,
-            output_config={
-                "format": {"type": "json_schema", "schema": schema}
-            },
+            **json_request(model, max_tokens, system, messages, schema)
         ) as stream:
             for piece in stream.text_stream:
                 if first_token is None and piece:

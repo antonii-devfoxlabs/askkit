@@ -2,13 +2,14 @@ import argparse
 import json
 import sys
 from dataclasses import replace
-from datetime import date
+from datetime import UTC, date, datetime
 from functools import partial
 from pathlib import Path
+from typing import Any
 
 import openai
 from anthropic import Anthropic, APIError, Timeout
-from anthropic.types import Message, ToolUnionParam
+from anthropic.types import Message, MessageParam, ToolUnionParam
 from openai import OpenAI
 from pydantic import ValidationError
 
@@ -110,6 +111,13 @@ from askkit.pdfs import document_block, is_pdf
 from askkit.permissions import offered, permissions_for
 from askkit.prices import PRICES, SEARCH_PRICE
 from askkit.prompts import ASK_SYSTEM, render
+from askkit.response_cache import (
+    CACHE_FOLDER,
+    Kept,
+    keep_answer,
+    kept_answer,
+    request_key,
+)
 from askkit.retry import (
     ANSWER_POLICY,
     ANSWER_TIMEOUT,
@@ -136,7 +144,7 @@ from askkit.rubric import (
 from askkit.rules import email_fault, load_orders, order_fault
 from askkit.runs import Results, diff_lines, load_results
 from askkit.server_tools import cited_urls, searches, web_search
-from askkit.structured import stream_json
+from askkit.structured import json_request, stream_json
 from askkit.tokens import count_tokens
 from askkit.tools import TOOLS
 from askkit.trim import OLD_TURNS
@@ -295,6 +303,59 @@ def today() -> date:
     return date.today()
 
 
+def now() -> datetime:
+    # The one place the CLI reads the time of day, in UTC (Coordinated
+    # Universal Time), so a kept answer's age is the same wherever it
+    # runs, and a test can set it.
+    return datetime.now(UTC)
+
+
+def call_json(
+    model: str,
+    max_tokens: int,
+    system: str,
+    messages: list[MessageParam],
+    schema: dict[str, Any],
+    task: str,
+) -> tuple[Message, Timing]:
+    # One call for an answer held to a schema, as read and classify make
+    # it. An error, Ctrl-C or an answer that stopped early ends the
+    # command here, so what comes back is a whole answer to check.
+    client = Anthropic(api_key=require_api_key())
+    try:
+        reply, timing = stream_json(
+            client, model, max_tokens, system, messages, schema
+        )
+    except APIError as error:
+        sys.exit(f"askkit: {error_message(error)}")
+    if reply is None:
+        print(f"Time:          {timing_line(timing, cancelled=True)}")
+        sys.exit(f"askkit: {CANCELLED}")
+    warning = stop_warning(reply, task)
+    if warning is not None:
+        print_calls([reply], model)
+        print_times([timing])
+        sys.exit(f"askkit: {warning}")
+    return reply, timing
+
+
+def print_answered(
+    response: Message, model: str, timing: Timing | None, kept: Kept | None
+) -> None:
+    # The lines under an answer: the call's tokens, cost and time, or,
+    # for an answer from the cache, when it was stored and what it saved.
+    if kept is None:
+        print_calls([response], model)
+        if timing is not None:
+            print_times([timing])
+        return
+    stored = kept.stored.strftime("%Y-%m-%d %H:%M")
+    saved = usage_cost(response.model, response.usage)
+    print(f"Model:         {response.model}")
+    print(f"Answer:        kept on {stored} UTC; nothing was sent")
+    print(f"Cost:          $0.000000, ${saved:.6f} saved")
+
+
 def models_called(options: argparse.Namespace) -> list[str]:
     # The models a command will call, known before its first call.
     if options.command == "transcribe":
@@ -351,6 +412,11 @@ def live_changes() -> list[str]:
         if change is not None:
             changes.append(change)
     return changes
+
+
+# read and classify give back a kept answer to the same request; --fresh
+# asks the model anyway and keeps the new answer in its place.
+FRESH_HELP = "ask the model even when an answer to this request is kept"
 
 
 def main(arguments: list[str] | None = None) -> None:
@@ -450,6 +516,7 @@ def main(arguments: list[str] | None = None) -> None:
         "-m", "--model", choices=MODELS, default=DEFAULT_MODEL
     )
     classify.add_argument("--max-tokens", type=int, default=1000)
+    classify.add_argument("--fresh", action="store_true", help=FRESH_HELP)
     read_command = commands.add_parser(
         "read", help="take the fields out of an invoice PDF, as JSON"
     )
@@ -458,6 +525,7 @@ def main(arguments: list[str] | None = None) -> None:
         "-m", "--model", choices=MODELS, default=DEFAULT_MODEL
     )
     read_command.add_argument("--max-tokens", type=int, default=1000)
+    read_command.add_argument("--fresh", action="store_true", help=FRESH_HELP)
     transcribe_command = commands.add_parser(
         "transcribe", help="turn a voice message into text"
     )
@@ -940,39 +1008,50 @@ def main(arguments: list[str] | None = None) -> None:
         email, left_out = clean_email(
             options.file.read_text(encoding="utf-8")
         )
-        client = Anthropic(api_key=require_api_key())
-        try:
-            reply, timing = stream_json(
-                client,
+        system = render("classify_email", {})
+        email_messages: list[MessageParam] = [
+            {"role": "user", "content": email}
+        ]
+        # The key is made from the request as it would be sent, so an
+        # email, a template or a model that differs gets a key of its own.
+        key = request_key(
+            json_request(
                 options.model,
                 options.max_tokens,
-                render("classify_email", {}),
-                [{"role": "user", "content": email}],
+                system,
+                email_messages,
                 CLASSIFICATION_SCHEMA,
             )
-        except APIError as error:
-            sys.exit(f"askkit: {error_message(error)}")
-        if reply is None:
-            print(f"Time:          {timing_line(timing, cancelled=True)}")
-            sys.exit(f"askkit: {CANCELLED}")
-        response = reply
-        warning = stop_warning(response, "sort this email into a queue")
-        if warning is not None:
-            print_calls([response], options.model)
-            print_times([timing])
-            sys.exit(f"askkit: {warning}")
+        )
+        kept = None
+        if not options.fresh:
+            kept = kept_answer(CACHE_FOLDER, key, now())
+        email_timing: Timing | None = None
+        if kept is None:
+            response, email_timing = call_json(
+                options.model,
+                options.max_tokens,
+                system,
+                email_messages,
+                CLASSIFICATION_SCHEMA,
+                "sort this email into a queue",
+            )
+        else:
+            response = kept.response
+        # A kept answer goes through the same checks as a new one: they
+        # cost nothing, and they may have changed since it was stored.
         try:
             classification, change = check_classification(
                 answer_text(response)
             )
         except ValidationError as error:
-            print_calls([response], options.model)
-            print_times([timing])
+            print_answered(response, options.model, email_timing, kept)
             sys.exit(f"askkit: {classification_error(error)}")
+        if kept is None:
+            keep_answer(CACHE_FOLDER, key, response, now())
         print(classification.model_dump_json(indent=2))
         print()
-        print_calls([response], options.model)
-        print_times([timing])
+        print_answered(response, options.model, email_timing, kept)
         if left_out:
             print(f"Left out:      {left_out} quoted lines")
         if change is not None:
@@ -989,46 +1068,53 @@ def main(arguments: list[str] | None = None) -> None:
         except ValueError as error:
             # Not a PDF: stopped before a call the API would reject.
             sys.exit(f"askkit: {error}")
-        client = Anthropic(api_key=require_api_key())
-        try:
-            reply, timing = stream_json(
-                client,
+        system = render("read_invoice", {})
+        invoice_messages: list[MessageParam] = [
+            {"role": "user", "content": [document]}
+        ]
+        key = request_key(
+            json_request(
                 options.model,
                 options.max_tokens,
-                render("read_invoice", {}),
-                [{"role": "user", "content": [document]}],
+                system,
+                invoice_messages,
                 INVOICE_SCHEMA,
             )
-        except APIError as error:
-            sys.exit(f"askkit: {error_message(error)}")
-        if reply is None:
-            print(f"Time:          {timing_line(timing, cancelled=True)}")
-            sys.exit(f"askkit: {CANCELLED}")
-        response = reply
-        warning = stop_warning(response, "read this invoice")
-        if warning is not None:
-            print_calls([response], options.model)
-            print_times([timing])
-            sys.exit(f"askkit: {warning}")
+        )
+        kept = None
+        if not options.fresh:
+            kept = kept_answer(CACHE_FOLDER, key, now())
+        invoice_timing: Timing | None = None
+        if kept is None:
+            response, invoice_timing = call_json(
+                options.model,
+                options.max_tokens,
+                system,
+                invoice_messages,
+                INVOICE_SCHEMA,
+                "read this invoice",
+            )
+        else:
+            response = kept.response
         try:
             invoice = Invoice.model_validate_json(answer_text(response))
         except ValidationError as error:
-            print_calls([response], options.model)
-            print_times([timing])
+            print_answered(response, options.model, invoice_timing, kept)
             sys.exit(f"askkit: {invoice_error(error)}")
         problems = invoice_faults(invoice)
         if problems:
             # A misread number or an invoice that is wrong itself: the
-            # check cannot tell which, so a person reads the PDF.
-            print_calls([response], options.model)
-            print_times([timing])
+            # check cannot tell which, so a person reads the PDF. Nothing
+            # is kept, so the next run asks again.
+            print_answered(response, options.model, invoice_timing, kept)
             sys.exit(
                 f"askkit: {'; '.join(problems)}; a person checks the invoice"
             )
+        if kept is None:
+            keep_answer(CACHE_FOLDER, key, response, now())
         print(invoice.model_dump_json(indent=2))
         print()
-        print_calls([response], options.model)
-        print_times([timing])
+        print_answered(response, options.model, invoice_timing, kept)
         return
 
     if options.command == "ask":
