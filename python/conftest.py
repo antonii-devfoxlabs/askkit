@@ -12,12 +12,16 @@ import pytest
 def steady_clock(monkeypatch: pytest.MonkeyPatch) -> None:
     # A real clock would print a different time on every run. This one
     # moves 0.42 s each time AskKit reads it, so a streamed answer shows
-    # its first token at 0.42 s and ends at 0.84 s.
+    # its first token at 0.42 s and ends at 0.84 s. The CLI's clock,
+    # which askkit inbox times each call on, moves the same steps on a
+    # count of its own, so the two never take each other's readings.
     readings = count(start=0.0, step=0.42)
     monkeypatch.setattr("askkit.ask.perf_counter", lambda: next(readings))
     monkeypatch.setattr(
         "askkit.structured.perf_counter", lambda: next(readings)
     )
+    cli_readings = count(start=0.0, step=0.42)
+    monkeypatch.setattr("askkit.cli.perf_counter", lambda: next(cli_readings))
 
 
 @pytest.fixture(autouse=True)

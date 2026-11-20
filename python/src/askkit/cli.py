@@ -2,7 +2,7 @@ import argparse
 import asyncio
 import json
 import sys
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime
 from functools import partial
 from pathlib import Path
@@ -101,8 +101,9 @@ from askkit.inbox import (
     duration_text,
     pace_text,
     queue_counts,
+    rate_text,
     read_inbox,
-    rounds,
+    run_rate,
     waiting_share,
     whole_job_seconds,
 )
@@ -539,8 +540,8 @@ async def sort_email(
     system: str,
 ) -> Message:
     # One email's call, as classify sends it. await hands control back
-    # while the answer is on its way, so the other emails of the round
-    # are sent and waited on meanwhile.
+    # while the answer is on its way, so other emails are sent and
+    # waited on meanwhile.
     cleaned, _ = clean_email(email.email)
     return await ask_json(
         client,
@@ -552,48 +553,83 @@ async def sort_email(
     )
 
 
+@dataclass
+class InboxRun:
+    # What every email's coroutine of one run shares: the places, the
+    # first rejected request, and each answered call's seconds and the
+    # input tokens a rate limit counts for it.
+    limit: asyncio.Semaphore
+    rejected: list[tuple[InboxEmail, APIError]]
+    seconds: list[float]
+    counted_tokens: list[int]
+
+
+async def sort_one(
+    client: AsyncAnthropic,
+    email: InboxEmail,
+    run: InboxRun,
+    options: argparse.Namespace,
+    system: str,
+) -> tuple[Message, str] | None:
+    # One email, sent once it holds one of the --at-once places. async
+    # with waits until a place is free, and gives the place back when
+    # the block ends, however it ends: the next email goes out then.
+    async with run.limit:
+        if run.rejected:
+            # A request was rejected: the emails still waiting for a
+            # place are not sent.
+            return None
+        start = perf_counter()
+        try:
+            response = await sort_email(
+                client, email, options.model, options.max_tokens, system
+            )
+        except APIError as error:
+            run.rejected.append((email, error))
+            return None
+        run.seconds.append(perf_counter() - start)
+    usage = response.usage
+    run.counted_tokens.append(
+        usage.input_tokens + (usage.cache_creation_input_tokens or 0)
+    )
+    queue, line = classify_line(
+        email, response, "sort this email into a queue"
+    )
+    print(line)
+    return response, queue
+
+
 async def sort_inbox(
     client: AsyncAnthropic,
     chosen: list[InboxEmail],
     options: argparse.Namespace,
     system: str,
-) -> tuple[list[Message], list[str]]:
-    # The emails in rounds of --at-once: each round is sent together
-    # with asyncio.gather, and the next starts once all its answers are
-    # in. gather gives the answers back in the order of the emails, so
-    # the lines come out in the order of the file.
-    task = "sort this email into a queue"
-    responses: list[Message] = []
-    queues: list[str] = []
+) -> tuple[list[Message], list[str], InboxRun]:
+    # Every email goes to gather at once, but a semaphore of --at-once
+    # places lets only that many calls wait for an answer at a time: the
+    # moment one answers, its place goes to the next email. A line
+    # prints as its answer comes; gather still returns the answers in
+    # the order of the file.
+    run = InboxRun(asyncio.Semaphore(options.at_once), [], [], [])
     try:
-        for group in rounds(chosen, options.at_once):
-            # return_exceptions=True: a rejected request takes its own
-            # place in the list, so the run can name its email.
-            answers = await asyncio.gather(
-                *[
-                    sort_email(
-                        client,
-                        email,
-                        options.model,
-                        options.max_tokens,
-                        system,
-                    )
-                    for email in group
-                ],
-                return_exceptions=True,
-            )
-            for email, answer in zip(group, answers, strict=True):
-                if isinstance(answer, APIError):
-                    sys.exit(f"askkit: {email.id}: {error_message(answer)}")
-                if isinstance(answer, BaseException):
-                    raise answer
-                responses.append(answer)
-                queue, line = classify_line(email, answer, task)
-                queues.append(queue)
-                print(line)
+        results = await asyncio.gather(
+            *[
+                sort_one(client, email, run, options, system)
+                for email in chosen
+            ]
+        )
     finally:
         await client.close()
-    return responses, queues
+    if run.rejected:
+        email, error = run.rejected[0]
+        sys.exit(f"askkit: {email.id}: {error_message(error)}")
+    responses: list[Message] = []
+    queues: list[str] = []
+    for result in results:
+        if result is not None:
+            responses.append(result[0])
+            queues.append(result[1])
+    return responses, queues, run
 
 
 def run_inbox(options: argparse.Namespace) -> None:
@@ -630,7 +666,7 @@ def run_inbox(options: argparse.Namespace) -> None:
     client = AsyncAnthropic(api_key=require_api_key())
     clocks = Clocks()
     try:
-        responses, queues = asyncio.run(
+        responses, queues, run = asyncio.run(
             sort_inbox(client, chosen, options, system)
         )
     except KeyboardInterrupt:
@@ -650,11 +686,13 @@ def run_inbox(options: argparse.Namespace) -> None:
         f"Waiting:       {waiting_share(times):.1%} of it; AskKit's own"
         f" work took {times.cpu:.2f} s"
     )
+    rate = run_rate(run.seconds, run.counted_tokens, options.at_once)
+    print(f"Rate:          {rate_text(rate)}")
     if done < len(emails):
         # The label is as wide as every other one: "All 1,000:" and
         # its spaces make 15 characters.
         label = f"All {len(emails):,}:"
-        whole = whole_job_seconds(times, done, len(emails), options.at_once)
+        whole = whole_job_seconds(run.seconds, len(emails), options.at_once)
         print(f"{label:<15}{duration_text(whole)}, {pace}")
 
 
@@ -775,7 +813,8 @@ def main(arguments: list[str] | None = None) -> None:
     inbox_command.add_argument("--max-tokens", type=int, default=1000)
     # Try the first few emails, and their times, before paying for all.
     inbox_command.add_argument("--first", type=int)
-    # How many calls wait at once: a round of them, sent together.
+    # How many calls may wait for an answer at once: the semaphore's
+    # places. The next email goes out the moment one answers.
     inbox_command.add_argument("--at-once", type=int, default=10)
     read_command = commands.add_parser(
         "read", help="take the fields out of an invoice PDF, as JSON"

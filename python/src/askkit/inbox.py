@@ -70,24 +70,44 @@ def waiting_share(times: JobTimes) -> float:
     return max(times.wall - times.cpu, 0.0) / times.wall
 
 
-def rounds(emails: list[InboxEmail], at_once: int) -> list[list[InboxEmail]]:
-    # The emails in groups of at_once, in the order of the file: a group
-    # is sent together, and the next one starts once all its answers are
-    # in. The last group holds what is left.
-    groups: list[list[InboxEmail]] = []
-    for start in range(0, len(emails), at_once):
-        groups.append(emails[start : start + at_once])
-    return groups
-
-
 def whole_job_seconds(
-    times: JobTimes, done: int, total: int, at_once: int
+    call_seconds: list[float], total: int, at_once: int
 ) -> float:
-    # The rounds done so far, at the pace they went, for every round of
-    # the file: a round takes about one wait, however many it holds.
-    rounds_done = math.ceil(done / at_once)
-    rounds_total = math.ceil(total / at_once)
-    return times.wall / rounds_done * rounds_total
+    # at_once calls wait at all times, so each of the at_once places
+    # answers its share of the file one email after another, each about
+    # as long as an average call. One at a time, that is every email.
+    average = sum(call_seconds) / len(call_seconds)
+    return average * math.ceil(total / at_once)
+
+
+@dataclass(frozen=True)
+class Rate:
+    # What a long run at this --at-once sends a minute, in the units the
+    # API's rate limits count: requests, and input tokens.
+    requests: float
+    input_tokens: float
+
+
+def run_rate(
+    call_seconds: list[float], counted_tokens: list[int], at_once: int
+) -> Rate:
+    # at_once places, each sending its next request the moment its call
+    # answers: a place sends 60 / average seconds requests a minute.
+    # counted_tokens are the input tokens a rate limit counts per call.
+    average_seconds = sum(call_seconds) / len(call_seconds)
+    requests = at_once * 60 / average_seconds
+    average_tokens = sum(counted_tokens) / len(counted_tokens)
+    return Rate(requests, requests * average_tokens)
+
+
+def rate_text(rate: Rate) -> str:
+    # Rounded the way a rate limit is written: whole requests, and input
+    # tokens to the nearest hundred.
+    tokens = round(rate.input_tokens, -2)
+    return (
+        f"about {rate.requests:,.0f} requests, {tokens:,.0f} input tokens"
+        " a minute"
+    )
 
 
 def pace_text(at_once: int) -> str:
@@ -99,6 +119,8 @@ def pace_text(at_once: int) -> str:
 
 def duration_text(seconds: float) -> str:
     # Rounded the way a person plans: "about 24 minutes".
+    if seconds < 1.5:
+        return "about 1 second"
     if seconds < 90:
         return f"about {round(seconds)} seconds"
     minutes = seconds / 60

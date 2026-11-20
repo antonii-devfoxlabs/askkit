@@ -704,21 +704,24 @@ cd python
 uv run askkit inbox samples/inbox.csv --first 12
 ```
 
-The calls go out on the SDK's async client, `AsyncAnthropic`, in rounds
-of `--at-once N` (10 unless you say otherwise): `asyncio.gather` sends a
-round's emails together, so their waits overlap, and the next round
-starts once all its answers are in. `--at-once 1` sends one at a time.
+The calls go out on the SDK's async client, `AsyncAnthropic`. A
+semaphore of `--at-once N` places (10 unless you say otherwise) lets at
+most N calls wait for an answer at a time: the moment one answers, its
+place goes to the next email, so N calls are waiting all the time and
+none waits for a slower neighbour. `--at-once 1` sends one at a time.
 The answers are not streamed, so `--max-tokens` may not ask for more
 than a call can write in ten minutes.
 
-It prints each email's queue, in the order of the file, then the run:
+It prints each email's queue the moment its answer comes, then the run:
 the tokens and the cost, the time in all and per email, the share of
 that time AskKit spent waiting (the wall clock, `perf_counter`, against
-the CPU clock, `process_time`), and how long the whole file would take
-at that pace. An answer that stopped early or fails its check goes to a
-person, and the run goes on; a rejected request stops it and names its
-email. Every call is a line of the log, under the command `inbox`, with
-its own time.
+the CPU clock, `process_time`), the rate a long run at this `--at-once`
+sends (requests and input tokens a minute, the units of the API's rate
+limits, to compare with your tier's), and how long the whole file would
+take. An answer that stopped early or fails its check goes to a person,
+and the run goes on; a rejected request stops it, sends no email still
+waiting for a place, and names its email. Every call is a line of the
+log, under the command `inbox`, with its own time.
 
 ## The models AskKit calls, and when each retires
 
