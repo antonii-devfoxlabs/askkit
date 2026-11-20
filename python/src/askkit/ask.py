@@ -14,6 +14,7 @@ from anthropic.types import (
 )
 
 from askkit.caching import CACHE, cached_system
+from askkit.calllog import log_call
 from askkit.prices import PRICES
 from askkit.server_tools import server_line
 
@@ -41,6 +42,8 @@ def ask(
     effort: Effort | None = None,
     history: list[MessageParam] | None = None,
 ) -> Message:
+    # Not logged here: askkit answer calls this through its retries, and
+    # only its caller, send_to, knows how many came before the answer.
     return client.messages.create(
         model=model,
         max_tokens=max_tokens,
@@ -82,13 +85,14 @@ def stream_answer(
     # mid_line: text was printed and its line not ended yet.
     mid_line = False
     # perf_counter: a clock for durations, which never goes back.
+    sent = messages_for(question, history)
     start = perf_counter()
     try:
         with client.messages.stream(
             model=model,
             max_tokens=max_tokens,
             system=cached_system(system),
-            messages=messages_for(question, history),
+            messages=sent,
             output_config=effort_config(effort),
             cache_control=CACHE if cache_conversation else omit,
             tools=omit if tools is None else tools,
@@ -111,7 +115,9 @@ def stream_answer(
                         print(line, flush=True)
                         mid_line = False
             response = stream.get_final_message()
-            return response, Timing(first_token, perf_counter() - start)
+            total = perf_counter() - start
+            log_call(response, model, total, system, sent, stream.request_id)
+            return response, Timing(first_token, total)
     except KeyboardInterrupt:
         # Ctrl-C while the answer streams. Leaving the with block closed
         # the connection, so no more of the answer comes.

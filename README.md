@@ -581,6 +581,31 @@ The second run prints the same invoice, then
 The eval never reads the cache: it calls the model through its own
 functions, so two runs of it are two samples.
 
+## Every call, in a log
+
+Every call AskKit makes to a model is written down the moment its answer
+arrives, before it is checked: one line of JSON a call in
+`.askkit-log/calls-<day>.jsonl` in the folder you run AskKit from, with
+the command, the model, the tokens (plain, read from the cache and
+written to it, and out), the seconds, the cost at that day's prices, the
+stop reason, the retries before it and the API's request ID. The line
+holds no word of the question or the answer. `--log-content`, given
+before the command, also keeps what was sent and what came back, in
+`.askkit-log/content-<day>.jsonl`, for 7 days (`CONTENT_MAX_AGE` in
+`python/src/askkit/calllog.py`); an image or a PDF is named, never
+copied. A kept answer from `.askkit-cache/` makes no call and no line.
+The folder is left out of Git. `askkit day` adds a day up, by command and
+by model; a day is a UTC day:
+
+```bash
+cd python
+uv run askkit --log-content ask "What is 18% of 4,417?"
+uv run askkit day
+uv run askkit day 2026-11-20
+```
+
+The eval calls the model through its own functions and logs nothing.
+
 ## Sending a ticket to a larger model
 
 Claude Sonnet 5.5 costs twenty times Claude Haiku 5.5 a token, so
@@ -926,6 +951,14 @@ test, as the thinking count of `ask` did.
   them, `transcribe` turns a voice message into text at OpenAI, and
   `estimate` prices an image, a PDF or a recording and stops at the
   API's limits before a call.
+- `m10`, end of Module 10 (Cost, Speed and Reliability): `costs` prices a
+  month by feature; prompt caching on the parts every call repeats;
+  `extract --escalate-to` sends a retry to a larger model; `answer`
+  retries with backoff, a deadline and a timeout, and falls back to
+  another model or provider; every model has a retirement date that
+  stops or warns before a call; `read` and `classify` keep the answers
+  they paid for; every call is logged with its model, tokens, latency
+  and cost, and `day` adds up what a day cost.
 
 ## Layout
 
@@ -983,6 +1016,7 @@ test, as the thinking count of `ask` did.
     AskKit waits before each retry, and the timeout of `askkit answer`.
   - `src/askkit/costmodel.py`: a cost model of the app's features, and
     what each one costs a month.
+  - `src/askkit/calllog.py`: the log of every call, and a day added up.
   - `samples/`: images, an invoice PDF, a voice message and a month of
     uses made for the course, with invented data.
   - `notebooks/`: notebooks for exploring, saved without outputs.

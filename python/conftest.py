@@ -24,3 +24,15 @@ def own_cache_folder(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     # A test never reads or writes the response cache of the folder it
     # runs from: an answer kept by one test would answer the next.
     monkeypatch.setattr("askkit.cli.CACHE_FOLDER", tmp_path / ".askkit-cache")
+
+
+@pytest.fixture(autouse=True)
+def own_log_folder(
+    tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A test's calls are logged in a folder of their own, never in the
+    # log of the folder it runs from, nor in the test's tmp_path, which
+    # some tests expect to stay empty; a run a test started ends with it.
+    log_folder = tmp_path_factory.mktemp("log") / ".askkit-log"
+    monkeypatch.setattr("askkit.cli.LOG_FOLDER", log_folder)
+    monkeypatch.setattr("askkit.calllog.current", None)

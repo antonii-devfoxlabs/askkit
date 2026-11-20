@@ -7,3 +7,4 @@ __pycache__/
 .ipynb_checkpoints/
 memory.json
 .askkit-cache/
+.askkit-log/

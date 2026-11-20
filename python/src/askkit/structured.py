@@ -7,6 +7,7 @@ from anthropic import Anthropic
 from anthropic.types import Message, MessageParam
 
 from askkit.ask import Timing
+from askkit.calllog import log_call
 
 
 def settled_fields(text: str) -> dict[str, Any]:
@@ -83,7 +84,16 @@ def stream_json(
                             file=sys.stderr,
                         )
             response = stream.get_final_message()
-            return response, Timing(first_token, perf_counter() - start)
+            total = perf_counter() - start
+            log_call(
+                response,
+                model,
+                total,
+                system,
+                messages,
+                stream.request_id,
+            )
+            return response, Timing(first_token, total)
     except KeyboardInterrupt:
         # Leaving the with block closed the connection: no more comes.
         return None, Timing(first_token, perf_counter() - start)

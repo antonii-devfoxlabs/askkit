@@ -1,8 +1,10 @@
+from time import perf_counter
 from typing import Literal
 
 from anthropic import Anthropic
-from anthropic.types import Message
+from anthropic.types import Message, MessageParam
 
+from askkit.calllog import log_call, request_id_of
 from askkit.history import SavedMessage
 from askkit.prompts import render
 
@@ -48,13 +50,21 @@ def summarise(
     request = render(
         "fold_turns", {"summary": summary, "turns": transcript(folded)}
     )
-    return client.messages.create(
+    system = render("summarise_turns", {})
+    messages: list[MessageParam] = [{"role": "user", "content": request}]
+    start = perf_counter()
+    response = client.messages.create(
         model=model,
         max_tokens=SUMMARY_MAX_TOKENS,
-        system=render("summarise_turns", {}),
-        messages=[{"role": "user", "content": request}],
+        system=system,
+        messages=messages,
         output_config={"effort": "low"},
     )
+    seconds = perf_counter() - start
+    log_call(
+        response, model, seconds, system, messages, request_id_of(response)
+    )
+    return response
 
 
 def with_summary(system: str, summary: str) -> str:

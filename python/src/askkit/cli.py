@@ -5,12 +5,14 @@ from dataclasses import replace
 from datetime import UTC, date, datetime
 from functools import partial
 from pathlib import Path
+from time import perf_counter
 from typing import Any
 
 import openai
 from anthropic import Anthropic, APIError, Timeout
 from anthropic.types import Message, MessageParam, ToolUnionParam
 from openai import OpenAI
+from openai.types.audio import Transcription
 from pydantic import ValidationError
 
 from askkit.analysis import fault_lines
@@ -37,6 +39,17 @@ from askkit.audio import (
     transcription_cost,
 )
 from askkit.budget import DEFAULT_BUDGET, budget_fault
+from askkit.calllog import (
+    LOG_FOLDER,
+    LoggedCall,
+    clock,
+    day_calls,
+    day_lines,
+    log_call,
+    request_id_of,
+    start_log,
+    write_call,
+)
 from askkit.chat import STOP, chat
 from askkit.classify import (
     CLASSIFICATION_SCHEMA,
@@ -201,10 +214,16 @@ def send_to(
     # its tries. A Claude model goes through AskKit's retry policy: each
     # retry is added to tried, and the number of tries this model made to
     # tries_made, so a message names the last model's tries, not all.
+    sent: list[MessageParam] = [{"role": "user", "content": question}]
+    start = perf_counter()
     if model in OPENAI_MODELS and openai_client is not None:
-        return ask_openai(
+        response = ask_openai(
             openai_client, question, model, max_tokens, ASK_SYSTEM
         )
+        seconds = perf_counter() - start
+        request_id = request_id_of(response)
+        log_call(response, model, seconds, ASK_SYSTEM, sent, request_id)
+        return response
     # One question's call is retried, never the run: the answers before
     # it are not asked for, or paid for, again. partial(ask, ...) is ask
     # with its arguments filled in, a call with_retries can make as often
@@ -212,10 +231,54 @@ def send_to(
     call = partial(ask, client, question, model, max_tokens, ASK_SYSTEM)
     this_model: list[Retry] = []
     try:
-        return with_retries(call, policy, this_model)
+        response = with_retries(call, policy, this_model)
     finally:
         tried.extend(this_model)
         tries_made.append(len(this_model) + 1)
+    # Logged here, not in ask(): only here are the retries known. The
+    # seconds run from the first try, so the waits between tries count,
+    # as they did for whoever waited for the answer.
+    log_call(
+        response,
+        model,
+        perf_counter() - start,
+        ASK_SYSTEM,
+        sent,
+        request_id_of(response),
+        retries=len(this_model),
+    )
+    return response
+
+
+def log_transcription(
+    transcript: Transcription, data: bytes, seconds: float
+) -> None:
+    # A transcription is a call too, at another provider, priced by the
+    # minute. Only a WAV gives its length, so another file's cost is
+    # logged as unknown rather than guessed.
+    usage = transcript.usage
+    input_tokens = 0
+    output_tokens = 0
+    if usage is not None and usage.type == "tokens":
+        input_tokens = usage.input_tokens
+        output_tokens = usage.output_tokens
+    length = audio_seconds(data)
+    cost = None if length is None else transcription_cost(length)
+    call = LoggedCall(
+        at=clock(),
+        command="transcribe",
+        model=TRANSCRIBE_MODEL,
+        input_tokens=input_tokens,
+        cache_read=0,
+        cache_written=0,
+        output_tokens=output_tokens,
+        seconds=round(seconds, 3),
+        cost=cost,
+        stop_reason=None,
+        retries=0,
+        request_id=request_id_of(transcript),
+    )
+    write_call(call, "[audio]", transcript.text)
 
 
 def print_calls(
@@ -421,6 +484,11 @@ FRESH_HELP = "ask the model even when an answer to this request is kept"
 
 def main(arguments: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="askkit")
+    parser.add_argument(
+        "--log-content",
+        action="store_true",
+        help="also log what each call sent and what came back, for a week",
+    )
     commands = parser.add_subparsers(dest="command", required=True)
     estimate = commands.add_parser(
         "estimate", help="estimate what sending a file would cost"
@@ -444,6 +512,10 @@ def main(arguments: list[str] | None = None) -> None:
     )
     costs_command.add_argument("file", type=Path)
     commands.add_parser("key", help="check that AskKit finds your API key")
+    day_command = commands.add_parser(
+        "day", help="what one day's calls cost, from the log"
+    )
+    day_command.add_argument("date", nargs="?", type=date.fromisoformat)
     models_command = commands.add_parser(
         "models", help="list the models AskKit calls and when each retires"
     )
@@ -583,6 +655,8 @@ def main(arguments: list[str] | None = None) -> None:
     )
     options = parser.parse_args(arguments)
     require_current(models_called(options), today())
+    # Every call from here on is logged; what was sent only on request.
+    start_log(LOG_FOLDER, options.command, options.log_content)
 
     if options.command == "models":
         # The dates AskKit acts on, from models.py; no call unless --live.
@@ -606,6 +680,25 @@ def main(arguments: list[str] | None = None) -> None:
             problems.extend(live_changes())
         if problems:
             sys.exit("askkit: " + "\naskkit: ".join(problems))
+        return
+
+    if options.command == "day":
+        # No model call: the day's log, added up. A day is a UTC day, as
+        # the log's times are.
+        day = options.date or clock().date()
+        none_logged = f"askkit: no calls logged on {day.isoformat()} (UTC)"
+        try:
+            logged = day_calls(LOG_FOLDER, day)
+        except FileNotFoundError:
+            sys.exit(none_logged)
+        except ValueError:
+            # A line that is not JSON, or not a LoggedCall: both are
+            # ValueErrors, and neither is a log AskKit wrote.
+            sys.exit(f"askkit: the log of {day.isoformat()} is not AskKit's")
+        if not logged:
+            sys.exit(none_logged)
+        for line in day_lines(logged, day):
+            print(line)
         return
 
     if options.command == "costs":
@@ -639,12 +732,14 @@ def main(arguments: list[str] | None = None) -> None:
                 " OpenAI); put your OpenAI key after the = in .env"
             )
         openai_client = OpenAI(api_key=openai_key)
+        start = perf_counter()
         try:
             transcript = transcribe(
                 openai_client, options.file, data, TRANSCRIBE_MODEL
             )
         except openai.APIError as error:
             sys.exit(f"askkit: {openai_error(error)}")
+        log_transcription(transcript, data, perf_counter() - start)
         print(transcript.text)
         print()
         print(f"Model:         {TRANSCRIBE_MODEL}")
