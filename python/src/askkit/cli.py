@@ -759,7 +759,8 @@ def run_batch(options: argparse.Namespace) -> None:
     try:
         batch = client.messages.batches.retrieve(options.batch_id)
         while options.wait and batch.processing_status != "ended":
-            print(f"Status:        {status_text(batch)}", file=sys.stderr)
+            status = status_text(batch)
+            print(f"Status:        {status}", file=sys.stderr)
             sleep(POLL_SECONDS)
             batch = client.messages.batches.retrieve(options.batch_id)
         if batch.processing_status != "ended":
