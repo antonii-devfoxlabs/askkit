@@ -310,9 +310,9 @@ def models_called(options: argparse.Namespace) -> list[str]:
 
 def require_current(models: list[str], on: date) -> None:
     # Every model of the command is checked before any call, the last
-    # one of a fallback chain too: a retired model would fail every
-    # request with a 404, and a fallback does not hide that (lesson
-    # 10.5). A model that retires soon still runs, and is named.
+    # one of a fallback chain too: a retired model fails every request,
+    # and a chain never hands a rejected request on (lesson 10.5). A
+    # model that retires soon still runs, and is named.
     for model in models:
         fault = retirement_fault(model, on)
         if fault is not None:
