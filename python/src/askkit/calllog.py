@@ -123,7 +123,9 @@ def logged_call(
     return LoggedCall(
         at=at,
         command=command,
-        model=response.model,
+        # The model AskKit asked and prices the call at, so the name and
+        # the cost always agree.
+        model=model,
         input_tokens=usage.input_tokens,
         cache_read=usage.cache_read_input_tokens or 0,
         cache_written=usage.cache_creation_input_tokens or 0,

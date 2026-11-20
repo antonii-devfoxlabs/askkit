@@ -235,9 +235,10 @@ def send_to(
     finally:
         tried.extend(this_model)
         tries_made.append(len(this_model) + 1)
-    # Logged here, not in ask(): only here are the retries known. The
-    # seconds run from the first try, so the waits between tries count,
-    # as they did for whoever waited for the answer.
+    # Logged here, not in ask(): only here are the retries known. tried
+    # holds this question's retries on every model of the chain so far,
+    # so a fallback's line keeps the retries made before it. The seconds
+    # run from this model's first try, the waits between tries included.
     log_call(
         response,
         model,
@@ -245,7 +246,7 @@ def send_to(
         ASK_SYSTEM,
         sent,
         request_id_of(response),
-        retries=len(this_model),
+        retries=len(tried),
     )
     return response
 

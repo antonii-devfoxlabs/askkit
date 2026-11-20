@@ -371,3 +371,41 @@ def test_a_log_that_is_not_askkits_says_so(run_here: None) -> None:
     with pytest.raises(SystemExit) as stop:
         main(["day"])
     assert stop.value.code == "askkit: the log of 2026-11-20 is not AskKit's"
+
+
+def test_a_question_that_falls_back_logs_the_retries_before_it(
+    ask_set: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Haiku is overloaded twice, its tries are used up, and Sonnet answers.
+    # The line names the model that answered, the one its cost is priced
+    # at, and keeps the retry made on Haiku: before the fix it named the
+    # response's model and counted Sonnet's retries only, so a fallback
+    # day showed no retries at all.
+    monkeypatch.setattr("askkit.calllog.clock", lambda: MORNING)
+    steps: list[Step] = [
+        (200, answer_body(), {}),
+        (529, OVERLOADED, {}),
+        (529, OVERLOADED, {}),
+        (200, answer_body(), {}),
+    ]
+    answer_with(steps, monkeypatch, [], [])
+    main(
+        [
+            "answer",
+            str(ask_set),
+            "--tries",
+            "2",
+            "--fallback",
+            "claude-sonnet-5-5",
+            "--out",
+            "answers.json",
+        ]
+    )
+    calls = logged()
+    assert [call.model for call in calls] == [
+        "claude-haiku-5-5",
+        "claude-sonnet-5-5",
+    ]
+    assert [call.retries for call in calls] == [0, 1]
+    # 410 in and 52 out at Sonnet 5.5's $2 and $10 a million tokens.
+    assert calls[1].cost == pytest.approx(0.00134)
