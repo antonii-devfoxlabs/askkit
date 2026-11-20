@@ -2,6 +2,7 @@ import argparse
 import json
 import sys
 from dataclasses import replace
+from datetime import date
 from functools import partial
 from pathlib import Path
 
@@ -93,6 +94,18 @@ from askkit.loop import (
     tool_loop,
 )
 from askkit.memory import load_memory
+from askkit.models import (
+    CHECKED,
+    DEFAULT_MODEL,
+    LIFECYCLES,
+    claude_lifecycle,
+    lifecycle_change,
+    openai_lifecycle,
+    retirement_fault,
+    retirement_warning,
+    retires_text,
+    table_lines,
+)
 from askkit.pdfs import document_block, is_pdf
 from askkit.permissions import offered, permissions_for
 from askkit.prices import PRICES, SEARCH_PRICE
@@ -277,6 +290,69 @@ def print_times(timings: list[Timing]) -> None:
         print(f"Time:          {timing_line(timing)}")
 
 
+def today() -> date:
+    # The one place the CLI reads the date, so a test can set it.
+    return date.today()
+
+
+def models_called(options: argparse.Namespace) -> list[str]:
+    # The models a command will call, known before its first call.
+    if options.command == "transcribe":
+        return [TRANSCRIBE_MODEL]
+    if options.command == "answer":
+        return [options.model, *options.fallback]
+    if options.command == "extract" and options.escalate_to is not None:
+        return [options.model, options.escalate_to]
+    if options.command in ("ask", "chat", "extract", "classify", "read"):
+        return [options.model]
+    return []
+
+
+def require_current(models: list[str], on: date) -> None:
+    # Every model of the command is checked before any call, the last
+    # one of a fallback chain too: a retired model would fail every
+    # request with a 404, and a fallback does not hide that (lesson
+    # 10.5). A model that retires soon still runs, and is named.
+    for model in models:
+        fault = retirement_fault(model, on)
+        if fault is not None:
+            sys.exit(f"askkit: {fault}")
+    for model in models:
+        warning = retirement_warning(model, on)
+        if warning is not None:
+            print(f"askkit: warning: {warning}", file=sys.stderr)
+
+
+def live_changes() -> list[str]:
+    # What each provider says today, against the dates AskKit acts on.
+    # The table is not changed: a person reads the notice and updates
+    # its row.
+    client = Anthropic(api_key=require_api_key())
+    openai_key = load_api_key(OPENAI_KEY_NAME)
+    openai_client = None if openai_key is None else OpenAI(api_key=openai_key)
+    changes: list[str] = []
+    for model, pinned in LIFECYCLES.items():
+        try:
+            if pinned.provider == "Anthropic":
+                live = claude_lifecycle(client, model)
+            elif openai_client is not None:
+                live = openai_lifecycle(openai_client, model)
+            else:
+                print(
+                    f"Not checked:   {model} ({OPENAI_KEY_NAME} is not set)"
+                )
+                continue
+        except APIError as error:
+            sys.exit(f"askkit: {model}: {error_message(error)}")
+        except openai.APIError as error:
+            sys.exit(f"askkit: {model}: {openai_error(error)}")
+        print(f"Live:          {model}, {retires_text(live)}")
+        change = lifecycle_change(model, pinned, live)
+        if change is not None:
+            changes.append(change)
+    return changes
+
+
 def main(arguments: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="askkit")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -285,7 +361,7 @@ def main(arguments: list[str] | None = None) -> None:
     )
     estimate.add_argument("file", type=Path)
     estimate.add_argument(
-        "-m", "--model", choices=sorted(PRICES), default="claude-haiku-5-5"
+        "-m", "--model", choices=sorted(PRICES), default=DEFAULT_MODEL
     )
     estimate.add_argument("--output", type=int, default=500)
     estimate.add_argument("--calls", type=int, default=1)
@@ -302,10 +378,15 @@ def main(arguments: list[str] | None = None) -> None:
     )
     costs_command.add_argument("file", type=Path)
     commands.add_parser("key", help="check that AskKit finds your API key")
+    models_command = commands.add_parser(
+        "models", help="list the models AskKit calls and when each retires"
+    )
+    # Also ask each provider, to find a date models.py does not have yet.
+    models_command.add_argument("--live", action="store_true")
     ask_command = commands.add_parser("ask", help="ask a model a question")
     ask_command.add_argument("question")
     ask_command.add_argument(
-        "-m", "--model", choices=MODELS, default="claude-haiku-5-5"
+        "-m", "--model", choices=MODELS, default=DEFAULT_MODEL
     )
     ask_command.add_argument("--max-tokens", type=int, default=1000)
     ask_command.add_argument("--effort", choices=EFFORTS)
@@ -335,7 +416,7 @@ def main(arguments: list[str] | None = None) -> None:
         "chat", help="chat with a model until you type /exit"
     )
     chat_command.add_argument(
-        "-m", "--model", choices=MODELS, default="claude-haiku-5-5"
+        "-m", "--model", choices=MODELS, default=DEFAULT_MODEL
     )
     chat_command.add_argument("--max-tokens", type=int, default=1000)
     chat_command.add_argument("--effort", choices=EFFORTS)
@@ -355,7 +436,7 @@ def main(arguments: list[str] | None = None) -> None:
     )
     extract.add_argument("file", type=Path)
     extract.add_argument(
-        "-m", "--model", choices=MODELS, default="claude-haiku-5-5"
+        "-m", "--model", choices=MODELS, default=DEFAULT_MODEL
     )
     extract.add_argument("--max-tokens", type=int, default=1000)
     extract.add_argument("--retries", type=int, default=1)
@@ -366,7 +447,7 @@ def main(arguments: list[str] | None = None) -> None:
     )
     classify.add_argument("file", type=Path)
     classify.add_argument(
-        "-m", "--model", choices=MODELS, default="claude-haiku-5-5"
+        "-m", "--model", choices=MODELS, default=DEFAULT_MODEL
     )
     classify.add_argument("--max-tokens", type=int, default=1000)
     read_command = commands.add_parser(
@@ -374,7 +455,7 @@ def main(arguments: list[str] | None = None) -> None:
     )
     read_command.add_argument("file", type=Path)
     read_command.add_argument(
-        "-m", "--model", choices=MODELS, default="claude-haiku-5-5"
+        "-m", "--model", choices=MODELS, default=DEFAULT_MODEL
     )
     read_command.add_argument("--max-tokens", type=int, default=1000)
     transcribe_command = commands.add_parser(
@@ -397,7 +478,7 @@ def main(arguments: list[str] | None = None) -> None:
         "-m",
         "--model",
         choices=[*MODELS, *OPENAI_MODELS],
-        default="claude-haiku-5-5",
+        default=DEFAULT_MODEL,
     )
     answer_command.add_argument("--max-tokens", type=int, default=1000)
     answer_command.add_argument(
@@ -433,6 +514,31 @@ def main(arguments: list[str] | None = None) -> None:
         "--cases", type=Path, default=Path("evals/extract/main")
     )
     options = parser.parse_args(arguments)
+    require_current(models_called(options), today())
+
+    if options.command == "models":
+        # The dates AskKit acts on, from models.py; no call unless --live.
+        for line in table_lines():
+            print(line)
+        print()
+        print(f"Default:       {DEFAULT_MODEL}")
+        print(
+            f"Checked:       {CHECKED}, on each provider's deprecations page"
+        )
+        on = today()
+        problems: list[str] = []
+        for model in LIFECYCLES:
+            fault = retirement_fault(model, on)
+            if fault is not None:
+                problems.append(fault)
+            warning = retirement_warning(model, on)
+            if warning is not None:
+                print(f"Warning:       {warning}")
+        if options.live:
+            problems.extend(live_changes())
+        if problems:
+            sys.exit("askkit: " + "\naskkit: ".join(problems))
+        return
 
     if options.command == "costs":
         # No model call: a file of features, each with its uses a month and

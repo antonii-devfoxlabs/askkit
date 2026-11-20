@@ -1,13 +1,14 @@
 from pydantic import ValidationError
 
 from askkit.extract import check_ticket, ticket_faults
+from askkit.models import DEFAULT_MODEL
 from askkit.rules import email_fault
 
 # The two models a ticket can go to: the small one first, every time,
 # and the large one only for an email the small one got visibly wrong.
 # Claude Sonnet 5.5 costs twenty times Claude Haiku 5.5 a token
 # (prices.py), so it is worth paying only where it changes the answer.
-SMALL_MODEL = "claude-haiku-5-5"
+SMALL_MODEL = DEFAULT_MODEL
 LARGE_MODEL = "claude-sonnet-5-5"
 
 

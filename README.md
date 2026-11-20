@@ -635,6 +635,28 @@ model that wrote it, the question's line names a fallback model, and a
 a fallback, answer the whole set with it first (`-m gpt-6-luna`) and
 grade it. `src/askkit/fallback.py` holds the chain.
 
+## The models AskKit calls, and when each retires
+
+Every model ID AskKit calls is a pinned snapshot, and the one every
+command starts with, `DEFAULT_MODEL`, is set in one place:
+`src/askkit/models.py`. The same file keeps, for each model, the day its
+provider retires it, read from each provider's deprecations page:
+
+```bash
+cd python
+uv run askkit models
+```
+
+A date shown as `not before` is only the earliest day the provider could
+retire the model. Once a provider announces the day, enter it in the
+model's row with the replacement it recommends. From then on every
+command that calls the model names the day on stderr, starting 60 days
+before it, and from that day stops before its first call, the last model
+of a `--fallback` chain included. `askkit models --live` also asks each
+provider's models endpoint (Anthropic's `lifecycle` and `retires_at`,
+OpenAI's `shutdown_date`) and exits with 1 when a row no longer matches.
+Before you move `DEFAULT_MODEL` to the replacement, run the eval on it.
+
 ## Prompts
 
 Every prompt AskKit sends is a template file in
@@ -924,6 +946,8 @@ test, as the thinking count of `ask` did.
     ticket goes to the large one.
   - `src/askkit/fallback.py`: when a question moves on to the next
     model of a chain, and OpenAI's answer in Claude's shape.
+  - `src/askkit/models.py`: the default model, and the day each model
+    AskKit calls retires.
   - `src/askkit/retry.py`: which failed calls are sent again, how long
     AskKit waits before each retry, and the timeout of `askkit answer`.
   - `src/askkit/costmodel.py`: a cost model of the app's features, and
