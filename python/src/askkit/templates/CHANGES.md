@@ -21,7 +21,8 @@ The system prompt sent with every question: AskKit's job and its rules.
 ## quote_request
 
 The user message for a question about documents: `$documents` first, then
-the request to quote, then `$question` last.
+the request to quote, then the question last (`$question` up to v2; from
+v3, a block of its own).
 
 - v1: the documents first and the question last; the model copies the
   sentences its answer rests on into `<quote>` tags before the
@@ -31,6 +32,10 @@ the request to quote, then `$question` last.
   applies was quoted, an exception to a rule included. With v1 the model
   quoted the general rule and missed the exception that overrode it, and
   every quote still passed the check.
+- v3: the same words as v2 without the question, which AskKit now sends
+  in a block of its own after them. The documents and the request stay
+  the same while you ask about them, so they end in a cache breakpoint
+  and the next question reads them from the cache (lesson 10.2).
 
 ## extract_ticket
 

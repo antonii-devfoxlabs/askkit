@@ -11,7 +11,7 @@ TEMPLATES = Path(__file__).parent / "templates"
 # The version of each prompt AskKit sends now.
 IN_USE = {
     "ask_system": 2,
-    "quote_request": 2,
+    "quote_request": 3,
     "extract_ticket": 2,
     "retry_ticket": 1,
     "classify_email": 1,

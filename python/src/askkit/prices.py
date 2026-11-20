@@ -18,6 +18,16 @@ LONG_PROMPT_PRICES: dict[str, dict[str, float]] = {
     "gpt-6-luna": {"over": 272_000, "input": 0.20, "output": 0.75},
 }
 
+# Prompt caching, the same Anthropic page, checked on 2026-11-20: a write
+# to the 5-minute cache (1.25 times the input price) and a read from it
+# (0.1 times). Over the long prompt step, both from the higher prices.
+CACHE_PRICES: dict[str, dict[str, float]] = {
+    "claude-haiku-5-5": {"write": 0.125, "read": 0.01},
+}
+LONG_PROMPT_CACHE_PRICES: dict[str, dict[str, float]] = {
+    "claude-haiku-5-5": {"write": 0.625, "read": 0.05},
+}
+
 # US dollars per search with Anthropic's web search tool, on top of the
 # tokens its results add: $10 per 1,000 searches, checked on 2026-11-18
 # on the same pricing page. A search that fails is not billed.

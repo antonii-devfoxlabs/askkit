@@ -1,3 +1,6 @@
+from anthropic.types import TextBlockParam
+
+from askkit.caching import CACHE
 from askkit.prompts import render
 
 # The words both prompts tell the model to write when it has no answer.
@@ -20,9 +23,34 @@ def documents_block(documents: dict[str, str]) -> str:
     return "\n".join(lines)
 
 
+def documents_request(documents: dict[str, str]) -> str:
+    return render("quote_request", {"documents": documents_block(documents)})
+
+
+def question_part(question: str) -> str:
+    return f"<question>\n{question}\n</question>"
+
+
 def with_documents(question: str, documents: dict[str, str]) -> str:
-    values = {"documents": documents_block(documents), "question": question}
-    return render("quote_request", values)
+    # The whole message as one text, for a history file and the eval: the
+    # same words, in the same order, as the two blocks below.
+    return documents_request(documents) + "\n\n" + question_part(question)
+
+
+def document_question(
+    question: str, documents: dict[str, str]
+) -> list[TextBlockParam]:
+    # The documents and the request to quote stay the same while you ask
+    # about them, so they end in a breakpoint and the next question reads
+    # them from the cache. Only the question changes; it goes last.
+    return [
+        {
+            "type": "text",
+            "text": documents_request(documents),
+            "cache_control": CACHE,
+        },
+        {"type": "text", "text": question_part(question)},
+    ]
 
 
 def flat(text: str) -> str:

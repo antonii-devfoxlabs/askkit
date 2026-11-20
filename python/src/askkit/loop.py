@@ -18,6 +18,7 @@ from askkit.ask import (
     messages_for,
     stream_answer,
 )
+from askkit.caching import cached
 from askkit.permissions import Permission, run_permitted
 from askkit.tools import tool_calls
 
@@ -90,7 +91,11 @@ def tool_loop(
     replies: list[Message] = []
     timings: list[Timing] = []
     sent = history
-    content: Content | None = question
+    # The question carries a breakpoint, so every later call reads the
+    # first call's input from the cache. The tool results do not: a
+    # result such as a page is written to the cache at 1.25 times the
+    # price, and the call that would read it is often never made.
+    content: Content | None = cached(question)
     rounds = 0
     pauses = 0
     while True:

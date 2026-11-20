@@ -9,6 +9,7 @@ from anthropic import Anthropic
 from anthropic.types import Message, ToolUseBlock
 from test_ask import replied
 
+from askkit.caching import cached
 from askkit.cli import main
 from askkit.fetch import FETCH
 from askkit.tools import (
@@ -333,7 +334,10 @@ def test_askkit_ask_runs_the_clock_and_sends_the_result_back(
     main(["ask", "What is today's date?"])
     assert len(sent) == 2
     question, turn, results = sent[1]["messages"]
-    assert question == {"role": "user", "content": "What is today's date?"}
+    assert question == {
+        "role": "user",
+        "content": cached("What is today's date?"),
+    }
     # The model's own turn goes back as it came, thinking included.
     assert turn["role"] == "assistant"
     assert [block["type"] for block in turn["content"]] == [

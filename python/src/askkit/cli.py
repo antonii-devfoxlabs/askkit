@@ -42,9 +42,10 @@ from askkit.classify import (
 from askkit.clean import clean_email
 from askkit.compare import compare_models
 from askkit.config import KEY_NAME, OPENAI_KEY_NAME, load_api_key, masked
-from askkit.cost import call_cost, error_cost
+from askkit.cost import call_cost, error_cost, prompt_tokens, usage_cost
 from askkit.costmodel import load_cost_model, month_costs, report_lines
 from askkit.documents import (
+    document_question,
     missing_quotes,
     quotes_in,
     unchecked,
@@ -149,15 +150,22 @@ def print_calls(
     # are added up, so a ticket asked for twice shows what both cost.
     input_tokens = 0
     output_tokens = 0
+    written = 0
+    read = 0
+    cost = 0.0
     thinking: int | None = None
     for response in responses:
-        input_tokens += response.usage.input_tokens
-        output_tokens += response.usage.output_tokens
+        usage = response.usage
+        input_tokens += prompt_tokens(usage)
+        output_tokens += usage.output_tokens
+        written += usage.cache_creation_input_tokens or 0
+        read += usage.cache_read_input_tokens or 0
+        # Call by call: each call's prompt decides its prices.
+        cost += usage_cost(model, usage)
         thought = thinking_tokens(response)
         if thought is not None:
             thinking = (thinking or 0) + thought
     last = responses[-1]
-    cost = call_cost(model, input_tokens, output_tokens)
     searched = searches(responses)
     # Searches are billed on top of the tokens their results add.
     cost += searched * SEARCH_PRICE
@@ -166,6 +174,10 @@ def print_calls(
     if thinking is not None:
         tokens += f" ({thinking:,} thinking)"
     print(f"Tokens:        {tokens}")
+    if read or written:
+        # How many of the input tokens the cache served, and how many
+        # this command wrote to it for the next calls.
+        print(f"Cache:         {read:,} read, {written:,} written")
     if searched:
         print(f"Searches:      {searched}, ${searched * SEARCH_PRICE:.2f}")
     print(f"Cost:          ${cost:.6f}")
@@ -774,9 +786,10 @@ def main(arguments: list[str] | None = None) -> None:
                 )
             documents[str(path)] = path.read_text(encoding="utf-8")
         question = options.question
+        content: Content = question
         if documents:
             question = with_documents(options.question, documents)
-        content: Content = question
+            content = document_question(options.question, documents)
         if options.image:
             if options.history is not None:
                 # A saved message holds text, and an image is not text.

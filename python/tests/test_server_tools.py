@@ -5,6 +5,7 @@ import pytest
 from anthropic.types import Message
 from test_tools import use_answers
 
+from askkit.caching import cached
 from askkit.cli import main
 from askkit.loop import MAX_PAUSES
 from askkit.server_tools import (
@@ -239,7 +240,10 @@ def test_a_paused_turn_goes_back_as_it_came(
     # No new message: the paused turn is the last one, as it came.
     assert last["role"] == "assistant"
     assert last["content"][-1]["id"] == SEARCH["id"]
-    assert sent[1]["messages"][-2] == {"role": "user", "content": QUESTION}
+    assert sent[1]["messages"][-2] == {
+        "role": "user",
+        "content": cached(QUESTION),
+    }
     # The same tools, so the search that waits can still run.
     assert sent[1]["tools"] == sent[0]["tools"]
     out = capsys.readouterr().out.splitlines()

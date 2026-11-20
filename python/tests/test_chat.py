@@ -36,6 +36,17 @@ OVERLOADED = {
 }
 
 
+def system_text(request: dict[str, Any]) -> str:
+    # A chat call sends its system prompt as one block with a cache
+    # breakpoint; a summary call sends a plain string.
+    system = request["system"]
+    if isinstance(system, str):
+        return system
+    [block] = system
+    assert block["cache_control"] == {"type": "ephemeral"}
+    return str(block["text"])
+
+
 def answering(
     sent: list[dict[str, Any]],
     replies: list[int | dict[str, Any]],
@@ -594,7 +605,7 @@ def test_drop_sends_the_turns_after_the_oldest(
     )
     assert sent[0]["messages"][0] == {"role": "user", "content": "Question 2"}
     assert len(sent[0]["messages"]) == 5
-    assert sent[0]["system"] == "Be brief."
+    assert system_text(sent[0]) == "Be brief."
     # The file keeps every turn: only the call leaves turn 1 out.
     assert len(history) == 8
     assert len(load_history(tmp_path / "chat.json")) == 8
@@ -658,13 +669,13 @@ def test_summarise_folds_all_but_the_last_two_turns(
     assert "User: Question 1\nAssistant: Answer 1" in request
     assert "User: Question 2\nAssistant: Answer 2" in request
     assert "Question 3" not in request
-    assert sent[0]["system"] == render("summarise_turns", {})
+    assert system_text(sent[0]) == render("summarise_turns", {})
     assert sent[0]["max_tokens"] == 4000
     assert sent[0]["output_config"] == {"effort": "low"}
     call = sent[1]
     assert call["messages"][0] == {"role": "user", "content": "Question 3"}
     assert len(call["messages"]) == 5
-    assert call["system"] == render(
+    assert system_text(call) == render(
         "earlier_turns", {"system": "Be brief.", "summary": SUMMARY}
     )
     assert len(history) == 10
@@ -741,7 +752,7 @@ def test_a_turn_within_the_budget_makes_no_summary(tmp_path: Path) -> None:
         needed=by_messages,
     )
     assert len(sent) == 1
-    assert sent[0]["system"] == "Be brief."
+    assert system_text(sent[0]) == "Be brief."
 
 
 def test_askkit_chat_takes_old_turns(
@@ -786,10 +797,10 @@ def test_a_note_holds_from_the_next_turn_on(tmp_path: Path) -> None:
         typed(MARIA, f"/remember {HAIKU}", FOLLOW_UP),
         counted=counted,
     )
-    assert sent[0]["system"] == "Be brief."
+    assert system_text(sent[0]) == "Be brief."
     remembered = with_memory("Be brief.", [HAIKU])
-    assert sent[1]["system"] == remembered
-    assert counted[1]["system"] == remembered
+    assert system_text(sent[1]) == remembered
+    assert system_text(counted[1]) == remembered
     assert load_memory(tmp_path / "memory.json") == [HAIKU]
 
 
@@ -797,14 +808,14 @@ def test_notes_from_an_earlier_chat_go_with_the_first_turn(
     tmp_path: Path,
 ) -> None:
     sent, _ = run_chat(tmp_path, [WRITTEN], typed(MARIA), notes=[HAIKU])
-    assert sent[0]["system"] == with_memory("Be brief.", [HAIKU])
+    assert system_text(sent[0]) == with_memory("Be brief.", [HAIKU])
 
 
 def test_a_forgotten_note_is_no_longer_sent(tmp_path: Path) -> None:
     sent, _ = run_chat(
         tmp_path, [WRITTEN], typed("/forget 1", MARIA), notes=[HAIKU]
     )
-    assert sent[0]["system"] == "Be brief."
+    assert system_text(sent[0]) == "Be brief."
     assert load_memory(tmp_path / "memory.json") == []
 
 
@@ -831,8 +842,8 @@ def test_the_notes_come_before_the_summary(tmp_path: Path) -> None:
         notes=[HAIKU],
     )
     # The summary call carries no notes: it only folds turns.
-    assert sent[0]["system"] == render("summarise_turns", {})
-    assert sent[1]["system"] == render(
+    assert system_text(sent[0]) == render("summarise_turns", {})
+    assert system_text(sent[1]) == render(
         "earlier_turns",
         {"system": with_memory("Be brief.", [HAIKU]), "summary": SUMMARY},
     )
@@ -850,7 +861,7 @@ def test_askkit_chat_reads_memory_json(
     main(["chat", "--history", "tuesday.json"])
     lines = capsys.readouterr().out.splitlines()
     assert lines[3] == "Memory:        1 note in memory.json"
-    assert sent[0]["system"] == with_memory(ASK_SYSTEM, [HAIKU])
+    assert system_text(sent[0]) == with_memory(ASK_SYSTEM, [HAIKU])
 
 
 def test_askkit_chat_takes_another_memory_file(

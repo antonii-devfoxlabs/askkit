@@ -535,6 +535,23 @@ prompt. `python/samples/month.json` is a month made up for the course:
 the uses are invented, and the tokens are those of the runs the lessons
 show.
 
+## What the cache saves
+
+Every call of `ask` sends the same tools and system prompt, and the
+second call of a tool loop sends the whole first one again. AskKit marks
+where that repeated opening ends with cache breakpoints: one on the
+system prompt (the tools come before it, so it keeps both), one after
+the documents of `--document`, and one on the question. Within 5
+minutes, a call that starts with the same bytes reads that opening from
+Anthropic's cache for a tenth of the input price; the first call writes
+it for 1.25 times the price. `askkit chat` lets the API move a
+breakpoint to the end of every call, so each turn reads the turns before
+it. A prompt under 512 tokens on Claude Haiku 5.5 is not cached at all.
+
+Every command that calls a model prints a `Cache:` line when the cache
+read or wrote anything, and its `Tokens:` and `Cost:` count each kind of
+input at its own price.
+
 ## Prompts
 
 Every prompt AskKit sends is a template file in
@@ -818,6 +835,8 @@ test, as the thinking count of `ask` did.
   - `src/askkit/audio.py`: a voice message turned into text at OpenAI:
     its format told by its first bytes, its length read from a WAV's
     header, and what the call cost.
+  - `src/askkit/caching.py`: the cache breakpoints AskKit puts on the
+    system prompt and the question.
   - `src/askkit/costmodel.py`: a cost model of the app's features, and
     what each one costs a month.
   - `samples/`: images, an invoice PDF, a voice message and a month of

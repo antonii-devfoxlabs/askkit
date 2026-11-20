@@ -37,6 +37,9 @@ RELEASED = {
     "quote_request.v2.txt": (
         "476a48c7d1346e43e4472aec0f61f4f032f606829d9095a07a3372959fe4614c"
     ),
+    "quote_request.v3.txt": (
+        "b7d00a753696ced0df90d46e3dc506e674bfbb093bfac0f6ee4a71712497b19c"
+    ),
     "retry_ticket.v1.txt": (
         "a88920196f5db7dd08eaee247474631854b76edfcd95408222ecbeb014b6af8c"
     ),
@@ -93,7 +96,7 @@ def test_every_tag_in_a_template_is_closed() -> None:
 
 def test_render_fills_every_placeholder() -> None:
     message = render(
-        "quote_request", {"documents": "<documents/>", "question": "Who?"}
+        "quote_request", {"documents": "<documents/>", "question": "Who?"}, 2
     )
     assert message.startswith("<documents/>\n\nAnswer the question below")
     assert message.endswith("<question>\nWho?\n</question>")
@@ -108,7 +111,7 @@ def test_render_reads_an_older_version_when_asked() -> None:
 
 def test_render_stops_on_a_missing_value() -> None:
     with pytest.raises(ValueError) as error:
-        render("quote_request", {"documents": "<documents/>"})
+        render("quote_request", {"documents": "<documents/>"}, 2)
     assert str(error.value) == (
         "quote_request v2 needs ['documents', 'question'],"
         " but was given ['documents']"

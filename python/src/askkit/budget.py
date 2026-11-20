@@ -2,6 +2,7 @@ from anthropic import Anthropic
 from anthropic.types import MessageParam
 
 from askkit.ask import messages_for
+from askkit.caching import CACHE, cached_system
 from askkit.limits import LIMITS
 
 # The most input tokens one call of askkit chat sends unless you give
@@ -35,12 +36,14 @@ def input_tokens(
     question: str,
     history: list[MessageParam],
 ) -> int:
-    # The same system prompt and messages the call will send, counted by
-    # the API without a call: free, and an estimate close to the bill.
+    # The same system prompt and messages the call will send, breakpoints
+    # included, counted by the API without a call: free, and an estimate
+    # close to the bill. The count is every token, cached or not.
     count = client.messages.count_tokens(
         model=model,
-        system=system,
+        system=cached_system(system),
         messages=messages_for(question, history),
+        cache_control=CACHE,
     )
     return count.input_tokens
 

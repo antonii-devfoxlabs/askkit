@@ -7,6 +7,7 @@ from pydantic import ValidationError
 from test_ask import fake_client, stopped_with, use_fake_client
 
 from askkit.ask import ask
+from askkit.caching import cached
 from askkit.cli import main
 from askkit.history import (
     SavedMessage,
@@ -162,7 +163,7 @@ def test_the_first_run_saves_the_question_and_the_answer(
     sent: list[dict[str, Any]] = []
     use_fake_client(monkeypatch, sent)
     main(["ask", MARIA, "--history", "chat.json"])
-    assert sent[0]["messages"] == [{"role": "user", "content": MARIA}]
+    assert sent[0]["messages"] == [{"role": "user", "content": cached(MARIA)}]
     lines = capsys.readouterr().out.splitlines()
     assert lines[-3:] == [
         "Stop reason:   end_turn",
@@ -186,10 +187,12 @@ def test_the_next_run_sends_the_whole_conversation(
     use_fake_client(monkeypatch, sent)
     main(["ask", MARIA, "--history", "chat.json"])
     main(["ask", FOLLOW_UP, "--history", "chat.json"])
+    # The history goes as it was saved, as text; only the new question
+    # carries the cache breakpoint.
     assert sent[1]["messages"] == [
         {"role": "user", "content": MARIA},
         {"role": "assistant", "content": ANSWER},
-        {"role": "user", "content": FOLLOW_UP},
+        {"role": "user", "content": cached(FOLLOW_UP)},
     ]
     lines = capsys.readouterr().out.splitlines()
     assert lines[-1] == "History:       4 messages in chat.json"

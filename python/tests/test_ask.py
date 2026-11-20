@@ -17,6 +17,7 @@ from askkit.ask import (
     thinking_tokens,
     timing_line,
 )
+from askkit.caching import cached, cached_system
 from askkit.cli import main
 from askkit.prompts import ASK_SYSTEM, render
 
@@ -283,7 +284,7 @@ def test_ask_prints_the_answer_and_its_cost(
         "Time:          first token 0.42 s, total 0.84 s",
     ]
     assert sent[0]["max_tokens"] == 1000
-    assert sent[0]["system"] == ASK_SYSTEM
+    assert sent[0]["system"] == cached_system(ASK_SYSTEM)
 
 
 def test_ask_takes_the_model_and_max_tokens(
@@ -386,12 +387,12 @@ def test_ask_reads_the_system_prompt_from_a_file(
     sent: list[dict[str, Any]] = []
     use_fake_client(monkeypatch, sent)
     main(["ask", "My lamp flickers.", "--system-file", "ticket.txt"])
-    assert sent[0]["system"] == (
+    assert sent[0]["system"] == cached_system(
         "You turn a customer's messages into a support ticket. Be brief.\n"
         "If the messages give no order number, write: no order number."
     )
     assert sent[0]["messages"] == [
-        {"role": "user", "content": "My lamp flickers."}
+        {"role": "user", "content": cached("My lamp flickers.")}
     ]
 
 
@@ -405,16 +406,16 @@ def test_the_system_prompt_sets_the_job_and_the_rules() -> None:
 def test_the_word_limit_leaves_copied_sentences_out() -> None:
     # The quote request asks for every sentence that applies; a limit that
     # counted them would leave the model a choice between the two rules.
-    request = render("quote_request", {"documents": "", "question": ""})
+    request = render("quote_request", {"documents": ""})
     assert "Sentences you copy from documents do not count" in ASK_SYSTEM
     assert "word\nfor word" in request
 
 
 def test_both_prompts_end_on_the_same_way_out() -> None:
     way_out = "write exactly: I don't know."
-    request = render("quote_request", {"documents": "", "question": ""})
+    request = render("quote_request", {"documents": ""})
     assert ASK_SYSTEM.endswith(way_out)
-    assert f"{way_out}\n\n<question>" in request
+    assert request.endswith(way_out)
 
 
 def stopped_with(reason: str) -> dict[str, Any]:
@@ -595,7 +596,12 @@ def test_stream_answer_sends_the_request_of_ask_as_a_stream() -> None:
         "Be brief.",
         "low",
     )
-    assert streamed_requests == [{**asked[0], "stream": True}]
+    # The same request, with the system prompt as a block that carries a
+    # cache breakpoint.
+    system = cached_system("Be brief.")
+    assert streamed_requests == [
+        {**asked[0], "system": system, "stream": True}
+    ]
 
 
 def test_stream_answer_prints_the_pieces_and_returns_the_message(

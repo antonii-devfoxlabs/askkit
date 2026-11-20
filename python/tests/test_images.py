@@ -158,7 +158,12 @@ def test_ask_labels_two_images(
     content = sent[0]["messages"][-1]["content"]
     assert content[0] == {"type": "text", "text": "Image 1:"}
     assert content[2] == {"type": "text", "text": "Image 2:"}
-    assert content[-1] == {"type": "text", "text": "What changed?"}
+    # The question last, with the cache breakpoint on it.
+    assert content[-1] == {
+        "type": "text",
+        "text": "What changed?",
+        "cache_control": {"type": "ephemeral"},
+    }
 
 
 def test_ask_refuses_a_file_that_is_no_image_before_any_call(

@@ -10,6 +10,7 @@ from anthropic.types import MessageParam
 from test_ask import Interrupted, replied
 from test_tools import ANSWERED, use_answers
 
+from askkit.caching import cached
 from askkit.cli import main
 from askkit.loop import MAX_ROUNDS, TOO_MANY_ROUNDS, tool_loop
 from askkit.permissions import DEFAULT_PERMISSIONS
@@ -152,7 +153,7 @@ def test_each_call_carries_every_earlier_round(
     question, first_turn, first_results, second_turn, second_results = sent[
         2
     ]["messages"]
-    assert question == {"role": "user", "content": QUESTION}
+    assert question == {"role": "user", "content": cached(QUESTION)}
     # Each turn goes back as it came, thinking included, and each result
     # answers the request of the turn just before it.
     assert first_turn["content"][1]["id"] == "toolu_01AskKitSum1"

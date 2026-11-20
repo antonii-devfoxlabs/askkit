@@ -15,7 +15,7 @@ from askkit.ask import (
     timing_line,
 )
 from askkit.budget import input_tokens, over_budget
-from askkit.cost import call_cost
+from askkit.cost import prompt_tokens, usage_cost
 from askkit.errors import error_message
 from askkit.history import SavedMessage, as_messages, save_history
 from askkit.memory import memory_reply, with_memory
@@ -123,11 +123,7 @@ def chat(
                     continue
                 summary = answer_text(folded)
                 start = keep
-                cost = call_cost(
-                    model,
-                    folded.usage.input_tokens,
-                    folded.usage.output_tokens,
-                )
+                cost = usage_cost(model, folded.usage)
                 label = turns_label(first // 2 + 1, start // 2)
                 print(f"{'Summarised:':<15}{label}, ${cost:.6f}")
                 sent_system = with_summary(system_with_notes, summary)
@@ -161,8 +157,18 @@ def chat(
         try:
             # The answer shows as it is written; the turn is kept only once
             # the stream has ended with a whole answer.
+            # Each turn sends every earlier one again: the API moves a
+            # breakpoint to the end of each call, so the next turn reads
+            # everything before its question from the cache.
             response, timing = stream_answer(
-                client, question, model, max_tokens, sent_system, effort, sent
+                client,
+                question,
+                model,
+                max_tokens,
+                sent_system,
+                effort,
+                sent,
+                cache_conversation=True,
             )
         except APIError as error:
             # A failed call changes nothing, so the chat goes on and the
@@ -196,12 +202,17 @@ def chat(
         # at most the turn that was still on its way.
         save_history(path, history)
         usage = response.usage
-        cost = call_cost(model, usage.input_tokens, usage.output_tokens)
+        whole = prompt_tokens(usage)
+        cost = usage_cost(model, usage)
         label = f"Turn {len(history) // 2}:"
-        share = usage.input_tokens / budget
+        share = whole / budget
         print(
-            f"{label:<15}{usage.input_tokens:,} in ({share:.0%} of budget),"
+            f"{label:<15}{whole:,} in ({share:.0%} of budget),"
             f" {usage.output_tokens:,} out, ${cost:.6f}"
         )
+        from_cache = usage.cache_read_input_tokens or 0
+        to_cache = usage.cache_creation_input_tokens or 0
+        if from_cache or to_cache:
+            print(f"{'Cache:':<15}{from_cache:,} read, {to_cache:,} written")
         print(f"{'Time:':<15}{timing_line(timing)}")
         print()

@@ -72,12 +72,19 @@ def test_input_tokens_counts_what_the_call_would_send() -> None:
         {
             "path": "/v1/messages/count_tokens",
             "model": "claude-haiku-5-5",
-            "system": "Be brief.",
+            "system": [
+                {
+                    "type": "text",
+                    "text": "Be brief.",
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ],
             "messages": [
                 {"role": "user", "content": "Hi"},
                 {"role": "assistant", "content": "Hello!"},
                 {"role": "user", "content": "How are you?"},
             ],
+            "cache_control": {"type": "ephemeral"},
         }
     ]
     # The count leaves the history as it was.

@@ -213,15 +213,21 @@ def test_ask_sends_the_document_first_and_the_question_last(
             "returns-policy.txt",
         ]
     )
-    assert sent[0]["messages"] == [
-        {
-            "role": "user",
-            "content": with_documents(
-                "Who pays the postage for order 6083?",
-                {"returns-policy.txt": POLICY},
-            ),
-        }
-    ]
+    documents, question = sent[0]["messages"][0]["content"]
+    # Two blocks, each with a cache breakpoint: the documents with the
+    # request, which stay the same from question to question, then the
+    # question. Together they are the words with_documents writes.
+    assert documents["cache_control"] == {"type": "ephemeral"}
+    asked = "Who pays the postage for order 6083?"
+    assert question == {
+        "type": "text",
+        "text": f"<question>\n{asked}\n</question>",
+        "cache_control": {"type": "ephemeral"},
+    }
+    assert documents["text"] + "\n\n" + question["text"] == with_documents(
+        "Who pays the postage for order 6083?",
+        {"returns-policy.txt": POLICY},
+    )
     lines = capsys.readouterr().out.splitlines()
     assert lines[-3:] == [
         "Stop reason:   end_turn",
@@ -246,7 +252,7 @@ def test_ask_takes_several_documents_in_order(
             "faq.txt",
         ]
     )
-    content = sent[0]["messages"][0]["content"]
+    content = sent[0]["messages"][0]["content"][0]["text"]
     assert content.index("<source>returns-policy.txt</source>") < (
         content.index("<source>faq.txt</source>")
     )
@@ -315,5 +321,11 @@ def test_ask_without_documents_sends_the_question_alone(
     sent: list[dict[str, Any]] = []
     use_fake_client(monkeypatch, sent, "Plain answer.")
     main(["ask", "Who pays?"])
-    assert sent[0]["messages"][0]["content"] == "Who pays?"
+    assert sent[0]["messages"][0]["content"] == [
+        {
+            "type": "text",
+            "text": "Who pays?",
+            "cache_control": {"type": "ephemeral"},
+        }
+    ]
     assert "Quotes:" not in capsys.readouterr().out
