@@ -13,6 +13,7 @@ from askkit.ask import (
     DECLINED_PART,
     EFFORTS,
     MODELS,
+    Content,
     Timing,
     answer_text,
     ask,
@@ -54,6 +55,7 @@ from askkit.history import (
     load_history,
     save_history,
 )
+from askkit.images import with_images
 from askkit.limits import LIMITS
 from askkit.loop import (
     TOO_MANY_ROUNDS,
@@ -209,6 +211,9 @@ def main(arguments: list[str] | None = None) -> None:
     ask_command.add_argument("--system-file", type=Path)
     ask_command.add_argument(
         "--document", type=Path, action="append", default=[]
+    )
+    ask_command.add_argument(
+        "--image", type=Path, action="append", default=[], metavar="FILE"
     )
     ask_command.add_argument("--history", type=Path)
     tool_names = [tool["name"] for tool in TOOLS]
@@ -622,6 +627,22 @@ def main(arguments: list[str] | None = None) -> None:
         question = options.question
         if documents:
             question = with_documents(options.question, documents)
+        content: Content = question
+        if options.image:
+            if options.history is not None:
+                # A saved message holds text, and an image is not text.
+                sys.exit(
+                    "askkit: --history keeps text only; ask about an image"
+                    " without --history"
+                )
+            try:
+                content = with_images(question, options.image)
+            except OSError as error:
+                sys.exit(
+                    f"askkit: cannot read {error.filename}: {error.strerror}"
+                )
+            except ValueError as error:
+                sys.exit(f"askkit: {error}")
         history: list[SavedMessage] = []
         if options.history is not None:
             history = require_history(options.history)
@@ -652,7 +673,7 @@ def main(arguments: list[str] | None = None) -> None:
         try:
             answered = tool_loop(
                 client,
-                question,
+                content,
                 options.model,
                 options.max_tokens,
                 system,

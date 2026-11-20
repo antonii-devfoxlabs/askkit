@@ -11,6 +11,7 @@ from anthropic.types import (
 )
 
 from askkit.ask import (
+    Content,
     Effort,
     Timing,
     answer_text,
@@ -70,7 +71,7 @@ class Answered:
 
 def tool_loop(
     client: Anthropic,
-    question: str,
+    question: Content,
     model: str,
     max_tokens: int,
     system: str,
@@ -89,7 +90,7 @@ def tool_loop(
     replies: list[Message] = []
     timings: list[Timing] = []
     sent = history
-    content: str | list[ToolResultBlockParam] | None = question
+    content: Content | None = question
     rounds = 0
     pauses = 0
     while True:

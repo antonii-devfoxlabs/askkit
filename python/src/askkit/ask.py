@@ -5,11 +5,11 @@ from typing import Literal
 
 from anthropic import Anthropic, Omit, omit
 from anthropic.types import (
+    ContentBlockParam,
     Message,
     MessageParam,
     OutputConfigParam,
     ToolChoiceParam,
-    ToolResultBlockParam,
     ToolUnionParam,
 )
 
@@ -21,6 +21,10 @@ MODELS: list[str] = []
 for name in sorted(PRICES):
     if name.startswith("claude-"):
         MODELS.append(name)
+
+# What a user message holds: plain text, or a list of blocks, such as
+# images with a question, or the results of tool requests.
+Content = str | Sequence[ContentBlockParam]
 
 # The effort levels the API takes, from the least work to the most.
 Effort = Literal["low", "medium", "high", "xhigh", "max"]
@@ -55,7 +59,7 @@ class Timing:
 
 def stream_answer(
     client: Anthropic,
-    question: str | list[ToolResultBlockParam] | None,
+    question: Content | None,
     model: str,
     max_tokens: int,
     system: str,
@@ -131,7 +135,7 @@ def effort_config(effort: Effort | None) -> OutputConfigParam | Omit:
 
 
 def messages_for(
-    question: str | list[ToolResultBlockParam] | None,
+    question: Content | None,
     history: list[MessageParam] | None = None,
 ) -> list[MessageParam]:
     # The API remembers nothing, so every earlier message goes again,

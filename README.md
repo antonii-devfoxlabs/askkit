@@ -194,6 +194,23 @@ from `python/src/askkit/errors.py` saying what happened and what to do,
 instead of a traceback, and exits with exit code 1. The SDK has already
 sent a busy or failed request twice more by then.
 
+`--image FILE` sends a picture with the question: a screenshot of an
+error, a chart, a photo. Give it once per image. AskKit reads the
+file's first bytes to tell its format (PNG, JPEG, GIF or WebP, the four
+Anthropic's API reads; anything else is refused before a call), sends
+it as base64 text in an `image` block, and puts the images before the
+question, each labelled "Image 1:", "Image 2:" when there are several.
+`python/samples/` holds two images made for the course: a terminal
+with a traceback, and a chart of invented daily costs:
+
+```bash
+cd python
+uv run askkit ask "On which day did AskKit cost the most, and about how much?" --image samples/chart.png
+```
+
+A saved history (`--history`) holds text only, so `--image` and
+`--history` are not taken together.
+
 `--document FILE` sends a long text with the question: a policy, a
 contract, a manual. Give it once per file, as many times as you need.
 Each file goes into the user message in `<documents>` tags, numbered and
@@ -667,6 +684,8 @@ test, as the thinking count of `ask` did.
   - `src/askkit/server_tools.py`: Anthropic's web search, which runs on
     Anthropic's servers: its definition, the lines it prints, its
     searches counted and the pages the answer cites.
+  - `src/askkit/images.py`: an image file as an `image` block, its
+    format told by its first bytes, placed before the question.
   - `src/askkit/fetch.py`: the web fetch, which reaches only the sites
     you allow, never a private address, and reads at most 100,000 bytes
     of text within 10 seconds.
@@ -677,6 +696,7 @@ test, as the thinking count of `ask` did.
     what it asks for and sends the results back until it answers, for
     at most 5 rounds, sets each call's `tool_choice`, and counts the
     requests and rounds a question took.
+  - `samples/`: images made for the course, with invented data.
   - `notebooks/`: notebooks for exploring, saved without outputs.
   - `evals/`: the golden sets, a main and a held-out part each, the
     ask set's documents and rubric, and the eval that runs the extract
