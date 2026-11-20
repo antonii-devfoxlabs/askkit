@@ -1,3 +1,4 @@
+import asyncio
 import csv
 import json
 import runpy
@@ -9,7 +10,7 @@ from typing import Any
 
 import httpx2
 import pytest
-from anthropic import Anthropic
+from anthropic import AsyncAnthropic
 from test_ask import replied
 from test_classify import with_answer
 
@@ -17,10 +18,13 @@ import askkit.cli
 from askkit.calllog import day_calls
 from askkit.cli import main
 from askkit.inbox import (
+    InboxEmail,
     JobTimes,
     duration_text,
+    pace_text,
     queue_counts,
     read_inbox,
+    rounds,
     waiting_share,
     whole_job_seconds,
 )
@@ -63,24 +67,37 @@ def answering(
     monkeypatch: pytest.MonkeyPatch,
     sent: list[dict[str, Any]],
     answers: Sequence[dict[str, Any] | httpx2.Response],
+    waits: Sequence[float] = (),
+    in_flight: list[int] | None = None,
 ) -> None:
-    # Each request gets the next answer, in the order the requests come.
+    # Each request gets the next answer, in the order the requests come,
+    # after the next of waits (none: at once). in_flight, when given,
+    # records how many requests were waiting each time one arrived.
     left = iter(answers)
+    waits_left = iter(waits)
+    waiting = 0
 
-    def answer(request: httpx2.Request) -> httpx2.Response:
+    async def answer(request: httpx2.Request) -> httpx2.Response:
+        nonlocal waiting
         sent.append(json.loads(request.content))
         body = next(left)
+        waiting += 1
+        if in_flight is not None:
+            in_flight.append(waiting)
+        await asyncio.sleep(next(waits_left, 0.0))
+        waiting -= 1
         if isinstance(body, httpx2.Response):
             return body
         return replied(request, body)
 
-    def make(api_key: str) -> Anthropic:
+    def make(api_key: str) -> AsyncAnthropic:
         transport = httpx2.MockTransport(answer)
-        return Anthropic(
-            api_key=api_key, http_client=httpx2.Client(transport=transport)
+        return AsyncAnthropic(
+            api_key=api_key,
+            http_client=httpx2.AsyncClient(transport=transport),
         )
 
-    monkeypatch.setattr("askkit.cli.Anthropic", make)
+    monkeypatch.setattr("askkit.cli.AsyncAnthropic", make)
 
 
 def job_clocks(
@@ -142,9 +159,31 @@ def test_the_waiting_share_is_the_time_askkit_code_did_not_run() -> None:
     assert waiting_share(JobTimes(wall=0.0, cpu=0.0)) == 0.0
 
 
-def test_the_whole_file_takes_the_same_time_an_email() -> None:
+def test_the_whole_file_takes_the_same_time_an_email_one_at_a_time() -> None:
     times = JobTimes(wall=16.8, cpu=0.1)
-    assert whole_job_seconds(times, 12, 1000) == pytest.approx(1400.0)
+    assert whole_job_seconds(times, 12, 1000, 1) == pytest.approx(1400.0)
+
+
+def test_the_whole_file_takes_the_same_time_a_round() -> None:
+    # 12 emails, 10 at once, are two rounds; the file is 100 rounds.
+    times = JobTimes(wall=3.4, cpu=0.1)
+    assert whole_job_seconds(times, 12, 1000, 10) == pytest.approx(170.0)
+
+
+def test_the_emails_go_in_rounds_in_the_order_of_the_file() -> None:
+    emails = [InboxEmail(f"e{number}", "") for number in range(1, 6)]
+    groups = rounds(emails, 2)
+    assert [[email.id for email in group] for group in groups] == [
+        ["e1", "e2"],
+        ["e3", "e4"],
+        ["e5"],
+    ]
+    assert rounds(emails, 10) == [emails]
+
+
+def test_the_pace_reads_as_a_person_says_it() -> None:
+    assert pace_text(1) == "one at a time"
+    assert pace_text(10) == "10 at once"
 
 
 @pytest.mark.parametrize(
@@ -168,7 +207,7 @@ def test_the_queues_are_counted_in_their_order() -> None:
     )
 
 
-def test_inbox_sorts_every_email_one_at_a_time(
+def test_at_once_1_sorts_every_email_one_at_a_time(
     inbox_file: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -176,7 +215,7 @@ def test_inbox_sorts_every_email_one_at_a_time(
     sent: list[dict[str, Any]] = []
     answering(monkeypatch, sent, [with_answer(queue) for queue in QUEUES])
     job_clocks(monkeypatch, wall=4.23, cpu=0.02)
-    main(["inbox", str(inbox_file)])
+    main(["inbox", str(inbox_file), "--at-once", "1"])
     assert capsys.readouterr().out.splitlines() == [
         "e0001   damaged",
         "e0002   delivery",
@@ -207,7 +246,7 @@ def test_first_tries_a_few_and_tells_the_time_of_the_whole_file(
     sent: list[dict[str, Any]] = []
     answering(monkeypatch, sent, [with_answer(QUEUES[0])])
     job_clocks(monkeypatch, wall=1.5, cpu=0.01)
-    main(["inbox", str(inbox_file), "--first", "1"])
+    main(["inbox", str(inbox_file), "--first", "1", "--at-once", "1"])
     lines = capsys.readouterr().out.splitlines()
     assert len(sent) == 1
     assert lines[2] == "Emails:        1 of 3, one at a time"
@@ -263,8 +302,10 @@ def test_a_rejected_request_names_its_email(
     )
     sent: list[dict[str, Any]] = []
     answering(monkeypatch, sent, [with_answer(QUEUES[0]), rejected])
+    # One at a time, the run stops at the rejected email: the third is
+    # never sent.
     with pytest.raises(SystemExit) as stopped:
-        main(["inbox", str(inbox_file)])
+        main(["inbox", str(inbox_file), "--at-once", "1"])
     assert str(stopped.value.code).startswith("askkit: e0002: ")
     assert len(sent) == 2
 
@@ -307,3 +348,131 @@ def test_the_clocks_are_read_only_around_the_emails(
     answering(monkeypatch, sent, [with_answer(queue) for queue in QUEUES])
     main(["inbox", str(inbox_file)])
     assert next(readings) == 4
+
+
+def test_a_round_sends_its_emails_together(
+    inbox_file: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # The mechanism, not a time: with --at-once 2, the second request
+    # arrives while the first still waits, and the third only once the
+    # first round is done.
+    sent: list[dict[str, Any]] = []
+    in_flight: list[int] = []
+    answering(
+        monkeypatch,
+        sent,
+        [with_answer(queue) for queue in QUEUES],
+        waits=[0.05, 0.05, 0.05],
+        in_flight=in_flight,
+    )
+    main(["inbox", str(inbox_file), "--at-once", "2"])
+    assert in_flight == [1, 2, 1]
+    assert "Emails:        3 of 3, 2 at once" in capsys.readouterr().out
+
+
+def test_ten_at_once_by_default(
+    inbox_file: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sent: list[dict[str, Any]] = []
+    in_flight: list[int] = []
+    answering(
+        monkeypatch,
+        sent,
+        [with_answer(queue) for queue in QUEUES],
+        waits=[0.05, 0.05, 0.05],
+        in_flight=in_flight,
+    )
+    main(["inbox", str(inbox_file)])
+    assert in_flight == [1, 2, 3]
+
+
+def test_the_lines_keep_the_order_of_the_file(
+    inbox_file: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # The first email's answer comes last; gather still gives the
+    # answers back in the order the emails were sent.
+    sent: list[dict[str, Any]] = []
+    answering(
+        monkeypatch,
+        sent,
+        [with_answer(queue) for queue in QUEUES],
+        waits=[0.15, 0.05, 0.0],
+    )
+    main(["inbox", str(inbox_file)])
+    assert capsys.readouterr().out.splitlines()[:3] == [
+        "e0001   damaged",
+        "e0002   delivery",
+        "e0003   other",
+    ]
+
+
+def test_a_rejected_request_in_a_round_names_its_own_email(
+    inbox_file: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The second email is rejected at once while the first still waits:
+    # the run names e0002, the email whose request was rejected.
+    rejected = httpx2.Response(
+        400,
+        json={
+            "type": "error",
+            "error": {
+                "type": "invalid_request_error",
+                "message": "messages: text content blocks must be non-empty",
+            },
+        },
+    )
+    sent: list[dict[str, Any]] = []
+    answering(
+        monkeypatch,
+        sent,
+        [with_answer(QUEUES[0]), rejected, with_answer(QUEUES[2])],
+        waits=[0.1, 0.0, 0.0],
+    )
+    with pytest.raises(SystemExit) as stopped:
+        main(["inbox", str(inbox_file)])
+    assert str(stopped.value.code).startswith("askkit: e0002: ")
+
+
+def test_at_once_must_be_a_number_of_emails(
+    inbox_file: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sent: list[dict[str, Any]] = []
+    answering(monkeypatch, sent, [])
+    with pytest.raises(SystemExit) as stopped:
+        main(["inbox", str(inbox_file), "--at-once", "0"])
+    assert stopped.value.code == (
+        "askkit: --at-once 0 is not a number of emails; give 1 or more"
+    )
+    assert sent == []
+
+
+def test_max_tokens_a_call_cannot_wait_for_is_refused_before_any_call(
+    inbox_file: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sent: list[dict[str, Any]] = []
+    answering(monkeypatch, sent, [])
+    with pytest.raises(SystemExit) as stopped:
+        main(["inbox", str(inbox_file), "--max-tokens", "30000"])
+    assert stopped.value.code == (
+        "askkit: --max-tokens 30,000 may take up to 844 s, longer than the"
+        " ten minutes a call that is not streamed may take; a queue needs"
+        " far fewer"
+    )
+    assert sent == []
+
+
+def test_each_call_is_logged_with_its_own_seconds(
+    inbox_file: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The steady clock moves 0.42 s each reading: a call is timed from
+    # its own start to its own answer, not over the whole round.
+    sent: list[dict[str, Any]] = []
+    answering(monkeypatch, sent, [with_answer(queue) for queue in QUEUES])
+    main(["inbox", str(inbox_file)])
+    folder: Path = vars(askkit.cli)["LOG_FOLDER"]
+    calls = day_calls(folder, MORNING.date())
+    assert [call.seconds for call in calls] == pytest.approx([1.26] * 3)

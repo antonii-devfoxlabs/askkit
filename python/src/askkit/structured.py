@@ -3,11 +3,11 @@ import sys
 from time import perf_counter
 from typing import Any
 
-from anthropic import Anthropic
+from anthropic import Anthropic, AsyncAnthropic
 from anthropic.types import Message, MessageParam
 
 from askkit.ask import Timing
-from askkit.calllog import log_call
+from askkit.calllog import log_call, request_id_of
 
 
 def settled_fields(text: str) -> dict[str, Any]:
@@ -101,3 +101,31 @@ def stream_json(
     except KeyboardInterrupt:
         # Leaving the with block closed the connection: no more comes.
         return None, Timing(first_token, perf_counter() - start)
+
+
+async def ask_json(
+    client: AsyncAnthropic,
+    model: str,
+    max_tokens: int,
+    system: str,
+    messages: list[MessageParam],
+    schema: dict[str, Any],
+) -> Message:
+    # The request stream_json sends, on the async client and not
+    # streamed: while this call waits for its answer, the program can
+    # send and wait on others. Nobody reads a preview in a run of many
+    # emails, so the answer comes whole. Each call is timed and logged
+    # on its own, so the log shows its own wait, not the whole run's.
+    start = perf_counter()
+    response: Message = await client.messages.create(
+        **json_request(model, max_tokens, system, messages, schema)
+    )
+    log_call(
+        response,
+        model,
+        perf_counter() - start,
+        system,
+        messages,
+        request_id_of(response),
+    )
+    return response

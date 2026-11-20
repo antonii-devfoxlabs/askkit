@@ -692,7 +692,7 @@ grade it. `src/askkit/fallback.py` holds the chain.
 ## Sorting a whole inbox
 
 `askkit inbox FILE` sorts every email of a CSV file into the queues of
-`askkit classify`, one email at a time. The file has two columns, `id`
+`askkit classify`, ten emails at a time. The file has two columns, `id`
 and `email`, named on its first line; an email may hold commas and line
 breaks inside double quotes. `python/samples/inbox.csv` holds 1,000
 emails made up for this course (invented names and order numbers),
@@ -704,13 +704,21 @@ cd python
 uv run askkit inbox samples/inbox.csv --first 12
 ```
 
-It prints each email's queue, then the run: the tokens and the cost, the
-time in all and per email, the share of that time AskKit spent waiting
-(the wall clock, `perf_counter`, against the CPU clock, `process_time`),
-and how long the whole file would take at that pace. An answer that
-stopped early or fails its check goes to a person, and the run goes on;
-a rejected request stops it and names its email. Every call is a line
-of the log, under the command `inbox`.
+The calls go out on the SDK's async client, `AsyncAnthropic`, in rounds
+of `--at-once N` (10 unless you say otherwise): `asyncio.gather` sends a
+round's emails together, so their waits overlap, and the next round
+starts once all its answers are in. `--at-once 1` sends one at a time.
+The answers are not streamed, so `--max-tokens` may not ask for more
+than a call can write in ten minutes.
+
+It prints each email's queue, in the order of the file, then the run:
+the tokens and the cost, the time in all and per email, the share of
+that time AskKit spent waiting (the wall clock, `perf_counter`, against
+the CPU clock, `process_time`), and how long the whole file would take
+at that pace. An answer that stopped early or fails its check goes to a
+person, and the run goes on; a rejected request stops it and names its
+email. Every call is a line of the log, under the command `inbox`, with
+its own time.
 
 ## The models AskKit calls, and when each retires
 

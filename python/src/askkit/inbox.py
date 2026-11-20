@@ -1,4 +1,5 @@
 import csv
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter, process_time
@@ -69,10 +70,31 @@ def waiting_share(times: JobTimes) -> float:
     return max(times.wall - times.cpu, 0.0) / times.wall
 
 
-def whole_job_seconds(times: JobTimes, done: int, total: int) -> float:
-    # The emails done so far, at the pace they went, for every email of
-    # the file: one at a time, each email adds its own wait.
-    return times.wall / done * total
+def rounds(emails: list[InboxEmail], at_once: int) -> list[list[InboxEmail]]:
+    # The emails in groups of at_once, in the order of the file: a group
+    # is sent together, and the next one starts once all its answers are
+    # in. The last group holds what is left.
+    groups: list[list[InboxEmail]] = []
+    for start in range(0, len(emails), at_once):
+        groups.append(emails[start : start + at_once])
+    return groups
+
+
+def whole_job_seconds(
+    times: JobTimes, done: int, total: int, at_once: int
+) -> float:
+    # The rounds done so far, at the pace they went, for every round of
+    # the file: a round takes about one wait, however many it holds.
+    rounds_done = math.ceil(done / at_once)
+    rounds_total = math.ceil(total / at_once)
+    return times.wall / rounds_done * rounds_total
+
+
+def pace_text(at_once: int) -> str:
+    # How the emails were sent, for the lines under a run.
+    if at_once == 1:
+        return "one at a time"
+    return f"{at_once:,} at once"
 
 
 def duration_text(seconds: float) -> str:

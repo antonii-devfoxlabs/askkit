@@ -1,4 +1,5 @@
 import argparse
+import asyncio
 import json
 import sys
 from dataclasses import replace
@@ -9,7 +10,7 @@ from time import perf_counter
 from typing import Any
 
 import openai
-from anthropic import Anthropic, APIError, Timeout
+from anthropic import Anthropic, APIError, AsyncAnthropic, Timeout
 from anthropic.types import Message, MessageParam, ToolUnionParam
 from openai import OpenAI
 from openai.types.audio import Transcription
@@ -98,8 +99,10 @@ from askkit.inbox import (
     Clocks,
     InboxEmail,
     duration_text,
+    pace_text,
     queue_counts,
     read_inbox,
+    rounds,
     waiting_share,
     whole_job_seconds,
 )
@@ -145,10 +148,12 @@ from askkit.retry import (
     ANSWER_POLICY,
     ANSWER_TIMEOUT,
     CONNECT_TIMEOUT,
+    LONGEST_TIMEOUT,
     Retry,
     RetryPolicy,
     after_tries,
     retries_line,
+    slowest_seconds,
     timeout_fault,
     with_retries,
 )
@@ -167,7 +172,7 @@ from askkit.rubric import (
 from askkit.rules import email_fault, load_orders, order_fault
 from askkit.runs import Results, diff_lines, load_results
 from askkit.server_tools import cited_urls, searches, web_search
-from askkit.structured import json_request, stream_json
+from askkit.structured import ask_json, json_request, stream_json
 from askkit.tokens import count_tokens
 from askkit.tools import TOOLS
 from askkit.trim import OLD_TURNS
@@ -526,10 +531,75 @@ def classify_line(
     return classification.queue, f"{email.id:<8}{classification.queue}"
 
 
+async def sort_email(
+    client: AsyncAnthropic,
+    email: InboxEmail,
+    model: str,
+    max_tokens: int,
+    system: str,
+) -> Message:
+    # One email's call, as classify sends it. await hands control back
+    # while the answer is on its way, so the other emails of the round
+    # are sent and waited on meanwhile.
+    cleaned, _ = clean_email(email.email)
+    return await ask_json(
+        client,
+        model,
+        max_tokens,
+        system,
+        [{"role": "user", "content": cleaned}],
+        CLASSIFICATION_SCHEMA,
+    )
+
+
+async def sort_inbox(
+    client: AsyncAnthropic,
+    chosen: list[InboxEmail],
+    options: argparse.Namespace,
+    system: str,
+) -> tuple[list[Message], list[str]]:
+    # The emails in rounds of --at-once: each round is sent together
+    # with asyncio.gather, and the next starts once all its answers are
+    # in. gather gives the answers back in the order of the emails, so
+    # the lines come out in the order of the file.
+    task = "sort this email into a queue"
+    responses: list[Message] = []
+    queues: list[str] = []
+    try:
+        for group in rounds(chosen, options.at_once):
+            # return_exceptions=True: a rejected request takes its own
+            # place in the list, so the run can name its email.
+            answers = await asyncio.gather(
+                *[
+                    sort_email(
+                        client,
+                        email,
+                        options.model,
+                        options.max_tokens,
+                        system,
+                    )
+                    for email in group
+                ],
+                return_exceptions=True,
+            )
+            for email, answer in zip(group, answers, strict=True):
+                if isinstance(answer, APIError):
+                    sys.exit(f"askkit: {email.id}: {error_message(answer)}")
+                if isinstance(answer, BaseException):
+                    raise answer
+                responses.append(answer)
+                queue, line = classify_line(email, answer, task)
+                queues.append(queue)
+                print(line)
+    finally:
+        await client.close()
+    return responses, queues
+
+
 def run_inbox(options: argparse.Namespace) -> None:
-    # Every email of the file, one at a time: each call starts only once
-    # the one before it has answered. The two clocks show how much of
-    # the time AskKit's own code ran, and how much it only waited.
+    # Every email of the file, --at-once of them at a time, on the async
+    # client: their waits overlap. The two clocks show how much of the
+    # time AskKit's own code ran, and how much it only waited.
     try:
         emails = read_inbox(options.file)
     except OSError as error:
@@ -541,37 +611,35 @@ def run_inbox(options: argparse.Namespace) -> None:
             f"askkit: --first {options.first} is not a number of emails;"
             " give 1 or more"
         )
+    if options.at_once < 1:
+        sys.exit(
+            f"askkit: --at-once {options.at_once} is not a number of"
+            " emails; give 1 or more"
+        )
+    # A call that is not streamed may not take longer than ten minutes:
+    # the SDK refuses it, so AskKit refuses it first, before any call.
+    slowest = slowest_seconds(options.max_tokens)
+    if slowest > LONGEST_TIMEOUT:
+        sys.exit(
+            f"askkit: --max-tokens {options.max_tokens:,} may take up to"
+            f" {slowest:,.0f} s, longer than the ten minutes a call that"
+            " is not streamed may take; a queue needs far fewer"
+        )
     chosen = emails[: options.first]
     system = render("classify_email", {})
-    task = "sort this email into a queue"
-    client = Anthropic(api_key=require_api_key())
-    responses: list[Message] = []
-    queues: list[str] = []
+    client = AsyncAnthropic(api_key=require_api_key())
     clocks = Clocks()
-    for email in chosen:
-        cleaned, _ = clean_email(email.email)
-        try:
-            response, _ = stream_json(
-                client,
-                options.model,
-                options.max_tokens,
-                system,
-                [{"role": "user", "content": cleaned}],
-                CLASSIFICATION_SCHEMA,
-                preview=False,
-            )
-        except APIError as error:
-            sys.exit(f"askkit: {email.id}: {error_message(error)}")
-        if response is None:
-            sys.exit(f"askkit: {email.id}: {CANCELLED}")
-        responses.append(response)
-        queue, line = classify_line(email, response, task)
-        queues.append(queue)
-        print(line)
+    try:
+        responses, queues = asyncio.run(
+            sort_inbox(client, chosen, options, system)
+        )
+    except KeyboardInterrupt:
+        sys.exit("askkit: cancelled; the emails above are sorted")
     times = clocks.read()
     done = len(chosen)
+    pace = pace_text(options.at_once)
     print()
-    print(f"Emails:        {done:,} of {len(emails):,}, one at a time")
+    print(f"Emails:        {done:,} of {len(emails):,}, {pace}")
     print(f"Queues:        {queue_counts(queues)}")
     print_calls(responses, options.model, stop_reason=False)
     print(
@@ -586,8 +654,8 @@ def run_inbox(options: argparse.Namespace) -> None:
         # The label is as wide as every other one: "All 1,000:" and
         # its spaces make 15 characters.
         label = f"All {len(emails):,}:"
-        whole = whole_job_seconds(times, done, len(emails))
-        print(f"{label:<15}{duration_text(whole)}, one at a time")
+        whole = whole_job_seconds(times, done, len(emails), options.at_once)
+        print(f"{label:<15}{duration_text(whole)}, {pace}")
 
 
 def main(arguments: list[str] | None = None) -> None:
@@ -707,6 +775,8 @@ def main(arguments: list[str] | None = None) -> None:
     inbox_command.add_argument("--max-tokens", type=int, default=1000)
     # Try the first few emails, and their times, before paying for all.
     inbox_command.add_argument("--first", type=int)
+    # How many calls wait at once: a round of them, sent together.
+    inbox_command.add_argument("--at-once", type=int, default=10)
     read_command = commands.add_parser(
         "read", help="take the fields out of an invoice PDF, as JSON"
     )
