@@ -170,7 +170,7 @@ def as_message(response: Response) -> Message:
     read = usage.input_tokens_details.cached_tokens
     written = usage.input_tokens_details.cache_write_tokens
     content: list[ContentBlock] = []
-    # Of a declined answer no part is kept, as with Claude's.
+    # A declined answer keeps no text, as Claude's does.
     if stop_reason != "refusal" and response.output_text:
         content.append(TextBlock(type="text", text=response.output_text))
     return Message(
@@ -200,8 +200,8 @@ def ask_openai(
         instructions=system,
         input=question,
         max_output_tokens=max_tokens,
-        # OpenAI keeps a response for at least 30 days unless told not
-        # to; AskKit saves the answers it needs itself.
+        # OpenAI keeps every response for 30 days unless told not to;
+        # AskKit saves the answers it needs itself.
         store=False,
     )
     return as_message(response)

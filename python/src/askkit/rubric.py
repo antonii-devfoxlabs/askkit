@@ -37,12 +37,13 @@ class Criterion(BaseModel):
 # What the model wrote for one case's question, which model wrote it, and
 # what code already found wrong with it, so the grader's time goes only to
 # what code cannot see. The model matters once a question can fall back to
-# another one: a grade belongs to the model that earned it.
+# another one: a grade belongs to the model that earned it. None: a file
+# saved before askkit answer named the model.
 class Answer(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     case: str
-    model: str
+    model: str | None = None
     text: str
     faults: list[str]
 

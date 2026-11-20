@@ -436,3 +436,14 @@ def test_answer_refuses_a_max_tokens_too_large_to_wait_for(
     message = str(stopped.value.code)
     assert message.startswith("askkit: --max-tokens 64,000 may take up to")
     assert not Path("answers.json").exists()
+
+
+def test_answers_saved_before_the_model_was_named_still_load(
+    tmp_path: Path,
+) -> None:
+    saved = tmp_path / "answers.json"
+    saved.write_text(
+        json.dumps([{"case": "gift", "text": "No.", "faults": []}]),
+        encoding="utf-8",
+    )
+    assert load_answers(saved)[0].model is None
