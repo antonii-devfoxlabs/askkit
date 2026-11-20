@@ -28,8 +28,8 @@ INVOICE_SCHEMA: dict[str, Any] = transform_schema(Invoice)
 
 
 def cents(amount: float) -> int:
-    # 743.30 + 148.66 is 891.9599999999999 as a float, so amounts are
-    # compared as whole cents, never as floats.
+    # A float stores most decimals only nearly, so amounts are compared
+    # as whole cents, which are exact.
     return round(amount * 100)
 
 
