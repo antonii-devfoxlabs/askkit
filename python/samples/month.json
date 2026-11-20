@@ -1,0 +1,76 @@
+{
+  "features": [
+    {
+      "name": "classify",
+      "model": "claude-haiku-5-5",
+      "uses": 12000,
+      "calls": 1,
+      "input_tokens": 214,
+      "output_tokens": 12,
+      "fees": 0
+    },
+    {
+      "name": "extract --orders",
+      "model": "claude-haiku-5-5",
+      "uses": 3000,
+      "calls": 1,
+      "input_tokens": 472,
+      "output_tokens": 62,
+      "fees": 0
+    },
+    {
+      "name": "ask, a sum",
+      "model": "claude-haiku-5-5",
+      "uses": 1500,
+      "calls": 2,
+      "input_tokens": 1307,
+      "output_tokens": 68,
+      "fees": 0
+    },
+    {
+      "name": "ask, a search",
+      "model": "claude-haiku-5-5",
+      "uses": 600,
+      "calls": 1,
+      "input_tokens": 9240,
+      "output_tokens": 120,
+      "fees": 0.01
+    },
+    {
+      "name": "chat, 8 turns",
+      "model": "claude-haiku-5-5",
+      "uses": 500,
+      "calls": 8,
+      "input_tokens": 4440,
+      "output_tokens": 720,
+      "fees": 0
+    },
+    {
+      "name": "ask, a page",
+      "model": "claude-haiku-5-5",
+      "uses": 400,
+      "calls": 2,
+      "input_tokens": 15308,
+      "output_tokens": 122,
+      "fees": 0
+    },
+    {
+      "name": "read",
+      "model": "claude-haiku-5-5",
+      "uses": 400,
+      "calls": 1,
+      "input_tokens": 3842,
+      "output_tokens": 97,
+      "fees": 0
+    },
+    {
+      "name": "voicemail",
+      "model": "claude-haiku-5-5",
+      "uses": 300,
+      "calls": 1,
+      "input_tokens": 431,
+      "output_tokens": 38,
+      "fees": 0.00225
+    }
+  ]
+}

@@ -43,6 +43,7 @@ from askkit.clean import clean_email
 from askkit.compare import compare_models
 from askkit.config import KEY_NAME, OPENAI_KEY_NAME, load_api_key, masked
 from askkit.cost import call_cost, error_cost
+from askkit.costmodel import load_cost_model, month_costs, report_lines
 from askkit.documents import (
     missing_quotes,
     quotes_in,
@@ -219,6 +220,10 @@ def main(arguments: list[str] | None = None) -> None:
     compare.add_argument("file", type=Path)
     compare.add_argument("--output", type=int, default=500)
     compare.add_argument("--calls", type=int, default=1)
+    costs_command = commands.add_parser(
+        "costs", help="what each feature costs a month, from a cost model"
+    )
+    costs_command.add_argument("file", type=Path)
     commands.add_parser("key", help="check that AskKit finds your API key")
     ask_command = commands.add_parser("ask", help="ask a model a question")
     ask_command.add_argument("question")
@@ -332,6 +337,17 @@ def main(arguments: list[str] | None = None) -> None:
         "--cases", type=Path, default=Path("evals/extract/main")
     )
     options = parser.parse_args(arguments)
+
+    if options.command == "costs":
+        # No model call: a file of features, each with its uses a month and
+        # what one use sends, priced from prices.py.
+        try:
+            cost_model = load_cost_model(options.file)
+        except (OSError, ValueError) as error:
+            sys.exit(f"askkit: {error}")
+        for line in report_lines(month_costs(cost_model)):
+            print(line)
+        return
 
     if options.command == "key":
         print(f"API key: {masked(require_api_key())}")

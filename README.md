@@ -513,6 +513,28 @@ does not read it. `ask --image` and `read` stop at the same limits
 before any call. The limits and the image rules were checked on 20
 November 2026.
 
+## What each feature costs a month
+
+The bill says what a month cost by model, workspace and API key, not by
+what people did with the app. `askkit costs` works it out per feature
+from a cost model: a JSON file that lists each feature with its uses a
+month, the calls one use makes, the input and output tokens of those
+calls added up (read from the usage of real runs), and any fees a use
+pays on top of the tokens, such as a web search or a recording written
+down at another provider. No call is made:
+
+```bash
+cd python
+uv run askkit costs samples/month.json
+```
+
+It prints every feature, the dearest first, with what one use and a
+month of uses cost and its share of the month. Lesson 1.2's price step
+is checked on an average call of a use, since it goes by each call's
+prompt. `python/samples/month.json` is a month made up for the course:
+the uses are invented, and the tokens are those of the runs the lessons
+show.
+
 ## Prompts
 
 Every prompt AskKit sends is a template file in
@@ -796,8 +818,10 @@ test, as the thinking count of `ask` did.
   - `src/askkit/audio.py`: a voice message turned into text at OpenAI:
     its format told by its first bytes, its length read from a WAV's
     header, and what the call cost.
-  - `samples/`: images, an invoice PDF and a voice message made for the
-    course, with invented data.
+  - `src/askkit/costmodel.py`: a cost model of the app's features, and
+    what each one costs a month.
+  - `samples/`: images, an invoice PDF, a voice message and a month of
+    uses made for the course, with invented data.
   - `notebooks/`: notebooks for exploring, saved without outputs.
   - `evals/`: the golden sets, a main and a held-out part each, the
     ask set's documents and rubric, and the eval that runs the extract
