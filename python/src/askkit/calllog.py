@@ -125,8 +125,8 @@ def logged_call(
     # Searches are billed on top of their tokens.
     usage = response.usage
     cost = usage_cost(model, usage) + searches([response]) * SEARCH_PRICE
-    # Rounded to a ten-thousandth of a cent: enough for any sum of days,
-    # without the float's last digits (0.00043270000000000006).
+    # Rounded to ten decimal places of a dollar: enough for any sum of
+    # days, without the float's last digits (0.00043270000000000006).
     cost = round(cost, 10)
     return LoggedCall(
         at=at,
@@ -187,7 +187,9 @@ def write_call(call: LoggedCall, prompt: str, answer: str) -> None:
         append_line(
             day_file(current.folder, "content", day), json.dumps(kept)
         )
-        remove_old_content(current.folder, day)
+    # Every logged call removes the words past their week, whether this
+    # run keeps words or not.
+    remove_old_content(current.folder, day)
 
 
 def log_call(

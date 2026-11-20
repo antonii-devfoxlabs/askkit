@@ -452,3 +452,18 @@ def test_both_files_write_the_moment_the_same_way(
         (log_folder() / "calls-2026-11-20.jsonl").read_text(encoding="utf-8")
     )
     assert content_lines()[0]["at"] == numbers["at"] == "2026-11-20T09:14:00Z"
+
+
+def test_any_run_removes_content_older_than_a_week(
+    run_here: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Before the fix only a run with --log-content removed old content,
+    # so the words of a week ago stayed until someone asked for the words
+    # again; the week is a promise every logged call keeps.
+    folder = log_folder()
+    folder.mkdir()
+    old = folder / "content-2026-11-12.jsonl"
+    old.write_text("{}\n", encoding="utf-8")
+    answering(monkeypatch, [], WRITTEN)
+    main(["ask", QUESTION])
+    assert not old.exists()
