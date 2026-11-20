@@ -650,9 +650,9 @@ uv run askkit models
 A date shown as `not before` is only the earliest day the provider could
 retire the model. Once a provider announces the day, enter it in the
 model's row with the replacement it recommends. From then on every
-command that calls the model names the day on stderr, starting 60 days
-before it, and from that day stops before its first call, the last model
-of a `--fallback` chain included. `askkit models --live` also asks each
+command that calls the model names the day on stderr, and from that day
+stops before its first call, the last model of a `--fallback` chain
+included. `askkit models --live` also asks each
 provider's models endpoint (Anthropic's `lifecycle` and `retires_at`,
 OpenAI's `shutdown_date`) and exits with 1 when a row no longer matches.
 Before you move `DEFAULT_MODEL` to the replacement, run the eval on it.

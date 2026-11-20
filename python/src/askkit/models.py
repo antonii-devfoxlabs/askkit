@@ -10,11 +10,6 @@ from openai import OpenAI
 # once the eval says the new model is as good.
 DEFAULT_MODEL = "claude-haiku-5-5"
 
-# Anthropic gives at least 60 days' notice before it retires a model, so
-# a date announced in the table below is named on every run from the day
-# it is entered.
-WARN_DAYS = 60
-
 # When the dates below were last read, each on its provider's own
 # deprecations page:
 # Anthropic: https://platform.claude.com/docs/en/about-claude/model-deprecations
@@ -26,7 +21,8 @@ CHECKED = date(2026, 11, 20)
 class Lifecycle:
     # provider: whose servers the model runs on.
     # retires: the day requests to the model start to fail, or None when
-    # the provider gives no date.
+    # the provider gives no date. The provider can still move it until
+    # then; askkit models --live says when it has.
     # announced: True once the provider has set that day. False means
     # retires is only the earliest day it could be ("not sooner than").
     # replacement: the model the provider recommends instead, once it
@@ -69,13 +65,13 @@ def retirement_fault(model: str, today: date) -> str | None:
 
 
 def retirement_warning(model: str, today: date) -> str | None:
-    # A model that still works, but not for long: the command runs and
-    # names the day.
+    # A model with an announced day still ahead: the command runs and
+    # names the day on every run, from the day the date is entered.
     lifecycle = LIFECYCLES[model]
     if not lifecycle.announced or lifecycle.retires is None:
         return None
     days = (lifecycle.retires - today).days
-    if days <= 0 or days > WARN_DAYS:
+    if days <= 0:
         return None
     unit = "day" if days == 1 else "days"
     return (

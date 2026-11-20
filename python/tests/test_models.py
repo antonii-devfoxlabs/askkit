@@ -14,7 +14,6 @@ from askkit.fallback import OPENAI_MODELS
 from askkit.models import (
     DEFAULT_MODEL,
     LIFECYCLES,
-    WARN_DAYS,
     Lifecycle,
     claude_lifecycle,
     lifecycle_change,
@@ -66,14 +65,14 @@ def test_an_earliest_date_is_never_a_retirement(
     assert retirement_warning(HAIKU, date(2027, 10, 1)) is None
 
 
-def test_an_announced_day_warns_inside_the_notice_and_stops_on_it(
+def test_an_announced_day_warns_from_the_start_and_stops_on_it(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setitem(LIFECYCLES, "claude-sonnet-4-5", SONNET_45)
     model = "claude-sonnet-4-5"
-    assert retirement_warning(model, date(2026, 9, 30)) is None
-    assert retirement_warning(model, date(2026, 10, 1)) == (
-        "claude-sonnet-4-5 retires on 2026-11-30, in 60 days;"
+    # The day of the email, 61 days ahead: named at once, however far.
+    assert retirement_warning(model, date(2026, 9, 30)) == (
+        "claude-sonnet-4-5 retires on 2026-11-30, in 61 days;"
         " move to claude-sonnet-5-5"
     )
     assert retirement_warning(model, date(2026, 11, 29)) == (
@@ -86,7 +85,6 @@ def test_an_announced_day_warns_inside_the_notice_and_stops_on_it(
         " move to claude-sonnet-5-5"
     )
     assert retirement_warning(model, date(2026, 11, 30)) is None
-    assert WARN_DAYS == 60
 
 
 def test_the_retirement_column_says_how_sure_each_date_is() -> None:
