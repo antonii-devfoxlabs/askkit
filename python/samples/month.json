@@ -13,7 +13,7 @@
       "name": "extract --orders",
       "model": "claude-haiku-5-5",
       "uses": 3000,
-      "calls": 1,
+      "calls": 2,
       "input_tokens": 472,
       "output_tokens": 62,
       "fees": 0

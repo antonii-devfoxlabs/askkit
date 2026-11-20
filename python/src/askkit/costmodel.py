@@ -80,15 +80,15 @@ def use_cost(feature: Feature) -> float:
     average_input = feature.input_tokens / feature.calls
     if long_prompt is not None and average_input > long_prompt["over"]:
         prices = long_prompt
-    tokens = (
+    token_cost = (
         feature.input_tokens * prices["input"]
         + feature.output_tokens * prices["output"]
     )
-    return tokens / 1_000_000 + feature.fees
+    return token_cost / 1_000_000 + feature.fees
 
 
 def month_costs(model: CostModel) -> list[FeatureCost]:
-    # The features with what they cost a month, the dearest first.
+    # The features with what they cost a month, the most expensive first.
     rows: list[FeatureCost] = []
     for feature in model.features:
         one_use = use_cost(feature)

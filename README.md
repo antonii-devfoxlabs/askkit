@@ -528,7 +528,7 @@ cd python
 uv run askkit costs samples/month.json
 ```
 
-It prints every feature, the dearest first, with what one use and a
+It prints every feature, the most expensive first, with what one use and a
 month of uses cost and its share of the month. Lesson 1.2's price step
 is checked on an average call of a use, since it goes by each call's
 prompt. `python/samples/month.json` is a month made up for the course:
