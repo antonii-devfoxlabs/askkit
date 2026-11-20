@@ -16,9 +16,9 @@ PRICE_PER_MINUTE = 0.0045
 # The largest file the endpoint takes, from the same guide.
 MAX_AUDIO_BYTES = 25 * 1024 * 1024
 
-# An MP3 with no tag at its start begins with its first frame of sound,
-# whose first two bytes are one of these.
-MP3_FRAMES = (b"\xff\xfb", b"\xff\xf3", b"\xff\xf2")
+# An MP3 with no tag at its start begins with its first block of packed
+# sound, whose first two bytes are one of these.
+MP3_FRAMES = (b"\xff\xfb", b"\xff\xfa", b"\xff\xf3", b"\xff\xf2")
 
 # Tells the model what the callers talk about, and that order numbers are
 # written as digits. A hint the model may follow, not a check.
@@ -30,7 +30,7 @@ SHOP_PROMPT = (
 
 def audio_format(data: bytes) -> str | None:
     # Told by the first bytes, as images and PDFs are. WAV and M4A hold
-    # their name a few bytes in, so those bytes are read where they stand.
+    # their name a few bytes in, so the code reads those bytes there.
     if data[:4] == b"RIFF" and data[8:12] == b"WAVE":
         return "WAV"
     if data[:3] == b"ID3" or data[:2] in MP3_FRAMES:
@@ -48,16 +48,16 @@ def audio_format(data: bytes) -> str | None:
 
 def audio_seconds(data: bytes) -> float | None:
     # Only a WAV says its own length in its header; the other formats are
-    # packed, and only a decoder can tell. So no length, and no cost, for
-    # them: guessing one from the size would print a wrong price.
+    # packed, and only a program that unpacks them can tell. So no length,
+    # and no cost, for them: a guess from the size would be a wrong price.
     if audio_format(data) != "WAV":
         return None
     try:
         with wave.open(io.BytesIO(data), "rb") as recording:
             return recording.getnframes() / recording.getframerate()
     except wave.Error:
-        # A WAV of a kind the wave module does not read, such as one of
-        # decimal samples: the endpoint takes it, but its length is unknown.
+        # A WAV the wave module does not read, such as one whose samples are
+        # decimal numbers: the endpoint takes it, but its length is unknown.
         return None
 
 

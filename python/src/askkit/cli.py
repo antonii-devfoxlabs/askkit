@@ -348,8 +348,8 @@ def main(arguments: list[str] | None = None) -> None:
         openai_key = load_api_key(OPENAI_KEY_NAME)
         if openai_key is None:
             sys.exit(
-                f"askkit: {OPENAI_KEY_NAME} is not set; transcribe runs at"
-                " OpenAI: put your OpenAI key after the = in .env"
+                f"askkit: {OPENAI_KEY_NAME} is not set (transcribe runs at"
+                " OpenAI); put your OpenAI key after the = in .env"
             )
         openai_client = OpenAI(api_key=openai_key)
         try:

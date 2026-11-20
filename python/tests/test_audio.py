@@ -94,6 +94,7 @@ def use_fake_openai(
         (b"RIFF\x24\x00\x00\x00WAVEfmt ", "WAV"),
         (b"ID3\x04\x00\x00\x00", "MP3"),
         (b"\xff\xfb\x90\x64\x00", "MP3"),
+        (b"\xff\xfa\x90\x64\x00", "MP3"),
         (b"\x00\x00\x00\x20ftypM4A ", "M4A"),
         (b"OggS\x00\x02\x00\x00", "OGG"),
         (b"fLaC\x00\x00\x00\x22", "FLAC"),
@@ -276,7 +277,7 @@ def test_no_openai_key_says_where_it_goes(
     with pytest.raises(SystemExit) as stopped:
         main(["transcribe", str(VOICEMAIL)])
     assert stopped.value.code == (
-        "askkit: OPENAI_API_KEY is not set; transcribe runs at OpenAI:"
+        "askkit: OPENAI_API_KEY is not set (transcribe runs at OpenAI);"
         " put your OpenAI key after the = in .env"
     )
 
