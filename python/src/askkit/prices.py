@@ -46,3 +46,9 @@ LONG_PROMPT_CACHE_PRICES: dict[str, dict[str, float]] = {
 # tokens its results add: $10 per 1,000 searches, checked on 2026-11-18
 # on the same pricing page. A search that fails is not billed.
 SEARCH_PRICE = 10 / 1000
+
+# The Message Batches API bills every token of a batch request, cache
+# writes and reads included, at this share of the prices above: "All
+# usage is charged at 50 percent of the standard API prices" (the
+# batch processing page and the pricing page, checked on 2026-11-20).
+BATCH_SHARE = 0.5

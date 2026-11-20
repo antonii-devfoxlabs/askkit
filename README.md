@@ -723,6 +723,34 @@ and the run goes on; a rejected request stops it, sends no email still
 waiting for a place, and names its email. Every call is a line of the
 log, under the command `inbox`, with its own time.
 
+## Sending an inbox as one batch
+
+A job nobody waits on can go as one Message Batch instead: every email
+in one request, answered within 24 hours (most batches end within an
+hour), at half the price of the same calls one by one.
+
+```bash
+cd python
+uv run askkit inbox samples/inbox.csv --first 12 --batch
+uv run askkit batch msgbatch_01...
+```
+
+`askkit inbox --batch` checks every email's `id` first (a batch request
+is named by it: 1 to 64 letters, digits, `-` or `_`, each once), sends
+the same request `askkit inbox` would, one per email, and prints the
+batch's ID and when it expires. `--batch` and `--at-once` exclude each
+other. `askkit batch ID` asks how the batch is doing; once it has ended
+it prints each email's queue, matched to its email by the request's
+`custom_id`, since the results come in any order. A request that
+errored, expired or was canceled is named and not billed. The summary
+shows the cost at the batch price beside the standard one, and the time
+from sending to the last answer. `--wait` checks once a minute until
+the batch ends.
+
+Each answer is one line of the log, under the command `batch`, at the
+batch price, its seconds the batch's own; a batch collected twice is
+logged once (`.askkit-log/batches.txt` keeps the IDs already logged).
+
 ## The models AskKit calls, and when each retires
 
 Every model ID AskKit calls is a pinned snapshot, and the one every
@@ -1053,6 +1081,8 @@ test, as the thinking count of `ask` did.
   - `src/askkit/calllog.py`: the log of every call, and a day added up.
   - `src/askkit/inbox.py`: an inbox CSV file read, and the two clocks of
     a run of many emails.
+  - `src/askkit/batch.py`: an inbox sent as one Message Batch, and its
+    answers priced and logged.
   - `samples/`: images, an invoice PDF, a voice message, a month of uses
     and an inbox of 1,000 emails (with the script that writes it), made
     for the course, with invented data.

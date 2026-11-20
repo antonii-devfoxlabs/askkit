@@ -6,11 +6,17 @@ from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime
 from functools import partial
 from pathlib import Path
-from time import perf_counter
+from time import perf_counter, sleep
 from typing import Any
 
 import openai
-from anthropic import Anthropic, APIError, AsyncAnthropic, Timeout
+from anthropic import (
+    Anthropic,
+    APIError,
+    AsyncAnthropic,
+    NotFoundError,
+    Timeout,
+)
 from anthropic.types import Message, MessageParam, ToolUnionParam
 from openai import OpenAI
 from openai.types.audio import Transcription
@@ -38,6 +44,14 @@ from askkit.audio import (
     openai_error,
     transcribe,
     transcription_cost,
+)
+from askkit.batch import (
+    POLL_SECONDS,
+    batch_seconds,
+    email_request,
+    id_fault,
+    log_batch,
+    status_text,
 )
 from askkit.budget import DEFAULT_BUDGET, budget_fault
 from askkit.calllog import (
@@ -136,7 +150,7 @@ from askkit.models import (
 )
 from askkit.pdfs import document_block, is_pdf
 from askkit.permissions import offered, permissions_for
-from askkit.prices import PRICES, SEARCH_PRICE
+from askkit.prices import BATCH_SHARE, PRICES, SEARCH_PRICE
 from askkit.prompts import ASK_SYSTEM, render
 from askkit.response_cache import (
     CACHE_FOLDER,
@@ -312,11 +326,14 @@ def print_calls(
     model: str,
     stop_reason: bool = True,
     models: list[str] | None = None,
+    share: float = 1.0,
 ) -> None:
     # One summary for every call a command made: the tokens and the cost
     # are added up, so a ticket asked for twice shows what both cost.
     # models names each call's model when the calls went to more than
     # one (extract --escalate-to); every call is priced at its own.
+    # share is the part of the standard prices paid: BATCH_SHARE for the
+    # answers of a batch, which also shows what they would have cost.
     if models is None:
         models = [model] * len(responses)
     input_tokens = 0
@@ -355,7 +372,13 @@ def print_calls(
         print(f"Cache:         {read:,} read, {written:,} written")
     if searched:
         print(f"Searches:      {searched}, ${searched * SEARCH_PRICE:.2f}")
-    print(f"Cost:          ${cost:.6f}")
+    if share == 1.0:
+        print(f"Cost:          ${cost:.6f}")
+    else:
+        print(
+            f"Cost:          ${cost * share:.6f}, {share:.0%} of"
+            f" ${cost:.6f} at standard prices"
+        )
     # One stop reason says how one answer ended; a command that asked
     # several questions names each answer's own on its line instead.
     if stop_reason:
@@ -653,9 +676,10 @@ def run_inbox(options: argparse.Namespace) -> None:
             " emails; give 1 or more"
         )
     # A call that is not streamed may not take longer than ten minutes:
-    # the SDK refuses it, so AskKit refuses it first, before any call.
+    # the SDK refuses it, so AskKit refuses it first, before any call. A
+    # batch request is not a call AskKit waits on, so it is not held back.
     slowest = slowest_seconds(options.max_tokens)
-    if slowest > LONGEST_TIMEOUT:
+    if slowest > LONGEST_TIMEOUT and not options.batch:
         sys.exit(
             f"askkit: --max-tokens {options.max_tokens:,} may take up to"
             f" {slowest:,.0f} s, longer than the ten minutes a call that"
@@ -663,6 +687,9 @@ def run_inbox(options: argparse.Namespace) -> None:
         )
     chosen = emails[: options.first]
     system = render("classify_email", {})
+    if options.batch:
+        send_batch(chosen, len(emails), options, system)
+        return
     client = AsyncAnthropic(api_key=require_api_key())
     clocks = Clocks()
     try:
@@ -694,6 +721,102 @@ def run_inbox(options: argparse.Namespace) -> None:
         label = f"All {len(emails):,}:"
         whole = whole_job_seconds(run.seconds, len(emails), options.at_once)
         print(f"{label:<15}{duration_text(whole)}, {pace}")
+
+
+def send_batch(
+    chosen: list[InboxEmail],
+    in_file: int,
+    options: argparse.Namespace,
+    system: str,
+) -> None:
+    # Every chosen email in one Message Batch: one request to send them
+    # all, answered later, at half the price. Nothing waits here for the
+    # answers: askkit batch collects them, by the batch's ID.
+    fault = id_fault(chosen)
+    if fault is not None:
+        sys.exit(f"askkit: {fault}")
+    requests = [
+        email_request(email, options.model, options.max_tokens, system)
+        for email in chosen
+    ]
+    client = Anthropic(api_key=require_api_key())
+    try:
+        batch = client.messages.batches.create(requests=requests)
+    except APIError as error:
+        sys.exit(f"askkit: {error_message(error)}")
+    print(f"Batch:         {batch.id}")
+    print(f"Emails:        {len(chosen):,} of {in_file:,}, in one batch")
+    print(f"Status:        {status_text(batch)}")
+    print(f"Expires:       {batch.expires_at:%Y-%m-%d %H:%M} UTC")
+    print(f"Results:       askkit batch {batch.id}")
+
+
+def run_batch(options: argparse.Namespace) -> None:
+    # A batch askkit inbox --batch sent: how it is doing, and once it
+    # has ended, each email's queue. The results come in any order, so
+    # each is matched to its email by its custom_id, never by place.
+    client = Anthropic(api_key=require_api_key())
+    try:
+        batch = client.messages.batches.retrieve(options.batch_id)
+        while options.wait and batch.processing_status != "ended":
+            print(f"Status:        {status_text(batch)}", file=sys.stderr)
+            sleep(POLL_SECONDS)
+            batch = client.messages.batches.retrieve(options.batch_id)
+        if batch.processing_status != "ended":
+            print(f"Batch:         {batch.id}")
+            print(f"Status:        {status_text(batch)}")
+            print(
+                "Results:       not yet; run this again later, or add --wait"
+            )
+            return
+        results = list(client.messages.batches.results(batch.id))
+    except NotFoundError:
+        sys.exit(
+            f"askkit: no batch {options.batch_id} in this workspace (404);"
+            " check the ID askkit inbox --batch printed"
+        )
+    except APIError as error:
+        sys.exit(f"askkit: {error_message(error)}")
+    answers: list[tuple[str, Message]] = []
+    queues: list[str] = []
+    not_sorted: list[str] = []
+    for result in results:
+        outcome = result.result
+        if outcome.type == "succeeded":
+            answers.append((result.custom_id, outcome.message))
+            queue, line = classify_line(
+                InboxEmail(result.custom_id, ""),
+                outcome.message,
+                "sort this email into a queue",
+            )
+            queues.append(queue)
+            print(line)
+            continue
+        # errored, canceled or expired: no answer, and none billed.
+        reason: str = outcome.type
+        if outcome.type == "errored":
+            reason += f" ({outcome.error.error.type})"
+        not_sorted.append(f"{result.custom_id} {reason}")
+        print(f"{result.custom_id:<8}not sorted: {reason}")
+    log_batch(batch, answers)
+    print()
+    print(f"Batch:         {batch.id}")
+    print(
+        f"Emails:        {len(answers):,} sorted,"
+        f" {len(not_sorted):,} not sorted"
+    )
+    if not_sorted:
+        print(f"Not sorted:    {', '.join(not_sorted)}")
+    if answers:
+        print(f"Queues:        {queue_counts(queues)}")
+        responses = [response for _, response in answers]
+        print_calls(
+            responses,
+            responses[0].model,
+            stop_reason=False,
+            share=BATCH_SHARE,
+        )
+    print(f"Time:          {duration_text(batch_seconds(batch))}")
 
 
 def main(arguments: list[str] | None = None) -> None:
@@ -813,9 +936,23 @@ def main(arguments: list[str] | None = None) -> None:
     inbox_command.add_argument("--max-tokens", type=int, default=1000)
     # Try the first few emails, and their times, before paying for all.
     inbox_command.add_argument("--first", type=int)
-    # How many calls may wait for an answer at once: the semaphore's
-    # places. The next email goes out the moment one answers.
-    inbox_command.add_argument("--at-once", type=int, default=10)
+    # How the emails go: --at-once calls waiting for an answer at a
+    # time, the semaphore's places, or --batch, all in one Message
+    # Batch answered later. One or the other, never both.
+    sending = inbox_command.add_mutually_exclusive_group()
+    sending.add_argument("--at-once", type=int, default=10)
+    sending.add_argument(
+        "--batch",
+        action="store_true",
+        help="send every email in one batch, at half the price",
+    )
+    batch_command = commands.add_parser(
+        "batch", help="collect the queues of a batch askkit inbox sent"
+    )
+    batch_command.add_argument("batch_id")
+    batch_command.add_argument(
+        "--wait", action="store_true", help="check every minute until it ends"
+    )
     read_command = commands.add_parser(
         "read", help="take the fields out of an invoice PDF, as JSON"
     )
@@ -1382,6 +1519,10 @@ def main(arguments: list[str] | None = None) -> None:
 
     if options.command == "inbox":
         run_inbox(options)
+        return
+
+    if options.command == "batch":
+        run_batch(options)
         return
 
     if options.command == "read":
