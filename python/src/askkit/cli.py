@@ -66,7 +66,7 @@ from askkit.history import (
     load_history,
     save_history,
 )
-from askkit.images import media_type_of, with_images
+from askkit.images import is_heic, media_type_of, with_images
 from askkit.inputs import image_input, pdf_input
 from askkit.invoices import (
     INVOICE_SCHEMA,
@@ -954,6 +954,12 @@ def main(arguments: list[str] | None = None) -> None:
     max_output = LIMITS[options.model]["max_output"]
     data = options.file.read_bytes()
     what: str | None = None
+    if is_heic(data):
+        # Checked before the recordings: it starts the way an M4A does.
+        sys.exit(
+            f"askkit: {options.file} is a HEIC photo, which Claude's API"
+            " does not read; save it as JPEG"
+        )
     if audio_format(data) is not None:
         # Claude reads the transcript, never the sound, so the recording
         # has a price at OpenAI and no tokens until it is written down.

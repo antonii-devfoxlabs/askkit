@@ -506,7 +506,9 @@ uv run askkit estimate samples/voicemail.wav
   (only a WAV gives its length), and Claude reads the transcript.
 
 Image and PDF tokens are counted for Claude only: every provider counts
-them its own way. `ask --image` and `read` stop at the same limits
+them its own way. A HEIC photo, which iPhones often save, is named as
+one (it starts the way an M4A recording does) and refused: Claude's API
+does not read it. `ask --image` and `read` stop at the same limits
 before any call. The limits and the image rules were checked on 20
 November 2026.
 

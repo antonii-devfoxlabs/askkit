@@ -30,6 +30,15 @@ def media_type_of(data: bytes) -> MediaType | None:
     return None
 
 
+# A HEIC or HEIF photo, what iPhones often save, is an MPEG-4 file like
+# an M4A recording: ftyp at byte 4, then its brand, one of these.
+HEIC_BRANDS = (b"heic", b"heix", b"hevc", b"heim", b"heis", b"mif1")
+
+
+def is_heic(data: bytes) -> bool:
+    return data[4:8] == b"ftyp" and data[8:12] in HEIC_BRANDS
+
+
 # From Anthropic's vision guide, checked on 20 November 2026. Claude reads
 # an image in squares of 28 x 28 pixels, one token each. Claude 4.7 and
 # later models, every Claude model AskKit knows, are on the guide's

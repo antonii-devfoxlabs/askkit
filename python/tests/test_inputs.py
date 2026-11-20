@@ -11,6 +11,7 @@ from askkit.images import (
     image_fault,
     image_size,
     image_tokens,
+    is_heic,
     resized_size,
 )
 from askkit.inputs import image_input, pdf_input
@@ -239,3 +240,19 @@ def test_read_refuses_too_many_pages_before_any_call(
         "askkit: report.pdf has 601 pages, over the 600 a request may hold;"
         " send it in parts"
     )
+
+
+def test_estimate_tells_a_heic_photo_from_a_recording(tmp_path: Path) -> None:
+    photo = tmp_path / "IMG_4417.HEIC"
+    photo.write_bytes(b"\x00\x00\x00\x18ftypheic\x00\x00\x00\x00mif1")
+    with pytest.raises(SystemExit) as stopped:
+        main(["estimate", str(photo)])
+    assert stopped.value.code == (
+        f"askkit: {photo} is a HEIC photo, which Claude's API does not read;"
+        " save it as JPEG"
+    )
+
+
+def test_an_m4a_recording_is_not_a_heic_photo() -> None:
+    assert not is_heic(b"\x00\x00\x00\x20ftypM4A \x00\x00\x00\x00")
+    assert is_heic(b"\x00\x00\x00\x18ftypmif1\x00\x00\x00\x00")
