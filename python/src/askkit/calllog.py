@@ -72,17 +72,25 @@ def clock() -> datetime:
 
 def text_of(content: object) -> str:
     # The words of a message's content. A block that is not text, such as
-    # an image or a PDF, is named, never copied into the log.
+    # an image or a PDF, is named, never copied into the log; a request
+    # for a tool is named with its tool.
     if isinstance(content, str):
         return content
     parts: list[str] = []
     if isinstance(content, Iterable):
         for block in content:
-            kind = block.get("type") if isinstance(block, dict) else None
+            if isinstance(block, BaseModel):
+                # The model's own turn, sent back as the SDK returned it.
+                block = block.model_dump()
+            if not isinstance(block, dict):
+                continue
+            kind = block.get("type")
             if kind == "text":
                 parts.append(str(block["text"]))
             elif kind == "tool_result":
                 parts.append(text_of(block.get("content", "")))
+            elif kind == "tool_use":
+                parts.append(f"[tool_use: {block['name']}]")
             else:
                 parts.append(f"[{kind}]")
     return "\n".join(parts)
@@ -170,7 +178,8 @@ def write_call(call: LoggedCall, prompt: str, answer: str) -> None:
     )
     if current.content:
         kept = {
-            "at": call.at.isoformat(),
+            # The same text as the calls file writes, to match them up.
+            "at": call.model_dump(mode="json")["at"],
             "request_id": call.request_id,
             "prompt": prompt,
             "answer": answer,
@@ -204,7 +213,7 @@ def log_call(
         request_id,
         clock(),
     )
-    answer = text_of([block.to_dict() for block in response.content])
+    answer = text_of(response.content)
     write_call(call, prompt_text(system, messages), answer)
 
 

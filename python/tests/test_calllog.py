@@ -409,3 +409,46 @@ def test_a_question_that_falls_back_logs_the_retries_before_it(
     assert [call.retries for call in calls] == [0, 1]
     # 410 in and 52 out at Sonnet 5.5's $2 and $10 a million tokens.
     assert calls[1].cost == pytest.approx(0.00134)
+
+
+def test_a_turn_the_sdk_returned_is_logged_by_its_blocks() -> None:
+    # A tool loop sends the model's own turn back as the SDK's block
+    # objects, not dicts: they were logged as "[None]". A tool request is
+    # named with its tool, never with its input.
+    turn = Message.model_validate(
+        {
+            **WRITTEN,
+            "content": [
+                {"type": "text", "text": "Let me work it out."},
+                {
+                    "type": "tool_use",
+                    "id": "toolu_01",
+                    "name": "calculate",
+                    "input": {"operation": "multiply", "a": 4417, "b": 0.18},
+                },
+            ],
+        }
+    )
+    text = prompt_text(
+        "Be brief.",
+        [
+            {"role": "user", "content": "What is 18% of 4,417?"},
+            {"role": "assistant", "content": turn.content},
+        ],
+    )
+    assert text == (
+        "system: Be brief.\n"
+        "user: What is 18% of 4,417?\n"
+        "assistant: Let me work it out.\n[tool_use: calculate]"
+    )
+
+
+def test_both_files_write_the_moment_the_same_way(
+    run_here: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    answering(monkeypatch, [], WRITTEN)
+    main(["--log-content", "ask", QUESTION])
+    numbers = json.loads(
+        (log_folder() / "calls-2026-11-20.jsonl").read_text(encoding="utf-8")
+    )
+    assert content_lines()[0]["at"] == numbers["at"] == "2026-11-20T09:14:00Z"
