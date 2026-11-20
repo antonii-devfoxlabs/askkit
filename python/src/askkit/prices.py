@@ -28,12 +28,18 @@ LONG_PROMPT_PRICES: dict[str, dict[str, float]] = {
 # (0.1 times). Over the long prompt step, both from the higher prices.
 # Claude Sonnet 5.5 reads at 0.05 times its input price, not 0.1 (the
 # same page, its footnote 2, checked on 2026-11-20).
+# GPT-6 Luna, the model askkit answer can fall back to at OpenAI (lesson
+# 10.5), from OpenAI's pricing page, checked on 2026-11-20: a write to its
+# 30-minute cache and a read; over 272,000 input tokens, the long-context
+# prices.
 CACHE_PRICES: dict[str, dict[str, float]] = {
     "claude-haiku-5-5": {"write": 0.125, "read": 0.01},
     "claude-sonnet-5-5": {"write": 2.50, "read": 0.10},
+    "gpt-6-luna": {"write": 0.125, "read": 0.01},
 }
 LONG_PROMPT_CACHE_PRICES: dict[str, dict[str, float]] = {
     "claude-haiku-5-5": {"write": 0.625, "read": 0.05},
+    "gpt-6-luna": {"write": 0.25, "read": 0.02},
 }
 
 # US dollars per search with Anthropic's web search tool, on top of the

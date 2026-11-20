@@ -25,6 +25,7 @@ ASK_SET = Path(__file__).parent.parent / "evals" / "ask"
 MAIN = ASK_SET / "main"
 HELD_OUT = ASK_SET / "held_out"
 RUBRIC = ASK_SET / "rubric.json"
+HAIKU = "claude-haiku-5-5"
 
 # The held-out part of the ask set is kept apart as the extract set's
 # is (tests/test_golden.py): a change to it is made on purpose.
@@ -166,7 +167,9 @@ def test_an_empty_rubric_is_refused(tmp_path: Path) -> None:
 
 def test_a_fail_is_not_taken_without_a_note() -> None:
     rubric = load_rubric(RUBRIC)
-    answer = Answer(case="postage", text=REFUND_POSTAGE, faults=[])
+    answer = Answer(
+        case="postage", model=HAIKU, text=REFUND_POSTAGE, faults=[]
+    )
     read = replies("y", "n", "", "refund is section 1's", "maybe", "y")
     grades = grade_answer(answer, rubric, read)
     assert [grade.passed for grade in grades] == [True, False, True]
@@ -179,7 +182,9 @@ def test_a_fail_is_not_taken_without_a_note() -> None:
 def test_an_answer_code_failed_is_not_shown_to_the_grader() -> None:
     rubric = load_rubric(RUBRIC)
     faults = ["the answer quotes nothing from the documents"]
-    answer = Answer(case="postage", text="We pay.", faults=faults)
+    answer = Answer(
+        case="postage", model=HAIKU, text="We pay.", faults=faults
+    )
     read = replies()
     grades = grade_answer(answer, rubric, read)
     assert read.shown == []
@@ -298,7 +303,7 @@ def test_answer_saves_every_answer_with_its_code_faults(
     )
     answers = load_answers(Path("answers.json"))
     assert answers[0] == Answer(
-        case="postage", text=REFUND_POSTAGE, faults=[]
+        case="postage", model=HAIKU, text=REFUND_POSTAGE, faults=[]
     )
     assert answers[1].faults == [
         "the answer quotes nothing from the documents"
@@ -326,9 +331,10 @@ def test_grade_asks_each_line_and_saves_the_grades(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     answers = [
-        Answer(case="postage", text=REFUND_POSTAGE, faults=[]),
+        Answer(case="postage", model=HAIKU, text=REFUND_POSTAGE, faults=[]),
         Answer(
             case="gift",
+            model=HAIKU,
             text="<answer>No.</answer>",
             faults=["the answer quotes nothing from the documents"],
         ),
@@ -384,7 +390,9 @@ def test_grade_asks_each_line_and_saves_the_grades(
 def test_grade_refuses_an_answer_to_a_question_not_in_the_set(
     ask_set: Path,
 ) -> None:
-    answer = Answer(case="canada", text="I don't know.", faults=[])
+    answer = Answer(
+        case="canada", model=HAIKU, text="I don't know.", faults=[]
+    )
     Path("answers.json").write_text(
         json.dumps([answer.model_dump()]), encoding="utf-8"
     )

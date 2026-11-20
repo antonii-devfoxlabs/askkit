@@ -62,6 +62,13 @@ from askkit.extract import (
     ticket_faults,
     ticket_messages,
 )
+from askkit.fallback import (
+    OPENAI_MODELS,
+    FirstAnswer,
+    ask_openai,
+    fallbacks_line,
+    first_answer,
+)
 from askkit.golden import KINDS, Case, kind_counts, load_cases
 from askkit.history import (
     SavedMessage,
@@ -95,6 +102,7 @@ from askkit.retry import (
     ANSWER_TIMEOUT,
     CONNECT_TIMEOUT,
     Retry,
+    RetryPolicy,
     after_tries,
     retries_line,
     timeout_fault,
@@ -154,6 +162,39 @@ def require_memory(path: Path) -> list[str]:
     except ValueError:
         # Not JSON, or not AskKit's notes: both are ValueErrors.
         sys.exit(f"askkit: {path} is not a memory AskKit saved")
+
+
+def send_to(
+    model: str,
+    *,
+    client: Anthropic,
+    openai_client: OpenAI | None,
+    question: str,
+    max_tokens: int,
+    policy: RetryPolicy,
+    tried: list[Retry],
+    tries_made: list[int],
+) -> Message:
+    # One question to one model of askkit answer's chain. An OpenAI model
+    # gets the same question through OpenAI's SDK, whose own retries own
+    # its tries. A Claude model goes through AskKit's retry policy: each
+    # retry is added to tried, and the number of tries this model made to
+    # tries_made, so a message names the last model's tries, not all.
+    if model in OPENAI_MODELS and openai_client is not None:
+        return ask_openai(
+            openai_client, question, model, max_tokens, ASK_SYSTEM
+        )
+    # One question's call is retried, never the run: the answers before
+    # it are not asked for, or paid for, again. partial(ask, ...) is ask
+    # with its arguments filled in, a call with_retries can make as often
+    # as it needs.
+    call = partial(ask, client, question, model, max_tokens, ASK_SYSTEM)
+    this_model: list[Retry] = []
+    try:
+        return with_retries(call, policy, this_model)
+    finally:
+        tried.extend(this_model)
+        tries_made.append(len(this_model) + 1)
 
 
 def print_calls(
@@ -350,8 +391,13 @@ def main(arguments: list[str] | None = None) -> None:
     )
     answer_command.add_argument("folder", type=Path)
     answer_command.add_argument("--out", type=Path, required=True)
+    # A fallback model can be the first one too, to answer the whole set
+    # with it and grade it before you rely on it.
     answer_command.add_argument(
-        "-m", "--model", choices=MODELS, default="claude-haiku-5-5"
+        "-m",
+        "--model",
+        choices=[*MODELS, *OPENAI_MODELS],
+        default="claude-haiku-5-5",
     )
     answer_command.add_argument("--max-tokens", type=int, default=1000)
     answer_command.add_argument(
@@ -359,6 +405,13 @@ def main(arguments: list[str] | None = None) -> None:
     )
     answer_command.add_argument(
         "--timeout", type=float, default=ANSWER_TIMEOUT
+    )
+    # Models to ask, in order, when the one before them cannot answer.
+    answer_command.add_argument(
+        "--fallback",
+        action="append",
+        default=[],
+        choices=[*MODELS, *OPENAI_MODELS],
     )
     grade_command = commands.add_parser(
         "grade", help="grade saved answers by hand against a rubric"
@@ -498,23 +551,45 @@ def main(arguments: list[str] | None = None) -> None:
         )
         if fault is not None:
             sys.exit(f"askkit: {fault}")
+        chain = [options.model, *options.fallback]
+        for model in options.fallback:
+            if chain.count(model) > 1:
+                sys.exit(
+                    f"askkit: --fallback {model} is already in the chain;"
+                    " fall back to another model"
+                )
         try:
             questions = load_questions(options.folder)
         except (OSError, ValueError) as error:
             sys.exit(f"askkit: {error}")
         policy = replace(ANSWER_POLICY, tries=options.tries)
+        timeout = Timeout(options.timeout, connect=CONNECT_TIMEOUT)
         # AskKit retries these calls itself, so the SDK does not: its own
         # two retries inside each of AskKit's tries would send up to
         # three times as many requests. connect: seconds to reach the
         # API; the timeout: the longest wait for the answer.
         client = Anthropic(
-            api_key=require_api_key(),
-            max_retries=0,
-            timeout=Timeout(options.timeout, connect=CONNECT_TIMEOUT),
+            api_key=require_api_key(), max_retries=0, timeout=timeout
         )
+        fallback_client: OpenAI | None = None
+        if any(model in OPENAI_MODELS for model in chain):
+            # Checked before any call, so a missing key costs nothing.
+            fallback_key = load_api_key(OPENAI_KEY_NAME)
+            if fallback_key is None:
+                sys.exit(
+                    f"askkit: {OPENAI_KEY_NAME} is not set (a fallback in"
+                    " the chain runs at OpenAI); put your OpenAI key after"
+                    " the = in .env"
+                )
+            # The SDK's own two retries own this provider's tries.
+            fallback_client = OpenAI(api_key=fallback_key, timeout=timeout)
         answers: list[Answer] = []
         calls: list[Message] = []
+        priced_as: list[str] = []
         retries: list[Retry] = []
+        outcomes: list[tuple[str, FirstAnswer]] = []
+        # When each model that failed may be asked again, for the run.
+        down_until: dict[str, float] = {}
         for item in questions:
             sources: dict[str, str] = {}
             for name in item.documents:
@@ -522,27 +597,38 @@ def main(arguments: list[str] | None = None) -> None:
                 sources[name] = path.read_text(encoding="utf-8")
             question = with_documents(item.question, sources)
             tried: list[Retry] = []
+            tries_made: list[int] = []
+            send = partial(
+                send_to,
+                client=client,
+                openai_client=fallback_client,
+                question=question,
+                max_tokens=options.max_tokens,
+                policy=policy,
+                tried=tried,
+                tries_made=tries_made,
+            )
             try:
-                # One question's call is retried, never the run: the
-                # answers before it are not asked for, or paid for, again.
-                # partial(ask, ...) is ask with its arguments filled in,
-                # a call with_retries can make as often as it needs.
-                send = partial(
-                    ask,
-                    client,
-                    question,
-                    options.model,
-                    options.max_tokens,
-                    ASK_SYSTEM,
-                )
-                response = with_retries(send, policy, tried)
+                outcome = first_answer(chain, send, down_until)
             except APIError as error:
-                tries = after_tries(len(tried) + 1)
+                tries = after_tries(tries_made[-1])
                 sys.exit(
                     f"askkit: {item.name}: {error_message(error, tries)}"
                 )
+            except openai.APIError as error:
+                sys.exit(f"askkit: {item.name}: {openai_error(error)}")
+            except ValueError as error:
+                sys.exit(f"askkit: {item.name}: {error}")
             retries.extend(tried)
+            outcomes.append((item.name, outcome))
+            # A declined answer that handed the question on may be billed
+            # too, so it is priced with the rest.
+            for declined, model in outcome.declined:
+                calls.append(declined)
+                priced_as.append(model)
+            response = outcome.response
             calls.append(response)
+            priced_as.append(outcome.model)
             code_faults = answer_faults(response, sources)
             # Of a declined answer no part is kept, as askkit ask prints
             # none of it.
@@ -550,20 +636,30 @@ def main(arguments: list[str] | None = None) -> None:
             if response.stop_reason != "refusal":
                 text = answer_text(response)
             answers.append(
-                Answer(case=item.name, text=text, faults=code_faults)
+                Answer(
+                    case=item.name,
+                    model=outcome.model,
+                    text=text,
+                    faults=code_faults,
+                )
             )
             state = "to grade"
             if code_faults:
                 state = "; ".join(code_faults)
+            if outcome.model != options.model:
+                state += f" ({outcome.model})"
             print(f"{item.name:<14}{state}")
         saved = [one.model_dump() for one in answers]
         options.out.write_text(
             json.dumps(saved, indent=2) + "\n", encoding="utf-8"
         )
         print()
-        print_calls(calls, options.model, stop_reason=False)
+        print_calls(calls, options.model, stop_reason=False, models=priced_as)
         if retries:
             print(retries_line(retries))
+        handed_on = fallbacks_line(outcomes)
+        if handed_on is not None:
+            print(handed_on)
         print(f"Saved:         {options.out}")
         return
 

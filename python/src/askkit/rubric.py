@@ -34,12 +34,15 @@ class Criterion(BaseModel):
     fails: str
 
 
-# What the model wrote for one case's question, and what code already found
-# wrong with it, so the grader's time goes only to what code cannot see.
+# What the model wrote for one case's question, which model wrote it, and
+# what code already found wrong with it, so the grader's time goes only to
+# what code cannot see. The model matters once a question can fall back to
+# another one: a grade belongs to the model that earned it.
 class Answer(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     case: str
+    model: str
     text: str
     faults: list[str]
 

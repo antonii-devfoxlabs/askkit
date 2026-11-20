@@ -608,6 +608,33 @@ tokens an hour) is refused before any call. A run that retried prints a
 failed question is sent again, never the questions before it.
 `src/askkit/retry.py` holds the policy.
 
+## Falling back to another model or provider
+
+When a question's tries are used up, `--fallback` sends it to the next
+model of a chain instead of ending the run. Give it once per model, in
+order:
+
+```bash
+cd python
+uv run askkit answer evals/ask/main --out answers.json --fallback gpt-6-luna
+```
+
+A model hands a question on only for what another model can fix: an
+overloaded or failing provider, a rate limit, a timeout or no
+connection. A rejected request (400) or key (401) ends the run as before,
+since every model would reject it too. A declined answer goes on only to
+another Claude model (`--fallback claude-sonnet-5-5`), never to another
+provider, and not at all for the `reasoning_extraction` category. A model
+that used up its tries is passed over for 60 seconds, so the questions
+after it do not wait for it again. `gpt-6-luna` runs at OpenAI, through
+its Responses API, with `OPENAI_API_KEY` from `.env` and `store=False`;
+its answer is turned into the same shape as Claude's, so the same checks
+read it and it is priced at its own prices. Each saved answer names the
+model that wrote it, the question's line names a fallback model, and a
+`Fallbacks:` line says which questions moved and why. Before you rely on
+a fallback, answer the whole set with it first (`-m gpt-6-luna`) and
+grade it. `src/askkit/fallback.py` holds the chain.
+
 ## Prompts
 
 Every prompt AskKit sends is a template file in
@@ -895,6 +922,8 @@ test, as the thinking count of `ask` did.
     system prompt and the question.
   - `src/askkit/routing.py`: the small and the large model, and when a
     ticket goes to the large one.
+  - `src/askkit/fallback.py`: when a question moves on to the next
+    model of a chain, and OpenAI's answer in Claude's shape.
   - `src/askkit/retry.py`: which failed calls are sent again, how long
     AskKit waits before each retry, and the timeout of `askkit answer`.
   - `src/askkit/costmodel.py`: a cost model of the app's features, and
