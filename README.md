@@ -479,6 +479,37 @@ so only a WAV gets a cost. `python/samples/voicemail.wav` is an
 11-second voice message made for the course with a synthetic voice
 (macOS `say`): Maria, an invented customer, about order 4417.
 
+## What an image, a PDF or a recording costs
+
+`askkit estimate` takes an image, a PDF or a voice message as well as
+text, tells which by the file's first bytes, and says what Claude would
+read from it and where it stops, without a call:
+
+```bash
+cd python
+uv run askkit estimate samples/chart.png
+uv run askkit estimate samples/invoice.pdf
+uv run askkit estimate samples/voicemail.wav
+```
+
+- An image costs one token for each square of 28 x 28 pixels. Its width
+  and height come from its header (with Pillow). Every Claude model
+  AskKit knows is on the high-resolution tier of Anthropic's vision
+  guide: an image with a side over 2,576 px, or one over 4,784 tokens,
+  is shrunk by the API to the largest size that fits, and billed at that
+  size. Over 8,000 px a side, or over 10 MB as base64, it is refused.
+- A PDF costs its text, estimated from its characters (taken out with
+  pypdf), plus at most 1,568 tokens for each page's image. Over 600
+  pages (100 when the model's window is under a million tokens), or over
+  128 MB as base64, it is refused.
+- A recording is never sent to Claude: it costs its minutes at OpenAI
+  (only a WAV gives its length), and Claude reads the transcript.
+
+Image and PDF tokens are counted for Claude only: every provider counts
+them its own way. `ask --image` and `read` stop at the same limits
+before any call. The limits and the image rules were checked on 20
+November 2026.
+
 ## Prompts
 
 Every prompt AskKit sends is a template file in
@@ -714,6 +745,11 @@ test, as the thinking count of `ask` did.
   permissions first, with error results the model can act on; it can
   force the first call's tool, and with `--search-site` it offers
   Anthropic's web search, run on Anthropic's servers.
+- `m09`, end of Module 9 (Beyond Text): `ask --image` sends screenshots
+  and charts, `read` takes the fields out of an invoice PDF and checks
+  them, `transcribe` turns a voice message into text at OpenAI, and
+  `estimate` prices an image, a PDF or a recording and stops at the
+  API's limits before a call.
 
 ## Layout
 
@@ -736,9 +772,12 @@ test, as the thinking count of `ask` did.
     Anthropic's servers: its definition, the lines it prints, its
     searches counted and the pages the answer cites.
   - `src/askkit/images.py`: an image file as an `image` block, its
-    format told by its first bytes, placed before the question.
+    format told by its first bytes, placed before the question; its
+    tokens, the size the API shrinks it to, and the API's limits.
   - `src/askkit/pdfs.py`: a PDF as a `document` block, told by its
-    first bytes.
+    first bytes; its pages' text, and the API's limits.
+  - `src/askkit/inputs.py`: what `estimate` prints for an image or a
+    PDF: what the file is and the tokens Claude reads from it.
   - `src/askkit/invoices.py`: the fields of an invoice, and the rules
     that check them against each other.
   - `src/askkit/fetch.py`: the web fetch, which reaches only the sites

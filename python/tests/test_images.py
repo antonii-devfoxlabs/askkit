@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from PIL import Image
 from test_tools import use_answers
 
 from askkit.cli import main
@@ -80,7 +81,7 @@ def test_an_image_goes_as_base64_text() -> None:
 
 def test_the_bytes_decide_the_format_not_the_name(tmp_path: Path) -> None:
     photo = tmp_path / "photo.png"
-    photo.write_bytes(b"\xff\xd8\xff\xe0\x00\x10JFIF\x00")
+    Image.new("RGB", (40, 30)).save(photo, "JPEG")
     source: Any = image_block(photo)["source"]
     assert source["media_type"] == "image/jpeg"
 

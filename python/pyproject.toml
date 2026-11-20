@@ -7,7 +7,9 @@ dependencies = [
     "anthropic>=2.8.0",
     "httpx2>=2.16.0",
     "openai>=3.57.0",
+    "pillow>=13.0.0",
     "pydantic>=2.14.3",
+    "pypdf>=7.1.1",
     "python-dotenv>=1.2.4",
     "tokenizers==0.23.3",
 ]

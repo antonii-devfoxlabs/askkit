@@ -66,7 +66,8 @@ from askkit.history import (
     load_history,
     save_history,
 )
-from askkit.images import with_images
+from askkit.images import media_type_of, with_images
+from askkit.inputs import image_input, pdf_input
 from askkit.invoices import (
     INVOICE_SCHEMA,
     Invoice,
@@ -692,7 +693,8 @@ def main(arguments: list[str] | None = None) -> None:
 
     if options.command == "read":
         try:
-            document = document_block(options.file)
+            window = LIMITS[options.model]["context_window"]
+            document = document_block(options.file, window)
         except OSError as error:
             reason = f"{error.filename}: {error.strerror}"
             sys.exit(f"askkit: cannot read {reason}")
@@ -928,8 +930,8 @@ def main(arguments: list[str] | None = None) -> None:
         print(f"History:       {len(history)} messages in {options.history}")
         return
 
-    text = options.file.read_text(encoding="utf-8")
     if options.command == "compare":
+        text = options.file.read_text(encoding="utf-8")
         print(f"Characters:    {len(text):,}")
         print(f"Output tokens: {options.output:,} (your guess)")
         print(f"Calls:         {options.calls:,}")
@@ -947,10 +949,49 @@ def main(arguments: list[str] | None = None) -> None:
             f"askkit: --cost-per-error {options.cost_per_error:g} is below"
             " zero; a wrong answer costs something or nothing"
         )
-    input_tokens, exact = count_tokens(options.model, text)
     window = LIMITS[options.model]["context_window"]
     max_input = LIMITS[options.model]["max_input"]
     max_output = LIMITS[options.model]["max_output"]
+    data = options.file.read_bytes()
+    what: str | None = None
+    if audio_format(data) is not None:
+        # Claude reads the transcript, never the sound, so the recording
+        # has a price at OpenAI and no tokens until it is written down.
+        fault = audio_fault(options.file, data)
+        if fault is not None:
+            sys.exit(f"askkit: {fault}")
+        recording = f"{audio_format(data)} recording"
+        seconds = audio_seconds(data)
+        if seconds is None:
+            print(f"Input:         {recording}, length unknown")
+            print("Transcribe:    unknown: only a WAV gives its length")
+        else:
+            cost = transcription_cost(seconds)
+            print(f"Input:         {recording}, {seconds:.1f} s")
+            print(f"Transcribe:    ${cost:.6f} at OpenAI, {TRANSCRIBE_MODEL}")
+        print("Claude reads:  the transcript; estimate it once it is written")
+        return
+    if media_type_of(data) is not None or is_pdf(data):
+        if not options.model.startswith("claude-"):
+            sys.exit(
+                "askkit: AskKit counts image and PDF tokens for Claude only;"
+                " each provider counts them its own way"
+            )
+        try:
+            if is_pdf(data):
+                media = pdf_input(options.file, data, options.model, window)
+            else:
+                media = image_input(options.file, data)
+        except ValueError as error:
+            sys.exit(f"askkit: {error}")
+        what, input_tokens, how = media.what, media.tokens, media.how
+    else:
+        text = data.decode("utf-8")
+        input_tokens, exact = count_tokens(options.model, text)
+        if exact:
+            how = "counted by the model's tokenizer"
+        else:
+            how = f"estimated from {len(text):,} characters"
     if options.output > max_output:
         sys.exit(
             f"askkit: --output {options.output:,} is over the most"
@@ -969,11 +1010,9 @@ def main(arguments: list[str] | None = None) -> None:
         )
 
     one_call = call_cost(options.model, input_tokens, options.output)
-    if exact:
-        how = "counted by the model's tokenizer"
-    else:
-        how = f"estimated from {len(text):,} characters"
     print(f"Model:         {options.model}")
+    if what is not None:
+        print(f"Input:         {what}")
     print(f"Input tokens:  {input_tokens:,} ({how})")
     print(f"Output tokens: {options.output:,} (your guess)")
     print(f"Window:        {needed:,} of {window:,} tokens")
