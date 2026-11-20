@@ -638,9 +638,10 @@ def main(arguments: list[str] | None = None) -> None:
             try:
                 content = with_images(question, options.image)
             except OSError as error:
-                sys.exit(
-                    f"askkit: cannot read {error.filename}: {error.strerror}"
-                )
+                # A missing file, or one AskKit may not open: its name and
+                # the reason, as the system words it.
+                reason = f"{error.filename}: {error.strerror}"
+                sys.exit(f"askkit: cannot read {reason}")
             except ValueError as error:
                 sys.exit(f"askkit: {error}")
         history: list[SavedMessage] = []
