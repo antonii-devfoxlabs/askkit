@@ -38,7 +38,7 @@ def audio_format(data: bytes) -> str | None:
     if data[4:8] == b"ftyp":
         return "M4A"
     if data[:4] == b"OggS":
-        return "OGG"
+        return "Ogg"
     if data[:4] == b"fLaC":
         return "FLAC"
     if data[:4] == b"\x1a\x45\xdf\xa3":
@@ -69,7 +69,7 @@ def audio_fault(path: Path, data: bytes) -> str | None:
     # Checked before the call: the endpoint would reject both, after the
     # whole file had gone over the network.
     if audio_format(data) is None:
-        return f"{path} is not a WAV, MP3, M4A, OGG, FLAC or WebM file"
+        return f"{path} is not a WAV, MP3, M4A, Ogg, FLAC or WebM file"
     if len(data) > MAX_AUDIO_BYTES:
         megabytes = len(data) / 1024 / 1024
         return (

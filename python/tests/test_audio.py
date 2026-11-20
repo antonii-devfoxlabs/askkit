@@ -96,7 +96,7 @@ def use_fake_openai(
         (b"\xff\xfb\x90\x64\x00", "MP3"),
         (b"\xff\xfa\x90\x64\x00", "MP3"),
         (b"\x00\x00\x00\x20ftypM4A ", "M4A"),
-        (b"OggS\x00\x02\x00\x00", "OGG"),
+        (b"OggS\x00\x02\x00\x00", "Ogg"),
         (b"fLaC\x00\x00\x00\x22", "FLAC"),
         (b"\x1a\x45\xdf\xa3\x9f\x42\x86", "WebM"),
     ],
@@ -150,7 +150,7 @@ def test_a_minute_costs_the_price_per_minute() -> None:
 
 def test_a_file_that_is_not_audio_is_a_fault() -> None:
     assert audio_fault(Path("notes.txt"), b"Order 4417") == (
-        "notes.txt is not a WAV, MP3, M4A, OGG, FLAC or WebM file"
+        "notes.txt is not a WAV, MP3, M4A, Ogg, FLAC or WebM file"
     )
 
 
@@ -251,7 +251,7 @@ def test_a_file_that_is_not_audio_stops_before_any_call(
     with pytest.raises(SystemExit) as stopped:
         main(["transcribe", str(path)])
     assert stopped.value.code == (
-        f"askkit: {path} is not a WAV, MP3, M4A, OGG, FLAC or WebM file"
+        f"askkit: {path} is not a WAV, MP3, M4A, Ogg, FLAC or WebM file"
     )
     assert sent == []
 

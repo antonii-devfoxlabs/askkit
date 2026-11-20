@@ -472,7 +472,7 @@ uv run askkit transcribe samples/voicemail.wav --out voicemail.txt
 uv run askkit extract voicemail.txt
 ```
 
-The file's format is told by its first bytes (WAV, MP3, M4A, OGG, FLAC
+The file's format is told by its first bytes (WAV, MP3, M4A, Ogg, FLAC
 or WebM), and a file that is none of them, or over the 25 MB a call
 takes, stops before the call. Only a WAV gives its length in its header,
 so only a WAV gets a cost. `python/samples/voicemail.wav` is an
