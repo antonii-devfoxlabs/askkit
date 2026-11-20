@@ -93,6 +93,16 @@ from askkit.history import (
     save_history,
 )
 from askkit.images import is_heic, media_type_of, with_images
+from askkit.inbox import (
+    TO_A_PERSON,
+    Clocks,
+    InboxEmail,
+    duration_text,
+    queue_counts,
+    read_inbox,
+    waiting_share,
+    whole_job_seconds,
+)
 from askkit.inputs import image_input, pdf_input
 from askkit.invoices import (
     INVOICE_SCHEMA,
@@ -437,7 +447,14 @@ def models_called(options: argparse.Namespace) -> list[str]:
         return [options.model, *options.fallback]
     if options.command == "extract" and options.escalate_to is not None:
         return [options.model, options.escalate_to]
-    if options.command in ("ask", "chat", "extract", "classify", "read"):
+    if options.command in (
+        "ask",
+        "chat",
+        "extract",
+        "classify",
+        "inbox",
+        "read",
+    ):
         return [options.model]
     return []
 
@@ -490,6 +507,87 @@ def live_changes() -> list[str]:
 # read and classify give back a kept answer to the same request; --fresh
 # asks the model anyway and keeps the new answer in its place.
 FRESH_HELP = "ask the model even when an answer to this request is kept"
+
+
+def classify_line(
+    email: InboxEmail, response: Message, task: str
+) -> tuple[str, str]:
+    # The queue an email goes to, and its line of the run. An answer that
+    # stopped early or fails its check goes to a person, and the run
+    # goes on: one odd email is no reason to stop the other 999.
+    warning = stop_warning(response, task)
+    if warning is not None:
+        return TO_A_PERSON, f"{email.id:<8}{TO_A_PERSON}: {warning}"
+    try:
+        classification, _ = check_classification(answer_text(response))
+    except ValidationError as error:
+        reason = classification_error(error)
+        return TO_A_PERSON, f"{email.id:<8}{TO_A_PERSON}: {reason}"
+    return classification.queue, f"{email.id:<8}{classification.queue}"
+
+
+def run_inbox(options: argparse.Namespace) -> None:
+    # Every email of the file, one at a time: each call starts only once
+    # the one before it has answered. The two clocks show how much of
+    # the time AskKit's own code ran, and how much it only waited.
+    try:
+        emails = read_inbox(options.file)
+    except OSError as error:
+        sys.exit(f"askkit: cannot read {error.filename}: {error.strerror}")
+    except ValueError as error:
+        sys.exit(f"askkit: {error}")
+    if options.first is not None and options.first < 1:
+        sys.exit(
+            f"askkit: --first {options.first} is not a number of emails;"
+            " give 1 or more"
+        )
+    chosen = emails[: options.first]
+    system = render("classify_email", {})
+    task = "sort this email into a queue"
+    client = Anthropic(api_key=require_api_key())
+    responses: list[Message] = []
+    queues: list[str] = []
+    clocks = Clocks()
+    for email in chosen:
+        cleaned, _ = clean_email(email.email)
+        try:
+            response, _ = stream_json(
+                client,
+                options.model,
+                options.max_tokens,
+                system,
+                [{"role": "user", "content": cleaned}],
+                CLASSIFICATION_SCHEMA,
+                preview=False,
+            )
+        except APIError as error:
+            sys.exit(f"askkit: {email.id}: {error_message(error)}")
+        if response is None:
+            sys.exit(f"askkit: {email.id}: {CANCELLED}")
+        responses.append(response)
+        queue, line = classify_line(email, response, task)
+        queues.append(queue)
+        print(line)
+    times = clocks.read()
+    done = len(chosen)
+    print()
+    print(f"Emails:        {done:,} of {len(emails):,}, one at a time")
+    print(f"Queues:        {queue_counts(queues)}")
+    print_calls(responses, options.model, stop_reason=False)
+    print(
+        f"Time:          {times.wall:.2f} s, "
+        f"{times.wall / done:.2f} s an email"
+    )
+    print(
+        f"Waiting:       {waiting_share(times):.1%} of it; AskKit's own"
+        f" work took {times.cpu:.2f} s"
+    )
+    if done < len(emails):
+        # The label is as wide as every other one: "All 1,000:" and
+        # its spaces make 15 characters.
+        label = f"All {len(emails):,}:"
+        whole = whole_job_seconds(times, done, len(emails))
+        print(f"{label:<15}{duration_text(whole)}, one at a time")
 
 
 def main(arguments: list[str] | None = None) -> None:
@@ -599,6 +697,16 @@ def main(arguments: list[str] | None = None) -> None:
     )
     classify.add_argument("--max-tokens", type=int, default=1000)
     classify.add_argument("--fresh", action="store_true", help=FRESH_HELP)
+    inbox_command = commands.add_parser(
+        "inbox", help="put every email of a CSV file in a queue"
+    )
+    inbox_command.add_argument("file", type=Path)
+    inbox_command.add_argument(
+        "-m", "--model", choices=MODELS, default=DEFAULT_MODEL
+    )
+    inbox_command.add_argument("--max-tokens", type=int, default=1000)
+    # Try the first few emails, and their times, before paying for all.
+    inbox_command.add_argument("--first", type=int)
     read_command = commands.add_parser(
         "read", help="take the fields out of an invoice PDF, as JSON"
     )
@@ -1161,6 +1269,10 @@ def main(arguments: list[str] | None = None) -> None:
             print(f"Left out:      {left_out} quoted lines")
         if change is not None:
             print(f"Repaired:      {change}")
+        return
+
+    if options.command == "inbox":
+        run_inbox(options)
         return
 
     if options.command == "read":

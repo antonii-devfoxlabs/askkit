@@ -57,13 +57,15 @@ def stream_json(
     system: str,
     messages: list[MessageParam],
     schema: dict[str, Any],
+    preview: bool = True,
 ) -> tuple[Message | None, Timing]:
     # An answer held to a JSON schema, streamed: the SDK refuses an
     # ordinary call whose max_tokens could take over ten minutes. Each
     # field is shown once it has settled, on the error output, as a
     # preview for a person; code uses the answer only from the final
     # Message, after its stop reason and its checks. No Message when you
-    # cancel it with Ctrl-C.
+    # cancel it with Ctrl-C. preview=False shows nothing: a run of many
+    # emails prints one line for each instead.
     first_token: float | None = None
     text = ""
     shown: list[str] = []
@@ -76,6 +78,8 @@ def stream_json(
                 if first_token is None and piece:
                     first_token = perf_counter() - start
                 text += piece
+                if not preview:
+                    continue
                 for name, value in settled_fields(text).items():
                     if name not in shown:
                         shown.append(name)

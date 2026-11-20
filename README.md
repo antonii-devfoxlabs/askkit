@@ -689,6 +689,29 @@ model that wrote it, the question's line names a fallback model, and a
 a fallback, answer the whole set with it first (`-m gpt-6-luna`) and
 grade it. `src/askkit/fallback.py` holds the chain.
 
+## Sorting a whole inbox
+
+`askkit inbox FILE` sorts every email of a CSV file into the queues of
+`askkit classify`, one email at a time. The file has two columns, `id`
+and `email`, named on its first line; an email may hold commas and line
+breaks inside double quotes. `python/samples/inbox.csv` holds 1,000
+emails made up for this course (invented names and order numbers),
+written by `python/samples/make_inbox.py`. `--first N` sorts only the
+first N, to measure before paying for all:
+
+```bash
+cd python
+uv run askkit inbox samples/inbox.csv --first 12
+```
+
+It prints each email's queue, then the run: the tokens and the cost, the
+time in all and per email, the share of that time AskKit spent waiting
+(the wall clock, `perf_counter`, against the CPU clock, `process_time`),
+and how long the whole file would take at that pace. An answer that
+stopped early or fails its check goes to a person, and the run goes on;
+a rejected request stops it and names its email. Every call is a line
+of the log, under the command `inbox`.
+
 ## The models AskKit calls, and when each retires
 
 Every model ID AskKit calls is a pinned snapshot, and the one every
@@ -1017,8 +1040,11 @@ test, as the thinking count of `ask` did.
   - `src/askkit/costmodel.py`: a cost model of the app's features, and
     what each one costs a month.
   - `src/askkit/calllog.py`: the log of every call, and a day added up.
-  - `samples/`: images, an invoice PDF, a voice message and a month of
-    uses made for the course, with invented data.
+  - `src/askkit/inbox.py`: an inbox CSV file read, and the two clocks of
+    a run of many emails.
+  - `samples/`: images, an invoice PDF, a voice message, a month of uses
+    and an inbox of 1,000 emails (with the script that writes it), made
+    for the course, with invented data.
   - `notebooks/`: notebooks for exploring, saved without outputs.
   - `evals/`: the golden sets, a main and a held-out part each, the
     ask set's documents and rubric, and the eval that runs the extract
