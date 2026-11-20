@@ -456,6 +456,29 @@ number and an invoice that is wrong itself look the same to the check,
 so a person reads the PDF. `python/samples/invoice.pdf` is a two-page
 invoice from an invented company, made for the course.
 
+## Transcribing a voice message
+
+Anthropic's API takes text and images, not sound, so `askkit transcribe
+FILE` turns a voice message into text with OpenAI's transcription model,
+`gpt-transcribe`, and prints it with the call's tokens, the recording's
+length and what it cost (estimated at $0.0045 a minute, OpenAI's pricing
+page, checked on 20 November 2026). It needs an OpenAI key in
+`python/.env` (`OPENAI_API_KEY`). `--out FILE` also saves the text, so a
+voice message becomes a ticket the way an email does:
+
+```bash
+cd python
+uv run askkit transcribe samples/voicemail.wav --out voicemail.txt
+uv run askkit extract voicemail.txt
+```
+
+The file's format is told by its first bytes (WAV, MP3, M4A, OGG, FLAC
+or WebM), and a file that is none of them, or over the 25 MB a call
+takes, stops before the call. Only a WAV gives its length in its header,
+so only a WAV gets a cost. `python/samples/voicemail.wav` is an
+11-second voice message made for the course with a synthetic voice
+(macOS `say`): Maria, an invented customer, about order 4417.
+
 ## Prompts
 
 Every prompt AskKit sends is a template file in
@@ -728,8 +751,11 @@ test, as the thinking count of `ask` did.
     what it asks for and sends the results back until it answers, for
     at most 5 rounds, sets each call's `tool_choice`, and counts the
     requests and rounds a question took.
-  - `samples/`: images and an invoice PDF made for the course, with
-    invented data.
+  - `src/askkit/audio.py`: a voice message turned into text at OpenAI:
+    its format told by its first bytes, its length read from a WAV's
+    header, and what the call cost.
+  - `samples/`: images, an invoice PDF and a voice message made for the
+    course, with invented data.
   - `notebooks/`: notebooks for exploring, saved without outputs.
   - `evals/`: the golden sets, a main and a held-out part each, the
     ask set's documents and rubric, and the eval that runs the extract

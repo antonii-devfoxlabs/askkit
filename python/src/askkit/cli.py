@@ -3,8 +3,10 @@ import json
 import sys
 from pathlib import Path
 
+import openai
 from anthropic import Anthropic, APIError
 from anthropic.types import Message, ToolUnionParam
+from openai import OpenAI
 from pydantic import ValidationError
 
 from askkit.analysis import fault_lines
@@ -21,6 +23,15 @@ from askkit.ask import (
     thinking_tokens,
     timing_line,
 )
+from askkit.audio import (
+    TRANSCRIBE_MODEL,
+    audio_fault,
+    audio_format,
+    audio_seconds,
+    openai_error,
+    transcribe,
+    transcription_cost,
+)
 from askkit.budget import DEFAULT_BUDGET, budget_fault
 from askkit.chat import STOP, chat
 from askkit.classify import (
@@ -30,7 +41,7 @@ from askkit.classify import (
 )
 from askkit.clean import clean_email
 from askkit.compare import compare_models
-from askkit.config import KEY_NAME, load_api_key, masked
+from askkit.config import KEY_NAME, OPENAI_KEY_NAME, load_api_key, masked
 from askkit.cost import call_cost, error_cost
 from askkit.documents import (
     missing_quotes,
@@ -282,6 +293,11 @@ def main(arguments: list[str] | None = None) -> None:
         "-m", "--model", choices=MODELS, default="claude-haiku-5-5"
     )
     read_command.add_argument("--max-tokens", type=int, default=1000)
+    transcribe_command = commands.add_parser(
+        "transcribe", help="turn a voice message into text"
+    )
+    transcribe_command.add_argument("file", type=Path)
+    transcribe_command.add_argument("--out", type=Path)
     cases_command = commands.add_parser(
         "cases", help="count a golden set's cases by kind"
     )
@@ -318,6 +334,48 @@ def main(arguments: list[str] | None = None) -> None:
 
     if options.command == "key":
         print(f"API key: {masked(require_api_key())}")
+        return
+
+    if options.command == "transcribe":
+        try:
+            data = options.file.read_bytes()
+        except OSError as error:
+            reason = f"{error.filename}: {error.strerror}"
+            sys.exit(f"askkit: cannot read {reason}")
+        fault = audio_fault(options.file, data)
+        if fault is not None:
+            sys.exit(f"askkit: {fault}")
+        openai_key = load_api_key(OPENAI_KEY_NAME)
+        if openai_key is None:
+            sys.exit(
+                f"askkit: {OPENAI_KEY_NAME} is not set; transcribe runs at"
+                " OpenAI: put your OpenAI key after the = in .env"
+            )
+        openai_client = OpenAI(api_key=openai_key)
+        try:
+            transcript = transcribe(
+                openai_client, options.file, data, TRANSCRIBE_MODEL
+            )
+        except openai.APIError as error:
+            sys.exit(f"askkit: {openai_error(error)}")
+        print(transcript.text)
+        print()
+        print(f"Model:         {TRANSCRIBE_MODEL}")
+        usage = transcript.usage
+        if usage is not None and usage.type == "tokens":
+            tokens = f"{usage.input_tokens:,} in, {usage.output_tokens:,} out"
+            print(f"Tokens:        {tokens}")
+        seconds = audio_seconds(data)
+        kind = audio_format(data)
+        if seconds is None:
+            print(f"Audio:         {kind}, length unknown")
+            print("Cost:          unknown: only a WAV gives its length")
+        else:
+            print(f"Audio:         {kind}, {seconds:.1f} s")
+            print(f"Cost:          ${transcription_cost(seconds):.6f}")
+        if options.out is not None:
+            options.out.write_text(transcript.text + "\n", encoding="utf-8")
+            print(f"Saved:         {options.out}")
         return
 
     if options.command == "cases":
