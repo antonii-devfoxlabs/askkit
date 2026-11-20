@@ -5,11 +5,16 @@
 # OpenAI: https://developers.openai.com/api/docs/pricing
 # Qwen: https://www.qwencloud.com/models/qwen3.8-27b
 # When prices change, change this file only.
+# The first four are the high-volume model of each provider, the ones
+# askkit compare sets side by side. claude-sonnet-5-5 is the larger model
+# a request is routed to when the small one is not enough (lesson 10.3),
+# checked on 2026-11-20.
 PRICES: dict[str, dict[str, float]] = {
     "claude-haiku-5-5": {"input": 0.10, "output": 0.50},
     "gemini-3.5-flash-lite": {"input": 0.30, "output": 2.50},
     "gpt-6-luna": {"input": 0.10, "output": 0.50},
     "qwen3.8-27b": {"input": 0.50, "output": 3.00},
+    "claude-sonnet-5-5": {"input": 2.00, "output": 10.00},
 }
 
 # Some models cost more for the whole call when a prompt is long.
@@ -21,8 +26,11 @@ LONG_PROMPT_PRICES: dict[str, dict[str, float]] = {
 # Prompt caching, the same Anthropic page, checked on 2026-11-20: a write
 # to the 5-minute cache (1.25 times the input price) and a read from it
 # (0.1 times). Over the long prompt step, both from the higher prices.
+# Claude Sonnet 5.5 reads at 0.05 times its input price, not 0.1 (the
+# same page, its footnote 2, checked on 2026-11-20).
 CACHE_PRICES: dict[str, dict[str, float]] = {
     "claude-haiku-5-5": {"write": 0.125, "read": 0.01},
+    "claude-sonnet-5-5": {"write": 2.50, "read": 0.10},
 }
 LONG_PROMPT_CACHE_PRICES: dict[str, dict[str, float]] = {
     "claude-haiku-5-5": {"write": 0.625, "read": 0.05},

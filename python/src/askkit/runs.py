@@ -8,12 +8,16 @@ from pydantic import BaseModel, ConfigDict
 # a pass. Runs of the same settings add up in one file. The model
 # samples, so one run is one draw: a case that passes one run and fails
 # the next is the draw, not the version, and only a second run shows it.
+# escalate_to is the larger model a failed answer was asked again on
+# (lesson 10.3), None for a run with no retry; files written before it
+# existed read as None.
 class Results(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     model: str
     prompt_version: int
     cases: dict[str, list[list[str]]]
+    escalate_to: str | None = None
 
 
 def load_results(path: Path) -> Results:
@@ -21,7 +25,11 @@ def load_results(path: Path) -> Results:
 
 
 def add_run(
-    path: Path, model: str, version: int, faults: dict[str, list[str]]
+    path: Path,
+    model: str,
+    version: int,
+    faults: dict[str, list[str]],
+    escalate_to: str | None = None,
 ) -> Results:
     # Adds one run to the file, or starts the file with it. A run of other
     # settings or of other cases would mix two things in one file, so it
@@ -34,20 +42,39 @@ def add_run(
                 f" on {results.model}, not v{version} on {model}; give"
                 " this run a file of its own"
             )
+        if results.escalate_to != escalate_to:
+            raise ValueError(
+                f"{path.name} holds runs escalated to"
+                f" {escalation_text(results.escalate_to)}, not to"
+                f" {escalation_text(escalate_to)}; give this run a file of"
+                " its own"
+            )
         if sorted(results.cases) != sorted(faults):
             raise ValueError(
                 f"{path.name} holds runs of other cases; run the same"
                 " cases again, or give this run a file of its own"
             )
     else:
-        results = Results(model=model, prompt_version=version, cases={})
+        results = Results(
+            model=model,
+            prompt_version=version,
+            cases={},
+            escalate_to=escalate_to,
+        )
         for name in faults:
             results.cases[name] = []
     for name, run_faults in faults.items():
         results.cases[name].append(run_faults)
-    text = results.model_dump_json(indent=2)
+    # A plain run writes no escalate_to, so its file reads as before.
+    text = results.model_dump_json(indent=2, exclude_none=True)
     path.write_text(text + "\n", encoding="utf-8")
     return results
+
+
+def escalation_text(escalate_to: str | None) -> str:
+    if escalate_to is None:
+        return "none"
+    return escalate_to
 
 
 def passes(runs: list[list[str]]) -> int:
@@ -103,6 +130,8 @@ def changed(old: Results, new: Results) -> str:
         differences.append("model")
     if old.prompt_version != new.prompt_version:
         differences.append("prompt version")
+    if old.escalate_to != new.escalate_to:
+        differences.append("escalation")
     if not differences:
         return "nothing: two files of one version"
     return ", ".join(differences)
@@ -128,9 +157,18 @@ def diff_lines(
         row("", old_name, new_name),
         row("Model", old.model, new.model),
         row("Prompt", f"v{old.prompt_version}", f"v{new.prompt_version}"),
-        row("Changed", changed(old, new), ""),
-        "",
     ]
+    # Only files of routed runs name an escalation, so the table of two
+    # plain runs stays as it was.
+    if old.escalate_to is not None or new.escalate_to is not None:
+        lines.append(
+            row(
+                "Escalate to",
+                escalation_text(old.escalate_to),
+                escalation_text(new.escalate_to),
+            )
+        )
+    lines.extend([row("Changed", changed(old, new), ""), ""])
     both_pass = 0
     for name in sorted(old.cases):
         found = verdict(old.cases[name], new.cases[name])

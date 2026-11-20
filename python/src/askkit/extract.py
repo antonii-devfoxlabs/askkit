@@ -59,15 +59,18 @@ def extract_ticket(
     model: str,
     max_tokens: int,
     version: int | None = None,
+    answer: str | None = None,
+    faults: str | None = None,
 ) -> Message:
     # The eval's call, not streamed: nobody watches it. version picks the
     # prompt file; None sends the one in IN_USE. The eval passes another
-    # one to score a version before it is put in use.
+    # one to score a version before it is put in use. With a failed
+    # answer and its faults, it is the retry, as extract asks it.
     return client.messages.create(
         model=model,
         max_tokens=max_tokens,
         system=render("extract_ticket", {}, version),
-        messages=ticket_messages(email),
+        messages=ticket_messages(email, answer, faults),
         output_config={
             "format": {"type": "json_schema", "schema": TICKET_SCHEMA}
         },

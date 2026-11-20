@@ -1,12 +1,21 @@
 from askkit.cost import call_cost
 from askkit.limits import LIMITS
-from askkit.prices import PRICES
 from askkit.tokens import count_tokens
+
+# The high-volume model of each of the four providers: the comparison
+# AskKit is for. The larger models in prices.py are for routing a request
+# that the small one cannot do, not one more row here.
+COMPARED: tuple[str, ...] = (
+    "claude-haiku-5-5",
+    "gemini-3.5-flash-lite",
+    "gpt-6-luna",
+    "qwen3.8-27b",
+)
 
 
 def compare_models(text: str, output_tokens: int, calls: int) -> list[str]:
     rows: list[str] = []
-    for model in PRICES:
+    for model in COMPARED:
         # Each model counts the text with its own tokenizer.
         input_tokens, exact = count_tokens(model, text)
         limits = LIMITS[model]

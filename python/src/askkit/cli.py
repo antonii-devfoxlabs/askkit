@@ -88,6 +88,7 @@ from askkit.pdfs import document_block, is_pdf
 from askkit.permissions import offered, permissions_for
 from askkit.prices import PRICES, SEARCH_PRICE
 from askkit.prompts import ASK_SYSTEM, render
+from askkit.routing import call_model
 from askkit.rubric import (
     Answer,
     Grade,
@@ -144,24 +145,31 @@ def require_memory(path: Path) -> list[str]:
 
 
 def print_calls(
-    responses: list[Message], model: str, stop_reason: bool = True
+    responses: list[Message],
+    model: str,
+    stop_reason: bool = True,
+    models: list[str] | None = None,
 ) -> None:
     # One summary for every call a command made: the tokens and the cost
     # are added up, so a ticket asked for twice shows what both cost.
+    # models names each call's model when the calls went to more than
+    # one (extract --escalate-to); every call is priced at its own.
+    if models is None:
+        models = [model] * len(responses)
     input_tokens = 0
     output_tokens = 0
     written = 0
     read = 0
     cost = 0.0
     thinking: int | None = None
-    for response in responses:
+    for response, priced_as in zip(responses, models, strict=True):
         usage = response.usage
         input_tokens += prompt_tokens(usage)
         output_tokens += usage.output_tokens
         written += usage.cache_creation_input_tokens or 0
         read += usage.cache_read_input_tokens or 0
         # Call by call: each call's prompt decides its prices.
-        cost += usage_cost(model, usage)
+        cost += usage_cost(priced_as, usage)
         thought = thinking_tokens(response)
         if thought is not None:
             thinking = (thinking or 0) + thought
@@ -169,7 +177,11 @@ def print_calls(
     searched = searches(responses)
     # Searches are billed on top of the tokens their results add.
     cost += searched * SEARCH_PRICE
-    print(f"Model:         {last.model}")
+    names: list[str] = []
+    for response in responses:
+        if response.model not in names:
+            names.append(response.model)
+    print(f"Model:         {', then '.join(names)}")
     tokens = f"{input_tokens:,} in, {output_tokens:,} out"
     if thinking is not None:
         tokens += f" ({thinking:,} thinking)"
@@ -294,6 +306,7 @@ def main(arguments: list[str] | None = None) -> None:
     )
     extract.add_argument("--max-tokens", type=int, default=1000)
     extract.add_argument("--retries", type=int, default=1)
+    extract.add_argument("--escalate-to", choices=MODELS)
     extract.add_argument("--orders", type=Path)
     classify = commands.add_parser(
         "classify", help="put an email in one of the shop's queues"
@@ -584,18 +597,24 @@ def main(arguments: list[str] | None = None) -> None:
         if left_out:
             notes.append(f"Left out:      {left_out} quoted lines")
         timings: list[Timing] = []
+        # Each call's model: the first goes to --model, a retry to
+        # --escalate-to when it is given (lesson 10.3).
+        models: list[str] = []
         answer = ""
         faults = ""
         rejection = ""
         for attempt in range(options.retries + 1):
+            model = call_model(attempt, options.model, options.escalate_to)
             messages = ticket_messages(email)
             if attempt > 0:
                 notes.append(f"Asked again:   {faults}")
+                if model != options.model:
+                    notes.append(f"Escalated:     to {model}")
                 messages = ticket_messages(email, answer, faults)
             try:
                 reply, timing = stream_json(
                     client,
-                    options.model,
+                    model,
                     options.max_tokens,
                     render("extract_ticket", {}),
                     messages,
@@ -607,19 +626,20 @@ def main(arguments: list[str] | None = None) -> None:
                 # Cancelled with Ctrl-C: the fields shown are a preview of
                 # a ticket that never came, and nothing is used.
                 if responses:
-                    print_calls(responses, options.model)
+                    print_calls(responses, options.model, models=models)
                 print_times(timings)
                 print(f"Time:          {timing_line(timing, cancelled=True)}")
                 sys.exit(f"askkit: {CANCELLED}")
             response = reply
             responses.append(response)
+            models.append(model)
             timings.append(timing)
             # A cut-off or declined answer may not match the schema, so the
             # stop reason is read before the JSON is. Neither is asked for
             # again: the same room or the same email gives the same stop.
             warning = stop_warning(response, "turn this email into a ticket")
             if warning is not None:
-                print_calls(responses, options.model)
+                print_calls(responses, options.model, models=models)
                 print_times(timings)
                 sys.exit(f"askkit: {warning}")
             answer = answer_text(response)
@@ -646,7 +666,7 @@ def main(arguments: list[str] | None = None) -> None:
             if orders is not None:
                 fault = order_fault(ticket, orders)
                 if fault is not None:
-                    print_calls(responses, options.model)
+                    print_calls(responses, options.model, models=models)
                     print_times(timings)
                     for note in notes:
                         print(note)
@@ -661,14 +681,14 @@ def main(arguments: list[str] | None = None) -> None:
                 notes.append(f"Not stated:    {', '.join(missing)}")
             print(ticket.model_dump_json(indent=2))
             print()
-            print_calls(responses, options.model)
+            print_calls(responses, options.model, models=models)
             print_times(timings)
             for note in notes:
                 print(note)
             return
         # Every answer broke the contract or a rule: no ticket, and exit
         # code 1, so whatever runs AskKit hands the email to a person.
-        print_calls(responses, options.model)
+        print_calls(responses, options.model, models=models)
         print_times(timings)
         for note in notes:
             print(note)

@@ -8,6 +8,7 @@ from askkit.ask import answer_text, stop_warning
 from askkit.clean import clean_email
 from askkit.extract import check_ticket, extract_ticket, ticket_faults
 from askkit.golden import Case, email_text
+from askkit.routing import escalation_fault
 
 # Four digits in a row: an order number. The warehouse finds a ticket by
 # its order field, so the number said again in the problem only takes
@@ -57,3 +58,35 @@ def run_case(
     if warning is not None:
         return [f"stop: {warning}"]
     return case_faults(answer_text(response), case)
+
+
+def run_routed_case(
+    client: Anthropic,
+    folder: Path,
+    case: Case,
+    model: str,
+    escalate_to: str,
+    max_tokens: int,
+    version: int | None = None,
+) -> tuple[list[str], bool]:
+    # One case as extract runs it with --escalate-to: the first call to
+    # model, and, only when its answer fails extract's own checks, one
+    # retry with the faults to escalate_to. The case scores the answer
+    # extract would print, and says whether the retry was made, so the
+    # run can count what share of the emails reached the larger model.
+    email, _ = clean_email(email_text(folder, case))
+    response = extract_ticket(client, email, model, max_tokens, version)
+    warning = stop_warning(response, "turn this email into a ticket")
+    if warning is not None:
+        return [f"stop: {warning}"], False
+    answer = answer_text(response)
+    fault = escalation_fault(answer, email)
+    if fault is None:
+        return case_faults(answer, case), False
+    response = extract_ticket(
+        client, email, escalate_to, max_tokens, version, answer, fault
+    )
+    warning = stop_warning(response, "turn this email into a ticket")
+    if warning is not None:
+        return [f"stop: {warning}"], True
+    return case_faults(answer_text(response), case), True

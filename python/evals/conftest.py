@@ -35,6 +35,11 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         help="the model to score the prompt on",
     )
     parser.addoption(
+        "--escalate-to",
+        help="ask this larger model again when an answer fails extract's"
+        " checks, as extract --escalate-to does",
+    )
+    parser.addoption(
         "--results",
         type=Path,
         help="add this run's faults to a results file, for askkit diff",
@@ -71,6 +76,45 @@ def model(request: pytest.FixtureRequest) -> str:
 
 
 @pytest.fixture(scope="session")
+def escalate_to(request: pytest.FixtureRequest) -> str | None:
+    chosen: str | None = request.config.getoption("--escalate-to")
+    return chosen
+
+
+# Every case of a routed run, and whether its first answer failed
+# extract's checks and went to the larger model, gathered while the run
+# goes and counted at its end.
+ESCALATED = pytest.StashKey[dict[str, bool]]()
+
+
+@pytest.fixture(scope="session")
+def escalated(request: pytest.FixtureRequest) -> dict[str, bool]:
+    cases: dict[str, bool] = {}
+    request.config.stash[ESCALATED] = cases
+    return cases
+
+
+def pytest_terminal_summary(
+    terminalreporter: pytest.TerminalReporter, config: pytest.Config
+) -> None:
+    # After the score: how many emails a routed run sent to the larger
+    # model, the share that decides what the routing costs.
+    target: str | None = config.getoption("--escalate-to")
+    cases = config.stash.get(ESCALATED, {})
+    if target is None or not cases:
+        return
+    names: list[str] = []
+    for name in sorted(cases):
+        if cases[name]:
+            names.append(name)
+    listed = ", ".join(names) or "none"
+    terminalreporter.write_line(
+        f"Escalated to {target}: {len(names)} of {len(cases)} cases"
+        f" ({listed})"
+    )
+
+
+@pytest.fixture(scope="session")
 def version(request: pytest.FixtureRequest) -> int:
     chosen: int | None = request.config.getoption("--prompt-version")
     if chosen is None:
@@ -92,10 +136,13 @@ def pytest_configure(config: pytest.Config) -> None:
 # file.
 @pytest.fixture(scope="session")
 def results(
-    request: pytest.FixtureRequest, model: str, version: int
+    request: pytest.FixtureRequest,
+    model: str,
+    version: int,
+    escalate_to: str | None,
 ) -> Iterator[dict[str, list[str]]]:
     path: Path | None = request.config.getoption("--results")
     faults: dict[str, list[str]] = {}
     yield faults
     if path is not None and faults:
-        add_run(path, model, version, faults)
+        add_run(path, model, version, faults, escalate_to)

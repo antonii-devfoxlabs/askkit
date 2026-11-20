@@ -3,8 +3,7 @@ from pathlib import Path
 import pytest
 
 from askkit.cli import main
-from askkit.compare import compare_models
-from askkit.prices import PRICES
+from askkit.compare import COMPARED, compare_models
 
 EMAIL = (
     "Summarise this support email in one line for the queue.\n"
@@ -23,9 +22,9 @@ ROWS = [
 ]
 
 
-def test_every_model_is_compared_in_the_price_table_order() -> None:
+def test_every_compared_model_gets_a_row_in_its_order() -> None:
     rows = compare_models(EMAIL, 40, 36_000)
-    assert [row.split()[0] for row in rows] == list(PRICES)
+    assert [row.split()[0] for row in rows] == list(COMPARED)
 
 
 def test_each_model_counts_the_text_its_own_way() -> None:

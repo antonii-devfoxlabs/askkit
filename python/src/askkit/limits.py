@@ -33,4 +33,11 @@ LIMITS: dict[str, dict[str, int]] = {
         "max_input": 983_000,
         "max_output": 131_000,
     },
+    # The larger Claude model a request can be routed to (lesson 10.3),
+    # the same Anthropic page, checked on 2026-11-20.
+    "claude-sonnet-5-5": {
+        "context_window": 1_000_000,
+        "max_input": 1_000_000,
+        "max_output": 128_000,
+    },
 }

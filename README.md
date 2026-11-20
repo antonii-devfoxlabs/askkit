@@ -552,6 +552,37 @@ Every command that calls a model prints a `Cache:` line when the cache
 read or wrote anything, and its `Tokens:` and `Cost:` count each kind of
 input at its own price.
 
+## Sending a ticket to a larger model
+
+Claude Sonnet 5.5 costs twenty times Claude Haiku 5.5 a token, so
+`extract` starts every email on Haiku 5.5 and can send only the ones it
+got visibly wrong to Sonnet 5.5:
+
+```bash
+cd python
+uv run askkit extract email.txt --escalate-to claude-sonnet-5-5
+```
+
+The first call goes to `--model`. When its ticket fails `extract`'s own
+checks (the `Ticket` contract, or an order number the email does not
+give), the one retry goes to the model `--escalate-to` names, with the
+failed answer and its faults, and an `Escalated:` line says so. Each
+call is priced at its own model's prices, and `Model:` names both. A
+ticket that passes the checks but is wrong is not escalated: no code
+sees it. `src/askkit/routing.py` holds the two models and the decision.
+
+The eval scores the same route: `uv run pytest evals --escalate-to
+claude-sonnet-5-5 --results routed.json` asks the larger model again
+wherever `extract` would, scores the answer `extract` would print, and
+ends with how many cases were escalated, the share the route's cost
+depends on. A results file keeps the model escalated to, and `askkit
+diff v2.json routed.json` names it as the change. `--escalate-to
+claude-haiku-5-5` scores the plain retry on the same model, the
+cheaper thing to beat.
+
+`askkit compare` still prices the high-volume model of each provider;
+Sonnet 5.5 is in `prices.py` and `limits.py` for routing.
+
 ## Prompts
 
 Every prompt AskKit sends is a template file in
@@ -837,6 +868,8 @@ test, as the thinking count of `ask` did.
     header, and what the call cost.
   - `src/askkit/caching.py`: the cache breakpoints AskKit puts on the
     system prompt and the question.
+  - `src/askkit/routing.py`: the small and the large model, and when a
+    ticket goes to the large one.
   - `src/askkit/costmodel.py`: a cost model of the app's features, and
     what each one costs a month.
   - `samples/`: images, an invoice PDF, a voice message and a month of
