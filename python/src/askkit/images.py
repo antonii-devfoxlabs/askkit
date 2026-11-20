@@ -57,23 +57,20 @@ def fits(width: int, height: int) -> bool:
 
 
 def resized_size(width: int, height: int) -> tuple[int, int]:
-    # The size the API shrinks an image to, from the reference code in
-    # Anthropic's guide "Coordinates and bounding boxes": the largest
-    # size with the same proportions that fits.
+    # The size the API shrinks an image to: the largest size with the same
+    # proportions that fits. AskKit takes one pixel off the long side at a
+    # time, the short side following, which gives the same sizes as the
+    # reference code in Anthropic's guide "Coordinates and bounding boxes".
     if fits(width, height):
         return (width, height)
-    if height > width:
-        short, long = resized_size(height, width)
-        return (long, short)
-    proportion = width / height
-    smallest, largest = 1, width  # smallest always fits, largest never
-    while smallest + 1 < largest:
-        middle = (smallest + largest) // 2
-        if fits(middle, max(round(middle / proportion), 1)):
-            smallest = middle
-        else:
-            largest = middle
-    return (smallest, max(round(smallest / proportion), 1))
+    long_side = max(width, height)
+    proportion = long_side / min(width, height)
+    while not fits(long_side, max(round(long_side / proportion), 1)):
+        long_side -= 1
+    short_side = max(round(long_side / proportion), 1)
+    if width >= height:
+        return (long_side, short_side)
+    return (short_side, long_side)
 
 
 # Pillow refuses to open an image of more than about 179 million pixels,
