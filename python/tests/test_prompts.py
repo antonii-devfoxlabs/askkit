@@ -52,6 +52,9 @@ RELEASED = {
     "remembered.v1.txt": (
         "2f61f208d01e317554cd227af33e132a4f33f7e55f3da1f1aa2f3ac7ebae2d80"
     ),
+    "read_invoice.v1.txt": (
+        "e71a36521ee912dfc1e225bd506c60e9d9582a87ea3067b4b6d84e8c0c5c0f4c"
+    ),
 }
 
 

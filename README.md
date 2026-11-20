@@ -215,7 +215,9 @@ A saved history (`--history`) holds text only, so `--image` and
 contract, a manual. Give it once per file, as many times as you need.
 Each file goes into the user message in `<documents>` tags, numbered and
 named after its path, then a request to quote first, then the
-question, last; the template `quote_request` holds that layout:
+question, last; the template `quote_request` holds that layout. A
+`--document` is read as text, so a PDF is refused before a call (its
+first bytes say what it is): an invoice goes to `askkit read`.
 
 ```bash
 cd python
@@ -427,6 +429,32 @@ allowed one only in its capitals is repaired, and a `Repaired:` line says
 so; any other answer is not asked for again, since the schema leaves
 nothing else to go wrong, and `classify` exits with exit code 1 for a
 person to sort the email.
+
+## Reading an invoice
+
+`askkit read FILE` takes the fields out of a supplier's invoice sent as a
+PDF: the seller, the invoice number, the dates it was issued and is due,
+the currency, the subtotal, the tax and the total. The whole PDF goes in
+the call as base64 text in a `document` block, alone in the user
+message; the API turns each page into an image and takes out its text,
+and the model reads both. The fields are `Invoice` in
+`python/src/askkit/invoices.py`, whose JSON schema is sent beside the
+template `read_invoice`:
+
+```bash
+cd python
+uv run askkit read samples/invoice.pdf
+```
+
+It streams as `extract` does, prints the invoice as JSON, then the same
+lines as `ask`. A file whose first bytes are not a PDF's (`%PDF-`) is
+refused before a call. After `Invoice` has passed, two rules check the
+fields against each other: the subtotal and the tax add up to the total,
+in whole cents, and the due date is not before the issue date. When one
+fails, `read` prints no invoice and exits with exit code 1: a misread
+number and an invoice that is wrong itself look the same to the check,
+so a person reads the PDF. `python/samples/invoice.pdf` is a two-page
+invoice from an invented company, made for the course.
 
 ## Prompts
 
@@ -686,6 +714,10 @@ test, as the thinking count of `ask` did.
     searches counted and the pages the answer cites.
   - `src/askkit/images.py`: an image file as an `image` block, its
     format told by its first bytes, placed before the question.
+  - `src/askkit/pdfs.py`: a PDF as a `document` block, told by its
+    first bytes.
+  - `src/askkit/invoices.py`: the fields of an invoice, and the rules
+    that check them against each other.
   - `src/askkit/fetch.py`: the web fetch, which reaches only the sites
     you allow, never a private address, and reads at most 100,000 bytes
     of text within 10 seconds.
@@ -696,7 +728,8 @@ test, as the thinking count of `ask` did.
     what it asks for and sends the results back until it answers, for
     at most 5 rounds, sets each call's `tool_choice`, and counts the
     requests and rounds a question took.
-  - `samples/`: images made for the course, with invented data.
+  - `samples/`: images and an invoice PDF made for the course, with
+    invented data.
   - `notebooks/`: notebooks for exploring, saved without outputs.
   - `evals/`: the golden sets, a main and a held-out part each, the
     ask set's documents and rubric, and the eval that runs the extract

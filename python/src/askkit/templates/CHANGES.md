@@ -115,3 +115,15 @@ in tags.
 
 - v1: the notes after the chat's rules, under a line that says the user
   asked for them and that the user's latest message wins over a note.
+
+## read_invoice
+
+The system prompt of `askkit read`: what each field of an invoice means
+and how to write it. The PDF is the user message; the shape is the class
+`Invoice` in `../invoices.py`, whose JSON schema is sent beside the
+prompt.
+
+- v1: the eight fields, `seller`, `number`, `issued`, `due`, `currency`,
+  `subtotal`, `tax` and `total`, each copied as the invoice prints it and
+  never worked out, dates as YYYY-MM-DD, `null` for no due date, `0` for
+  no tax, and amounts as plain numbers.

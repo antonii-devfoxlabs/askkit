@@ -1,0 +1,101 @@
+%PDF-1.7
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 5 0 R /F2 6 0 R >> >> /Contents 7 0 R >>
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 5 0 R /F2 6 0 R >> >> /Contents 8 0 R >>
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+6 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>
+endobj
+7 0 obj
+<< /Length 1877 >>
+stream
+0.92 g 40 760 515 44 re f 0 g
+BT /F2 18 Tf 52 785 Td (Kilnworth Ceramics Ltd) Tj ET
+BT /F1 9 Tf 52 769 Td (SAMPLE INVOICE: made up for this course. Not a real company.) Tj ET
+BT /F1 10 Tf 52 730 Td (Unit 4, Clayfield Yard, Stoke Row) Tj ET
+BT /F1 10 Tf 52 716 Td (orders@kilnworth.example) Tj ET
+BT /F2 10 Tf 360 730 Td (Invoice) Tj ET
+BT /F1 10 Tf 430 730 Td (KW-2026-0311) Tj ET
+BT /F2 10 Tf 360 716 Td (Issued) Tj ET
+BT /F1 10 Tf 430 716 Td (2 November 2026) Tj ET
+BT /F2 10 Tf 360 702 Td (Due) Tj ET
+BT /F1 10 Tf 430 702 Td (2 December 2026) Tj ET
+BT /F2 10 Tf 52 680 Td (Bill to) Tj ET
+BT /F1 10 Tf 52 666 Td (Your shop, Purchasing) Tj ET
+0.8 w 40 630 m 555 630 l S
+BT /F2 10 Tf 52 616 Td (Item) Tj ET
+BT /F2 10 Tf 300 616 Td (Quantity) Tj ET
+BT /F2 10 Tf 380 616 Td (Unit price) Tj ET
+BT /F2 10 Tf 511.64 616 Td (Amount) Tj ET
+0.5 w 40 608 m 555 608 l S
+BT /F1 10 Tf 52 590 Td (Stoneware mug, white, 350 ml) Tj ET
+BT /F1 10 Tf 333.88 590 Td (96) Tj ET
+BT /F1 10 Tf 420.54 590 Td (4.35) Tj ET
+BT /F1 10 Tf 514.42 590 Td (417.60) Tj ET
+BT /F1 10 Tf 52 572 Td (Teapot, blue glaze, 1 litre) Tj ET
+BT /F1 10 Tf 333.88 572 Td (24) Tj ET
+BT /F1 10 Tf 414.98 572 Td (12.80) Tj ET
+BT /F1 10 Tf 514.42 572 Td (307.20) Tj ET
+BT /F1 10 Tf 52 554 Td (Packing and pallet) Tj ET
+BT /F1 10 Tf 339.44 554 Td (1) Tj ET
+BT /F1 10 Tf 414.98 554 Td (18.50) Tj ET
+BT /F1 10 Tf 519.98 554 Td (18.50) Tj ET
+0.5 w 40 540 m 555 540 l S
+BT /F1 10 Tf 380 522 Td (Subtotal) Tj ET
+BT /F1 10 Tf 514.42 522 Td (743.30) Tj ET
+BT /F1 10 Tf 380 506 Td (VAT 20%) Tj ET
+BT /F1 10 Tf 514.42 506 Td (148.66) Tj ET
+0.8 w 375 496 m 555 496 l S
+BT /F2 11 Tf 380 480 Td (Total \(EUR\)) Tj ET
+BT /F2 11 Tf 511.36 480 Td (891.96) Tj ET
+BT /F1 9 Tf 52 440 Td (Payment terms and how to pay are on page 2.) Tj ET
+BT /F1 8 Tf 52 60 Td (Kilnworth Ceramics Ltd is invented for the AI Engineering course. Page 1 of 2) Tj ET
+endstream
+endobj
+8 0 obj
+<< /Length 796 >>
+stream
+BT /F2 14 Tf 52 785 Td (Terms and payment) Tj ET
+BT /F1 9 Tf 52 765 Td (SAMPLE INVOICE: made up for this course. Not a real company.) Tj ET
+BT /F1 10 Tf 52 730 Td (1. Payment is due 30 days after the invoice date.) Tj ET
+BT /F1 10 Tf 52 712 Td (2. Please quote the invoice number KW-2026-0311 with your payment.) Tj ET
+BT /F1 10 Tf 52 694 Td (3. Goods remain ours until the invoice is paid in full.) Tj ET
+BT /F1 10 Tf 52 676 Td (4. Report breakages within 7 days of delivery, with a photo.) Tj ET
+BT /F2 10 Tf 52 640 Td (How to pay) Tj ET
+BT /F1 10 Tf 52 622 Td (Pay through your supplier portal. This sample invoice) Tj ET
+BT /F1 10 Tf 52 608 Td (gives no bank details on purpose.) Tj ET
+BT /F1 8 Tf 52 60 Td (Kilnworth Ceramics Ltd is invented for the AI Engineering course. Page 2 of 2) Tj ET
+endstream
+endobj
+9 0 obj
+<< /Title (Sample invoice KW-2026-0311) /Author (AI Engineering course) /Producer (hand-written for the course) >>
+endobj
+xref
+0 10
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000127 00000 n 
+0000000263 00000 n 
+0000000399 00000 n 
+0000000496 00000 n 
+0000000598 00000 n 
+0000002527 00000 n 
+0000003374 00000 n 
+trailer
+<< /Size 10 /Root 1 0 R /Info 9 0 R >>
+startxref
+3504
+%%EOF

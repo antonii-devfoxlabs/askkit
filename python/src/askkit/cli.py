@@ -56,6 +56,12 @@ from askkit.history import (
     save_history,
 )
 from askkit.images import with_images
+from askkit.invoices import (
+    INVOICE_SCHEMA,
+    Invoice,
+    invoice_error,
+    invoice_faults,
+)
 from askkit.limits import LIMITS
 from askkit.loop import (
     TOO_MANY_ROUNDS,
@@ -64,6 +70,7 @@ from askkit.loop import (
     tool_loop,
 )
 from askkit.memory import load_memory
+from askkit.pdfs import document_block, is_pdf
 from askkit.permissions import offered, permissions_for
 from askkit.prices import PRICES, SEARCH_PRICE
 from askkit.prompts import ASK_SYSTEM, render
@@ -267,6 +274,14 @@ def main(arguments: list[str] | None = None) -> None:
         "-m", "--model", choices=MODELS, default="claude-haiku-5-5"
     )
     classify.add_argument("--max-tokens", type=int, default=1000)
+    read_command = commands.add_parser(
+        "read", help="take the fields out of an invoice PDF, as JSON"
+    )
+    read_command.add_argument("file", type=Path)
+    read_command.add_argument(
+        "-m", "--model", choices=MODELS, default="claude-haiku-5-5"
+    )
+    read_command.add_argument("--max-tokens", type=int, default=1000)
     cases_command = commands.add_parser(
         "cases", help="count a golden set's cases by kind"
     )
@@ -617,12 +632,70 @@ def main(arguments: list[str] | None = None) -> None:
             print(f"Repaired:      {change}")
         return
 
+    if options.command == "read":
+        try:
+            document = document_block(options.file)
+        except OSError as error:
+            reason = f"{error.filename}: {error.strerror}"
+            sys.exit(f"askkit: cannot read {reason}")
+        except ValueError as error:
+            # Not a PDF: stopped before a call the API would reject.
+            sys.exit(f"askkit: {error}")
+        client = Anthropic(api_key=require_api_key())
+        try:
+            reply, timing = stream_json(
+                client,
+                options.model,
+                options.max_tokens,
+                render("read_invoice", {}),
+                [{"role": "user", "content": [document]}],
+                INVOICE_SCHEMA,
+            )
+        except APIError as error:
+            sys.exit(f"askkit: {error_message(error)}")
+        if reply is None:
+            print(f"Time:          {timing_line(timing, cancelled=True)}")
+            sys.exit(f"askkit: {CANCELLED}")
+        response = reply
+        warning = stop_warning(response, "read this invoice")
+        if warning is not None:
+            print_calls([response], options.model)
+            print_times([timing])
+            sys.exit(f"askkit: {warning}")
+        try:
+            invoice = Invoice.model_validate_json(answer_text(response))
+        except ValidationError as error:
+            print_calls([response], options.model)
+            print_times([timing])
+            sys.exit(f"askkit: {invoice_error(error)}")
+        problems = invoice_faults(invoice)
+        if problems:
+            # A misread number or an invoice that is wrong itself: the
+            # check cannot tell which, so a person reads the PDF.
+            print_calls([response], options.model)
+            print_times([timing])
+            sys.exit(
+                f"askkit: {'; '.join(problems)}; a person checks the invoice"
+            )
+        print(invoice.model_dump_json(indent=2))
+        print()
+        print_calls([response], options.model)
+        print_times([timing])
+        return
+
     if options.command == "ask":
         system = ASK_SYSTEM
         if options.system_file is not None:
             system = options.system_file.read_text(encoding="utf-8").strip()
         documents: dict[str, str] = {}
         for path in options.document:
+            # Read as text, a PDF stops with a UnicodeDecodeError on its
+            # first bytes that are not UTF-8: say so before that happens.
+            if is_pdf(path.read_bytes()):
+                sys.exit(
+                    f"askkit: {path} is a PDF, and --document takes text;"
+                    " read an invoice with askkit read"
+                )
             documents[str(path)] = path.read_text(encoding="utf-8")
         question = options.question
         if documents:
