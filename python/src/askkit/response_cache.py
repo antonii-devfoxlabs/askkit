@@ -19,6 +19,13 @@ CACHE_FOLDER = Path(".askkit-cache")
 MAX_AGE = timedelta(days=30)
 
 
+# What reading a kept answer back can raise. OSError: no such file (never
+# stored) or one AskKit cannot open. ValueError: not JSON, or not a
+# Message (pydantic's ValidationError is a ValueError). KeyError and
+# TypeError: JSON of another shape.
+UNREADABLE = (OSError, ValueError, KeyError, TypeError)
+
+
 @dataclass
 class Kept:
     # An answer from the cache, and when it was stored.
@@ -43,11 +50,7 @@ def kept_answer(folder: Path, key: str, now: datetime) -> Kept | None:
         data = json.loads(path.read_text(encoding="utf-8"))
         stored = datetime.fromisoformat(data["stored"])
         response = Message.model_validate(data["response"])
-    except OSError, ValueError, KeyError, TypeError:
-        # OSError: no such file (never stored) or one AskKit cannot open.
-        # ValueError: not JSON, or not a Message (pydantic's
-        # ValidationError is a ValueError). KeyError and TypeError: JSON
-        # of another shape.
+    except UNREADABLE:
         return None
     if now - stored > MAX_AGE:
         return None
