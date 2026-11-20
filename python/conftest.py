@@ -4,6 +4,7 @@
 from itertools import count
 from pathlib import Path
 
+import httpx2
 import pytest
 
 
@@ -36,3 +37,52 @@ def own_log_folder(
     log_folder = tmp_path_factory.mktemp("log") / ".askkit-log"
     monkeypatch.setattr("askkit.cli.LOG_FOLDER", log_folder)
     monkeypatch.setattr("askkit.calllog.current", None)
+
+
+class ModelAPIInTests(AssertionError):
+    pass
+
+
+# The model APIs AskKit calls. A test reaching one would send a real,
+# maybe billed, request and pass or fail on the network.
+MODEL_API_HOSTS = (
+    "api.anthropic.com",
+    "api.openai.com",
+    "generativelanguage.googleapis.com",
+)
+TESTS = Path(__file__).parent / "tests"
+
+
+@pytest.fixture(autouse=True)
+def no_model_api(
+    request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A test that forgets to give AskKit a stand-in would call the real
+    # API: lesson 11.2's first draft of the async inbox did exactly that,
+    # and got a real 401. Real transports refuse the model APIs here;
+    # httpx2.MockTransport is a class of its own, so stand-ins still
+    # answer. Only for tests/: an eval answers at the network with a
+    # plugin of its own, which this would undo.
+    if not request.node.path.is_relative_to(TESTS):
+        return
+    sync_send = httpx2.HTTPTransport.handle_request
+    async_send = httpx2.AsyncHTTPTransport.handle_async_request
+
+    def guarded(
+        transport: httpx2.HTTPTransport, sent: httpx2.Request
+    ) -> httpx2.Response:
+        if sent.url.host in MODEL_API_HOSTS:
+            raise ModelAPIInTests(f"a test called {sent.url.host}")
+        return sync_send(transport, sent)
+
+    async def guarded_async(
+        transport: httpx2.AsyncHTTPTransport, sent: httpx2.Request
+    ) -> httpx2.Response:
+        if sent.url.host in MODEL_API_HOSTS:
+            raise ModelAPIInTests(f"a test called {sent.url.host}")
+        return await async_send(transport, sent)
+
+    monkeypatch.setattr(httpx2.HTTPTransport, "handle_request", guarded)
+    monkeypatch.setattr(
+        httpx2.AsyncHTTPTransport, "handle_async_request", guarded_async
+    )
