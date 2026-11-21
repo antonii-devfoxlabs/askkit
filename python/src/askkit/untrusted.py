@@ -6,8 +6,8 @@ def marked(source: str, content: str) -> str:
     # from. json.dumps escapes every quote, backslash and line break
     # inside content, so nothing the writer types can end the object or
     # add a field of its own: the object's border is not a tag anyone can
-    # type again. ensure_ascii=False keeps an accent as itself, not as
-    # é, which costs tokens and is harder for the model to read.
+    # type again. ensure_ascii=False keeps an accent as itself, as the
+    # email wrote it, not as the six characters \u00e9 in its place.
     return json.dumps(
         {"source": source, "content": content}, ensure_ascii=False
     )
