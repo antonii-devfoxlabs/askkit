@@ -258,7 +258,11 @@ def test_a_chat_summary_is_a_call_too(
 def test_a_transcription_is_logged_with_its_price_by_the_minute(
     keyed: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    # cli.py stamps a transcription with its own imported clock, which
+    # names the day's file: both clocks are held, or the test reads the
+    # file of the day it was written on and fails on every other day.
     monkeypatch.setattr("askkit.calllog.clock", lambda: MORNING)
+    monkeypatch.setattr("askkit.cli.clock", lambda: MORNING)
     use_fake_openai(monkeypatch, [])
     main(["transcribe", str(VOICEMAIL)])
     [call] = logged()
