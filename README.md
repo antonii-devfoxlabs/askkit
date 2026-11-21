@@ -777,6 +777,16 @@ shows the cost at the batch price beside the standard one, and the time
 from sending to the last answer. `--wait` checks once a minute until
 the batch ends.
 
+Anthropic keeps a batch, every email in it and every answer, for 29 days
+after it was created. `--delete` removes it there once its queues are
+written down, so it needs `--checkpoint`; a batch still processing is
+left alone, since only an ended batch can be deleted:
+
+```bash
+cd python
+uv run askkit batch msgbatch_01... --checkpoint sorted.jsonl --delete
+```
+
 Each answer is one line of the log, under the command `batch`, at the
 batch price, its seconds the batch's own; a batch collected twice is
 logged once (`.askkit-log/batches.txt` keeps the IDs already logged).
@@ -962,6 +972,30 @@ The endpoint's `flagged` is OpenAI's own line, and OpenAI upgrades the
 model behind it, so the categories a run flags can change: what decides
 is the share of emails a person has to read, and the threats that slip
 through, measured on emails like these.
+
+## Where your data goes
+
+Every command that calls a model sends text someone wrote to a
+provider, and each provider's terms say what it keeps and whether it may
+train on it. From each one's own data pages, checked on 21 November
+2026, for an API key of a paying organization; terms change, so read
+them again before you rely on this table:
+
+| Commands | Sent to | Kept there | Trained on |
+| --- | --- | --- | --- |
+| `ask`, `chat`, `classify`, `inbox`, `extract`, `read`, `answer` | Anthropic, Messages API | Deleted within 30 days | No |
+| `inbox --batch`, then `batch` | Anthropic, Message Batches | 29 days, or until `batch --delete` | No |
+| `classify` and `inbox` with `--moderate` | OpenAI, moderation | Nothing | No |
+| `transcribe` | OpenAI, transcriptions | Nothing | No |
+| `--fallback gpt-6-luna` | OpenAI, Responses API | Up to 30 days in its abuse logs; no stored response (`store=False`) | No |
+| `--log-content` | This machine, `.askkit-log/` | 7 days, redacted | No one |
+
+Two exceptions hold everywhere: a provider may keep what its safety
+systems flag for longer (Anthropic says up to 2 years), and what the
+law requires. Anthropic's Claude Fable 5.2 needs an organization with
+30-day retention on, so it does not run under zero data retention.
+The sources: Anthropic's "API and data retention" page and its
+commercial terms, OpenAI's "Data controls in the OpenAI platform" page.
 
 ## The models AskKit calls, and when each retires
 

@@ -98,10 +98,29 @@ class BatchesAPI:
         # results, so the last status stays once the others are used.
         self.statuses = statuses
         self.results = results
+        # For --delete: the status a delete gets, the checkpoint to read
+        # at that moment, and what it held then.
+        self.delete_status = 200
+        self.checkpoint: Path | None = None
+        self.checkpoint_at_delete: str | None = None
 
     def answer(self, request: httpx2.Request) -> httpx2.Response:
         self.paths.append(f"{request.method} {request.url.path}")
         path = request.url.path
+        if request.method == "DELETE":
+            if self.checkpoint is not None:
+                self.checkpoint_at_delete = self.checkpoint.read_text()
+            if self.delete_status != 200:
+                message = {
+                    "type": "permission_error",
+                    "message": "This key may not delete batches.",
+                }
+                return httpx2.Response(
+                    self.delete_status,
+                    json={"type": "error", "error": message},
+                )
+            deleted = {"id": BATCH_ID, "type": "message_batch_deleted"}
+            return httpx2.Response(200, json=deleted)
         if request.method == "POST" and path == "/v1/messages/batches":
             self.created.append(json.loads(request.content))
             count = len(self.created[-1]["requests"])
@@ -428,3 +447,86 @@ def test_an_email_request_cleans_the_quoted_part_away() -> None:
             "content": marked(EMAIL_SOURCE, "Thank you, the vase is lovely!"),
         }
     ]
+
+
+def test_delete_removes_the_batch_once_its_queues_are_written_down(
+    inbox_file: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    api = BatchesAPI(
+        [batch_body(0, True, succeeded=2)],
+        [succeeded("e0001", "damaged"), succeeded("e0002", "delivery")],
+    )
+    checkpoint = inbox_file.parent / "sorted.jsonl"
+    api.checkpoint = checkpoint
+    use_batches(monkeypatch, api)
+    main(["batch", BATCH_ID, "--checkpoint", str(checkpoint), "--delete"])
+    assert api.paths[-1] == f"DELETE /v1/messages/batches/{BATCH_ID}"
+    # Both queues were in the file before Anthropic's copy went.
+    assert api.checkpoint_at_delete == (
+        '{"id": "e0001", "queue": "damaged"}\n'
+        '{"id": "e0002", "queue": "delivery"}\n'
+    )
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[-1] == f"Deleted:       {BATCH_ID} at Anthropic"
+
+
+def test_without_delete_the_batch_stays_at_anthropic(
+    inbox_file: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    api = BatchesAPI(
+        [batch_body(0, True, succeeded=1)], [succeeded("e0001", "damaged")]
+    )
+    use_batches(monkeypatch, api)
+    main(["batch", BATCH_ID, "--checkpoint", "sorted.jsonl"])
+    assert not any(path.startswith("DELETE") for path in api.paths)
+
+
+def test_delete_without_a_checkpoint_stops_before_any_call(
+    inbox_file: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    api = BatchesAPI([batch_body(0, True, succeeded=0)], [])
+    use_batches(monkeypatch, api)
+    with pytest.raises(SystemExit) as stopped:
+        main(["batch", BATCH_ID, "--delete"])
+    assert stopped.value.code == (
+        "askkit: --delete needs --checkpoint FILE, so the queues are"
+        " written down before the batch is deleted at Anthropic"
+    )
+    assert api.paths == []
+
+
+def test_a_batch_still_processing_is_not_deleted(
+    inbox_file: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    api = BatchesAPI([batch_body(2, False, succeeded=0)], [])
+    use_batches(monkeypatch, api)
+    main(["batch", BATCH_ID, "--checkpoint", "sorted.jsonl", "--delete"])
+    assert api.paths == [f"GET /v1/messages/batches/{BATCH_ID}"]
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[-1] == "Deleted:       no; a batch is deleted once it ends"
+
+
+def test_a_delete_the_api_rejects_says_the_queues_are_kept(
+    inbox_file: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    api = BatchesAPI(
+        [batch_body(0, True, succeeded=1)], [succeeded("e0001", "damaged")]
+    )
+    api.delete_status = 403
+    use_batches(monkeypatch, api)
+    with pytest.raises(SystemExit) as stopped:
+        main(["batch", BATCH_ID, "--checkpoint", "sorted.jsonl", "--delete"])
+    assert stopped.value.code == (
+        "askkit: the queues are written down, but the batch was not"
+        " deleted: this key may not make this request (403); check its"
+        " workspace; run the same command again"
+    )
+    assert Path("sorted.jsonl").read_text() == (
+        '{"id": "e0001", "queue": "damaged"}\n'
+    )

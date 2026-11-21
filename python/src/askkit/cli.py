@@ -927,6 +927,11 @@ def run_batch(options: argparse.Namespace) -> None:
     # A batch askkit inbox --batch sent: how it is doing, and once it
     # has ended, each email's queue. The results come in any order, so
     # each is matched to its email by its custom_id, never by place.
+    if options.delete and options.checkpoint is None:
+        sys.exit(
+            "askkit: --delete needs --checkpoint FILE, so the queues are"
+            " written down before the batch is deleted at Anthropic"
+        )
     client = Anthropic(api_key=require_api_key())
     try:
         batch = client.messages.batches.retrieve(options.batch_id)
@@ -941,6 +946,8 @@ def run_batch(options: argparse.Namespace) -> None:
             print(
                 "Results:       not yet; run this again later, or add --wait"
             )
+            if options.delete:
+                print("Deleted:       no; a batch is deleted once it ends")
             return
         results = list(client.messages.batches.results(batch.id))
     except NotFoundError:
@@ -1007,6 +1014,23 @@ def run_batch(options: argparse.Namespace) -> None:
             f"Checkpoint:    {written:,} written to {options.checkpoint},"
             " for askkit inbox --checkpoint"
         )
+    if options.delete:
+        delete_batch(client, batch.id)
+
+
+def delete_batch(client: Anthropic, batch_id: str) -> None:
+    # Anthropic keeps a batch's requests and results for 29 days after
+    # it was created (its batch processing guide, checked on 21 November
+    # 2026; this may change). Once every queue is in the checkpoint,
+    # AskKit needs nothing more from it, so --delete removes it there.
+    try:
+        client.messages.batches.delete(batch_id)
+    except APIError as error:
+        sys.exit(
+            "askkit: the queues are written down, but the batch was not"
+            f" deleted: {error_message(error)}; run the same command again"
+        )
+    print(f"Deleted:       {batch_id} at Anthropic")
 
 
 def main(arguments: list[str] | None = None) -> None:
@@ -1164,6 +1188,12 @@ def main(arguments: list[str] | None = None) -> None:
         "--checkpoint",
         type=Path,
         help="write each sorted email to this file, for askkit inbox",
+    )
+    batch_command.add_argument(
+        "--delete",
+        action="store_true",
+        help="once the queues are in the checkpoint, delete the batch at"
+        " Anthropic, which keeps it 29 days",
     )
     read_command = commands.add_parser(
         "read", help="take the fields out of an invoice PDF, as JSON"
