@@ -1152,7 +1152,7 @@ test, as the thinking count of `ask` did.
     JSON line a sorted email, read before a run and written as it goes.
   - `src/askkit/batch.py`: an inbox sent as one Message Batch, and its
     answers priced and logged.
-  - `samples/`: images, an invoice PDF, a voice message, a month of uses
+  - `samples/`: images, an invoice PDF, a voice message, a month of uses,
     an inbox of 1,000 emails (with the script that writes it) and five
     injection attacks in the inbox's columns, made for the course, with
     invented data.
