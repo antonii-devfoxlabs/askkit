@@ -196,6 +196,7 @@ from askkit.rules import email_fault, load_orders, order_fault
 from askkit.runs import Results, diff_lines, load_results
 from askkit.server_tools import cited_urls, searches, web_search
 from askkit.structured import ask_json, json_request, stream_json
+from askkit.terminal import printable
 from askkit.tokens import count_tokens
 from askkit.tools import TOOLS
 from askkit.trim import OLD_TURNS
@@ -1246,7 +1247,7 @@ def main(arguments: list[str] | None = None) -> None:
         except openai.APIError as error:
             sys.exit(f"askkit: {openai_error(error)}")
         log_transcription(transcript, data, perf_counter() - start)
-        print(transcript.text)
+        print(printable(transcript.text))
         print()
         print(f"Model:         {TRANSCRIBE_MODEL}")
         usage = transcript.usage
@@ -1470,7 +1471,7 @@ def main(arguments: list[str] | None = None) -> None:
             if one.faults:
                 print("Failed by code: " + "; ".join(one.faults))
             else:
-                print(one.text)
+                print(printable(one.text))
                 print()
             grades.extend(grade_answer(one, rubric, input))
         saved = [grade.model_dump() for grade in grades]
@@ -1588,7 +1589,7 @@ def main(arguments: list[str] | None = None) -> None:
             missing = not_stated(ticket)
             if missing:
                 notes.append(f"Not stated:    {', '.join(missing)}")
-            print(ticket.model_dump_json(indent=2))
+            print(printable(ticket.model_dump_json(indent=2)))
             print()
             print_calls(responses, options.model, models=models)
             print_times(timings)
@@ -1648,7 +1649,7 @@ def main(arguments: list[str] | None = None) -> None:
             sys.exit(f"askkit: {classification_error(error)}")
         if kept is None:
             keep_answer(CACHE_FOLDER, key, response, now())
-        print(classification.model_dump_json(indent=2))
+        print(printable(classification.model_dump_json(indent=2)))
         print()
         print_answered(response, options.model, email_timing, kept)
         if left_out:
@@ -1719,7 +1720,7 @@ def main(arguments: list[str] | None = None) -> None:
             )
         if kept is None:
             keep_answer(CACHE_FOLDER, key, response, now())
-        print(invoice.model_dump_json(indent=2))
+        print(printable(invoice.model_dump_json(indent=2)))
         print()
         print_answered(response, options.model, invoice_timing, kept)
         return
@@ -1823,7 +1824,7 @@ def main(arguments: list[str] | None = None) -> None:
             # A blank line between the answer and its numbers.
             print()
         for url in cited_urls(responses):
-            print(f"Source:        {url}")
+            print(f"Source:        {printable(url)}")
         print_calls(responses, options.model)
         requests = requests_line(responses)
         if requests is not None:
@@ -1852,7 +1853,8 @@ def main(arguments: list[str] | None = None) -> None:
                     " found in the documents"
                 )
             if missing:
-                sys.exit(f'askkit: not in the documents: "{missing[0]}"')
+                quote = printable(missing[0])
+                sys.exit(f'askkit: not in the documents: "{quote}"')
             if unchecked(text):
                 sys.exit(
                     "askkit: the answer quotes nothing from the documents,"

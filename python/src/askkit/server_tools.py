@@ -4,6 +4,8 @@ from anthropic.types import (
     WebSearchTool20250305Param,
 )
 
+from askkit.terminal import printable
+
 # The most searches one call may run. Each one is billed, and each one's
 # results are read as input tokens.
 MAX_SEARCHES = 3
@@ -27,7 +29,9 @@ def server_line(block: ContentBlock) -> str | None:
     # A line for a server tool's request or its failure, so you can see
     # what ran on Anthropic's servers; None for every other block.
     if block.type == "server_tool_use" and block.name == "web_search":
-        return f"Search:        {block.input.get('query', '')}"
+        # The model wrote the query, so it is printed as printable text.
+        query = printable(str(block.input.get("query", "")))
+        return f"Search:        {query}"
     if block.type == "web_search_tool_result" and not isinstance(
         block.content, list
     ):

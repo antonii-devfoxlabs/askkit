@@ -17,6 +17,7 @@ from askkit.caching import CACHE, cached_system
 from askkit.calllog import log_call
 from askkit.prices import PRICES
 from askkit.server_tools import server_line
+from askkit.terminal import printable
 
 # Anthropic's SDK reaches only Anthropic's models.
 MODELS: list[str] = []
@@ -103,7 +104,9 @@ def stream_answer(
                     if first_token is None and event.text:
                         first_token = perf_counter() - start
                     # flush: show the piece now, not when the line ends.
-                    print(event.text, end="", flush=True)
+                    # printable: the model wrote it, so the terminal shows
+                    # its control characters instead of obeying them.
+                    print(printable(event.text), end="", flush=True)
                     mid_line = mid_line or bool(event.text)
                 elif event.type == "content_block_stop":
                     # A search the API ran inside this reply gets a line

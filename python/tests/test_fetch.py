@@ -566,3 +566,21 @@ def test_askkit_ask_refuses_a_private_address(
     assert result["content"] == PRIVATE
     lines = capsys.readouterr().out.splitlines()
     assert lines[0] == f"Tool error:    fetch_page: {PRIVATE}"
+
+
+def test_askkit_ask_shows_a_pages_control_characters_as_escapes(
+    tmp_path: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # The JSON around a page escapes ESC already, but not U+202E, which
+    # turns the rest of a line right to left: the Tool line shows it.
+    monkeypatch.chdir(tmp_path)
+    lookup_gives(monkeypatch, [PUBLIC])
+    site_answers(monkeypatch, page("Fine.‮.txt"))
+    asked = asked_for("fetch_page", {"url": PAGE_URL})
+    use_answers(monkeypatch, [], [asked, ANSWERED])
+    main(["ask", "Read it", "--allow-site", "docs.python.org"])
+    first = capsys.readouterr().out.splitlines()[0]
+    assert "‮" not in first
+    assert first.endswith('"content": "Fine.\\u202e.txt"}')

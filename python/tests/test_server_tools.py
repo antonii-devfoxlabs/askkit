@@ -320,3 +320,11 @@ def test_a_search_waits_while_your_tool_runs(
     assert [block["type"] for block in last["content"]] == ["tool_result"]
     assert last["content"][0]["tool_use_id"] == "toolu_01AskKitClock"
     assert sent[1]["tools"] == sent[0]["tools"]
+
+
+def test_a_search_line_shows_the_querys_control_characters() -> None:
+    # The model writes the query, so it is printed as printable text.
+    search: dict[str, Any] = deepcopy(SEARCH)
+    search["input"] = {"query": "python\x1b[2J"}
+    reply = parsed(message([search], searched=0))
+    assert server_line(reply.content[0]) == "Search:        python\\u001b[2J"

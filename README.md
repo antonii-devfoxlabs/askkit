@@ -868,6 +868,38 @@ run ends with a line such as `Attacks won: 1 of 5 (20%): a0004`. Five
 attacks are a smoke alarm, not a proof: add every new attack you find
 in the call log as a case, with its right queue.
 
+### What the model writes back
+
+An attack that wins takes over what the model writes, so AskKit treats
+the answer as one more text a stranger may have written. Before it acts
+on an answer, it checks it in code; the model's own words about it count
+for nothing:
+
+| The model writes | AskKit checks, before anything happens |
+| --- | --- |
+| An email's queue | One of the four queues (`Classification`), else a person |
+| A ticket | `Ticket`, then the email and your orders (`--orders`) |
+| A tool request | Offered and allowed (`--confirm`, `--deny`), input checked |
+| A `fetch_page` address | https, a site you allowed, a public address |
+
+A check holds the answer to what AskKit allows; it cannot tell a wrong
+queue from a right one, so the attack eval still counts the winners.
+AskKit never runs what a model writes as code, as a shell command or as
+part of a database query.
+
+Before it prints, AskKit escapes. A terminal obeys some characters
+instead of showing them: ESC (written `\x1b` in Python) starts a
+sequence that can clear the screen, move the cursor to write over a
+line, or show a link whose address is not the one you read, and `\r`
+goes back to the start of a line. A page or an email can get the model
+to write them. `printable` in `python/src/askkit/terminal.py` shows each
+character Python counts as not printable as the escape JSON writes for
+it, such as `\u001b`, and keeps line breaks and tabs. Everything AskKit
+prints from a model or a site goes through it: the answer as it
+streams, search queries, cited addresses, tool results, tickets,
+queues and invoices as JSON, transcripts, and the answers `grade`
+shows. Files AskKit writes keep the text exactly as it came.
+
 ## The models AskKit calls, and when each retires
 
 Every model ID AskKit calls is a pinned snapshot, and the one every
@@ -1175,6 +1207,8 @@ test, as the thinking count of `ask` did.
     JSON object with its source.
   - `src/askkit/attacks.py`: the injection attacks of the eval, each
     sent as `askkit inbox` sends it, and when an attack won.
+  - `src/askkit/terminal.py`: text a model or a site wrote, made safe to
+    print: every character a terminal would obey is shown as its escape.
   - `src/askkit/permissions.py`: which tools AskKit may run for you
     (allow, ask first, or deny), and the check every request passes
     before it runs.

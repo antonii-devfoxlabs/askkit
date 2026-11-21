@@ -20,6 +20,7 @@ from askkit.ask import (
 )
 from askkit.caching import cached
 from askkit.permissions import Permission, run_permitted
+from askkit.terminal import printable
 from askkit.tools import tool_calls
 
 # The most rounds of tool requests one question may run. Every round is
@@ -134,13 +135,18 @@ def tool_loop(
         results: list[ToolResultBlockParam] = []
         for call in tool_calls(reply):
             result = run_permitted(call, permissions, confirm, sites)
+            # A result can hold a site's own words, such as the address
+            # a page moved to, so it is printed as printable text.
             if result.get("is_error"):
                 # So you can tell a refusal or a failure from a result.
-                print(f"Tool error:    {call.name}: {result['content']}")
+                error = printable(str(result["content"]))
+                print(f"Tool error:    {call.name}: {error}")
             else:
                 text = str(result["content"])
                 if len(text) > LONG_RESULT:
                     text = f"{len(text):,} characters"
+                else:
+                    text = printable(text)
                 print(f"Tool:          {call.name}: {text}")
             results.append(result)
         # The next call carries everything so far: what was sent, the

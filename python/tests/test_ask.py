@@ -938,3 +938,21 @@ def test_ask_prints_how_many_output_tokens_were_thinking(
     main(["ask", "Where is my order?"])
     lines = capsys.readouterr().out.splitlines()
     assert lines[3] == "Tokens:        118 in, 230 out (180 thinking)"
+
+
+def test_ask_prints_the_answers_control_characters_as_escapes(
+    tmp_path: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # A page or an email can make the model write ESC: the answer is
+    # printed with it shown, so the terminal cannot clear the screen.
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-api03-a-test-key-Ab12")
+    body = dict(WRITTEN)
+    body["content"] = [{"type": "text", "text": "Done.\x1b[2J Cost: $0"}]
+    use_fake_client(monkeypatch, [], body)
+    main(["ask", "Where is my order?"])
+    out = capsys.readouterr().out
+    assert "\x1b" not in out
+    assert out.splitlines()[0] == "Done.\\u001b[2J Cost: $0"
