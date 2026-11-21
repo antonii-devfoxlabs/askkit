@@ -1,19 +1,24 @@
-import json
 from typing import Any, Literal, get_args
 
 from anthropic import transform_schema
 from anthropic.types import MessageParam
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    ValidationError,
+    ValidationInfo,
+    field_validator,
+)
 
-from askkit.extract import ticket_faults
+from askkit.extract import in_lower_case, repairs, ticket_faults
 from askkit.redact import redacted
 from askkit.untrusted import marked
 
 # The queues of the shop's support inbox, one per team. "other" is the
 # queue for an email that meets none of the first three conditions:
 # without it, the schema would make the model put such an email in a
-# queue it does not belong to. One list, read by Classification and by
-# repair_queue, and the template defines each queue in the same words.
+# queue it does not belong to. One list, read by the type and by the
+# repair, and the template defines each queue in the same words.
 Queue = Literal["refund", "damaged", "delivery", "other"]
 QUEUES: tuple[str, ...] = get_args(Queue)
 
@@ -24,6 +29,13 @@ class Classification(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     queue: Queue
+
+    # The capitals of an allowed queue ("Other" for "other"), repaired
+    # inside the class, as Ticket repairs its wish.
+    @field_validator("queue", mode="before")
+    @classmethod
+    def queue_in_lower_case(cls, queue: Any, info: ValidationInfo) -> Any:
+        return in_lower_case("queue", queue, QUEUES, info)
 
 
 CLASSIFICATION_SCHEMA: dict[str, Any] = transform_schema(Classification)
@@ -43,38 +55,14 @@ def sorting_messages(email: str) -> list[MessageParam]:
     return [{"role": "user", "content": content}]
 
 
-def repair_queue(text: str) -> tuple[str, str] | None:
-    # The capitals of an allowed queue, which the API does not hold
-    # ("Other" for "other"): the one fault with one right reading.
-    # Returns the repaired answer and what changed, or None.
-    try:
-        data = json.loads(text)
-    except json.JSONDecodeError:
-        return None
-    if not isinstance(data, dict):
-        return None
-    queue = data.get("queue")
-    if not isinstance(queue, str) or queue in QUEUES:
-        return None
-    if queue.lower() not in QUEUES:
-        return None
-    data["queue"] = queue.lower()
-    return json.dumps(data), f"queue {queue!r} to {queue.lower()!r}"
-
-
 def check_classification(text: str) -> tuple[Classification, str | None]:
-    # The answer as a Classification, and what repair_queue changed, if
+    # The answer as a Classification, and what the class repaired, if
     # anything. With the schema held, the queue is one of four words and
     # only its capitals can slip, so AskKit does not ask again: an answer
     # that still fails goes to a person.
-    try:
-        return Classification.model_validate_json(text), None
-    except ValidationError:
-        repaired = repair_queue(text)
-        if repaired is None:
-            raise
-    repaired_text, change = repaired
-    return Classification.model_validate_json(repaired_text), change
+    notes: dict[str, list[str]] = {}
+    classification = Classification.model_validate_json(text, context=notes)
+    return classification, repairs(notes)
 
 
 def classification_error(error: ValidationError) -> str:

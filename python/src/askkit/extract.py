@@ -1,17 +1,51 @@
-import json
 from typing import Any, Literal, get_args
 
 from anthropic import Anthropic, transform_schema
 from anthropic.types import Message, MessageParam
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    ValidationInfo,
+    field_validator,
+)
 
 from askkit.prompts import render
 from askkit.redact import redacted
 
-# The three wishes the warehouse acts on. One list, read by Ticket and by
-# repair_ticket, so the two cannot disagree on what is allowed.
+# The three wishes the warehouse acts on. One list, read by the type and
+# by the repair, so the two cannot disagree on what is allowed.
 Wish = Literal["replacement", "refund", "not stated"]
 WISHES: tuple[str, ...] = get_args(Wish)
+
+# Where a repair writes what it changed, in the validation context: a
+# dict the caller passes to model_validate_json(text, context=...), and
+# a structured-output library passes on to the class (Instructor's
+# context=, Pydantic AI's validation_context=).
+REPAIRED = "repaired"
+
+
+def in_lower_case(
+    field: str, value: Any, allowed: tuple[str, ...], info: ValidationInfo
+) -> Any:
+    # Repairs only what has one right reading: an allowed value written
+    # with other capitals, which Anthropic's documentation says the API
+    # does not hold ("not Stated" for "not stated"). Anything else is
+    # left for the type check to refuse: a question about the email, for
+    # the model to answer again. It runs inside the class, before the
+    # type check, so every loop that checks the class gets it, AskKit's
+    # own or a library's, and no call is paid for a fault code can fix.
+    if not isinstance(value, str) or value in allowed:
+        return value
+    if value.lower() not in allowed:
+        return value
+    # No context: validated by code that keeps no notes, such as a test
+    # or a library called without one. The repair still happens.
+    if isinstance(info.context, dict):
+        changes = info.context.setdefault(REPAIRED, [])
+        changes.append(f"{field} {value!r} to {value.lower()!r}")
+    return value.lower()
 
 
 # A support ticket, as the warehouse team reads it. One class is the
@@ -29,6 +63,13 @@ class Ticket(BaseModel):
     # this class holds it: the API cannot hold a length.
     problem: str = Field(max_length=40)
     wish: Wish
+
+    # mode="before": the value as the answer gave it, before the type
+    # check, so "Refund" can still become "refund" and pass.
+    @field_validator("wish", mode="before")
+    @classmethod
+    def wish_in_lower_case(cls, wish: Any, info: ValidationInfo) -> Any:
+        return in_lower_case("wish", wish, WISHES, info)
 
 
 # What Ticket checked, for a ticket's label (label.py).
@@ -85,39 +126,21 @@ def extract_ticket(
     )
 
 
-def repair_ticket(text: str) -> tuple[str, str] | None:
-    # Repairs only what has one right reading: an allowed wish written with
-    # other capitals, which Anthropic's documentation says the API does
-    # not hold ("not Stated" for "not stated"). Anything else is a
-    # question about the email, and only the model can answer it again.
-    # Returns the repaired answer and what changed, or None.
-    try:
-        data = json.loads(text)
-    except json.JSONDecodeError:
-        return None
-    if not isinstance(data, dict):
-        return None
-    wish = data.get("wish")
-    if not isinstance(wish, str) or wish in WISHES:
-        return None
-    if wish.lower() not in WISHES:
-        return None
-    data["wish"] = wish.lower()
-    return json.dumps(data), f"wish {wish!r} to {wish.lower()!r}"
-
-
 def check_ticket(text: str) -> tuple[Ticket, str | None]:
-    # The answer as a Ticket, and what repair_ticket changed, if anything.
-    # A repaired answer is checked again in full: the repair touches one
-    # field, and the others still have to pass.
-    try:
-        return Ticket.model_validate_json(text), None
-    except ValidationError:
-        repaired = repair_ticket(text)
-        if repaired is None:
-            raise
-    repaired_text, change = repaired
-    return Ticket.model_validate_json(repaired_text), change
+    # The answer as a Ticket, and what the class repaired, if anything.
+    # The repair is one of Ticket's own checks, so the rest of the answer
+    # is checked with it in the same pass.
+    notes: dict[str, list[str]] = {}
+    ticket = Ticket.model_validate_json(text, context=notes)
+    return ticket, repairs(notes)
+
+
+def repairs(notes: dict[str, list[str]]) -> str | None:
+    # The changes the repairs wrote into the context, as one note.
+    changes = notes.get(REPAIRED, [])
+    if not changes:
+        return None
+    return "; ".join(changes)
 
 
 def fault_place(loc: tuple[str | int, ...]) -> str:

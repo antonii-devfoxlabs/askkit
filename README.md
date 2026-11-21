@@ -357,9 +357,12 @@ or the length of `problem` (at most 40 characters). What fails takes
 one of three ways:
 
 - **Repaired**: a wish that differs from an allowed one only in its
-  capitals (`not Stated`) is repaired in code and checked again in full,
-  and a `Repaired:` line says what changed. Nothing else is repaired: any
-  other fault is a question about the email.
+  capitals (`not Stated`) is repaired by `Ticket` itself, a validator
+  that runs before the type check, so the rest of the answer is checked
+  in the same pass. It writes what it changed into the validation
+  context (`Ticket.model_validate_json(text, context=notes)`), and a
+  `Repaired:` line says so. Nothing else is repaired: any other fault is
+  a question about the email.
 - **Asked again**: the model gets the email, its answer and what was
   wrong with it (the template `retry_ticket`), once by default
   (`--retries 1`; `--retries 0` turns it off). An `Asked again:` line
@@ -426,8 +429,8 @@ uv run askkit classify gift.txt
 
 It streams as `extract` does, prints the classification as JSON, then
 the same lines as `ask`, with a `Time:` line. The email is cleaned first, as for `extract`. A queue that differs from an
-allowed one only in its capitals is repaired, and a `Repaired:` line says
-so; any other answer is not asked for again, since the schema leaves
+allowed one only in its capitals is repaired by `Classification`
+itself, as `Ticket` repairs its wish, and a `Repaired:` line says so; any other answer is not asked for again, since the schema leaves
 nothing else to go wrong, and `classify` exits with exit code 1 for a
 person to sort the email.
 
@@ -1323,6 +1326,27 @@ included, so clear them before you commit (**Edit**, then **Clear
 Outputs of All Cells**, then save); a test fails on any notebook saved
 with outputs. What a notebook settles moves into `src/askkit/` with a
 test, as the thinking count of `ask` did.
+
+## Structured-output libraries
+
+Instructor and Pydantic AI write the loop of `extract` for you: they
+send the schema, check the answer against the class, send the faults
+back and ask again, up to a limit. AskKit keeps its own loop, for what
+those libraries did with `anthropic` 2.8.0 on 21 November 2026 (checked
+against a stand-in transport; libraries change, so check again before
+you rely on this):
+
+| AskKit needs | Instructor 1.17.0 | Pydantic AI 2.71.0 |
+| --- | --- | --- |
+| The schema held by the API (`output_config`) | Falls back to the schema in the system prompt, with a warning | Yes (`NativeOutput`) |
+| Calls on `claude-sonnet-5-5` | Forces the tool call, a 400 on that model, unless you pass `tool_choice` `auto` | Yes |
+| The system prompt as written | Yes | Adds about 185 words before it on a retry, unless `framing_announcement` is `never` |
+| Each `Message`, for the call log, the cache and the costs | The last one, and each one in a hook | Its own message types |
+| A retry on a larger model (`--escalate-to`) | No | No |
+
+What AskKit takes from them is where a repair lives: inside the class,
+so any loop that checks the class repairs before it asks again.
+Without it, a library pays a second call for `"Refund"`.
 
 ## Tags
 

@@ -12,6 +12,7 @@ from test_label import printed_json
 from askkit.ask import CANCELLED
 from askkit.cli import main
 from askkit.extract import (
+    REPAIRED,
     TICKET_CHECK,
     TICKET_SCHEMA,
     WISHES,
@@ -20,7 +21,6 @@ from askkit.extract import (
     extract_ticket,
     fault_place,
     not_stated,
-    repair_ticket,
     ticket_error,
     ticket_faults,
     ticket_messages,
@@ -493,31 +493,68 @@ def test_the_problem_length_is_checked_here_not_by_the_api() -> None:
     assert ticket_faults(rejected.value) == TOO_LONG_FAULT
 
 
-def test_repair_changes_only_the_capitals_of_an_allowed_wish() -> None:
-    assert repair_ticket(
+def test_ticket_itself_repairs_the_capitals_of_an_allowed_wish() -> None:
+    # The repair is one of the class's checks, so any loop that checks
+    # Ticket gets it, a structured-output library's too: called with no
+    # context, as a library may call it, the answer still passes.
+    ticket = Ticket.model_validate_json(
         '{"order":4417,"problem":"mug broken","wish":"Refund"}'
-    ) == (
-        '{"order": 4417, "problem": "mug broken", "wish": "refund"}',
-        "wish 'Refund' to 'refund'",
     )
+    assert ticket.wish == "refund"
+
+
+def test_the_repair_writes_what_it_changed_into_the_context() -> None:
+    notes: dict[str, list[str]] = {}
+    Ticket.model_validate_json(
+        '{"order":4417,"problem":"mug broken","wish":"not Stated"}',
+        context=notes,
+    )
+    assert notes == {REPAIRED: ["wish 'not Stated' to 'not stated'"]}
+
+
+def test_check_ticket_names_the_repair() -> None:
+    ticket, change = check_ticket(
+        '{"order":4417,"problem":"mug broken","wish":"Refund"}'
+    )
+    assert ticket.wish == "refund"
+    assert change == "wish 'Refund' to 'refund'"
 
 
 def test_repair_never_guesses_a_wish() -> None:
     # "money back" probably means a refund, but probably is a guess, and
     # a guess is the model's job: it is asked again instead.
-    assert (
-        repair_ticket(
-            '{"order":4417,"problem":"mug broken","wish":"money back"}'
+    notes: dict[str, list[str]] = {}
+    with pytest.raises(ValidationError) as rejected:
+        Ticket.model_validate_json(
+            '{"order":4417,"problem":"mug broken","wish":"money back"}',
+            context=notes,
         )
-        is None
-    )
+    assert notes == {}
+    assert ticket_faults(rejected.value).startswith("wish: Input should be")
 
 
 def test_repair_leaves_what_it_cannot_read() -> None:
-    assert repair_ticket('{"order":4417,"problem":"mug bro') is None
-    assert repair_ticket("[]") is None
-    assert repair_ticket('{"order":4417,"problem":"mug broken"}') is None
-    assert repair_ticket(SHORT) is None
+    for text in ['{"order":4417,"problem":"mug bro', "[]", '{"wish":7}']:
+        notes: dict[str, list[str]] = {}
+        with pytest.raises(ValidationError):
+            Ticket.model_validate_json(text, context=notes)
+        assert notes == {}
+
+
+def test_a_context_that_is_not_a_dict_is_left_alone() -> None:
+    # A library may pass a context of its own shape: the repair happens,
+    # and nothing is written into what is not AskKit's dict.
+    ticket = Ticket.model_validate_json(
+        '{"order":null,"problem":"lamp flickers","wish":"Refund"}',
+        context="the library's own",
+    )
+    assert ticket.wish == "refund"
+
+
+def test_the_repair_does_not_change_the_schema_sent() -> None:
+    # A before-validator is code, not schema: the request is the same.
+    assert TICKET_SCHEMA == transform_schema(Ticket)
+    assert set(TICKET_SCHEMA["properties"]) == {"order", "problem", "wish"}
 
 
 def test_a_repaired_answer_is_checked_again_in_full() -> None:

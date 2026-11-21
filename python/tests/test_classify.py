@@ -12,9 +12,9 @@ from askkit.classify import (
     CLASSIFICATION_SCHEMA,
     EMAIL_SOURCE,
     QUEUES,
+    Classification,
     check_classification,
     classification_error,
-    repair_queue,
     sorting_messages,
 )
 from askkit.cli import main
@@ -123,21 +123,19 @@ def test_classify_streams_the_schema_beside_the_email(
 
 
 def test_capitals_of_an_allowed_queue_are_repaired() -> None:
-    assert repair_queue('{"queue":"Other"}') == (
-        '{"queue": "other"}',
-        "queue 'Other' to 'other'",
-    )
+    classification = Classification.model_validate_json('{"queue":"Other"}')
+    assert classification.queue == "other"
     classification, change = check_classification('{"queue":"Damaged"}')
     assert classification.queue == "damaged"
     assert change == "queue 'Damaged' to 'damaged'"
 
 
 def test_nothing_but_capitals_is_repaired() -> None:
-    assert repair_queue('{"queue":"other"}') is None
-    assert repair_queue('{"queue":"gift cards"}') is None
-    assert repair_queue('{"queue":"Others"}') is None
-    assert repair_queue('["other"]') is None
-    assert repair_queue("other") is None
+    _, change = check_classification('{"queue":"other"}')
+    assert change is None
+    for text in ['{"queue":"gift cards"}', '{"queue":"Others"}', '["other"]']:
+        with pytest.raises(ValidationError):
+            check_classification(text)
 
 
 def test_a_queue_not_on_the_list_is_stopped() -> None:
