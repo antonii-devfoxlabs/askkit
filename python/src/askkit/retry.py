@@ -5,6 +5,14 @@ from dataclasses import dataclass
 
 import anthropic
 from anthropic.types import Message
+from any_llm.exceptions import AnyLLMError
+from tenacity import (
+    RetryCallState,
+    Retrying,
+    retry_if_exception,
+    stop_after_attempt,
+    stop_before_delay,
+)
 
 
 @dataclass(frozen=True)
@@ -57,7 +65,21 @@ class Retry:
     wait: float
 
 
-def worth_retrying(error: anthropic.APIError) -> bool:
+# A Claude model fails with the SDK's errors; a model reached through the
+# layer (lesson 13.2) with the layer's own.
+ProviderError = anthropic.APIError | AnyLLMError
+
+
+def worth_retrying(error: BaseException) -> bool:
+    # The one rule for which failures are worth another try, for every
+    # provider: AskKit's retries and its fallbacks (lesson 10.5) both
+    # read it, so a failure is never retried by one and refused by the
+    # other.
+    if isinstance(error, AnyLLMError):
+        # The same rule in the layer's terms: no status means no answer
+        # at all.
+        status = error.status_code
+        return status is None or status in RETRY_STATUSES or status >= 500
     if isinstance(error, anthropic.APIStatusError):
         # The API may say itself whether a retry can help; it decides.
         header = error.response.headers.get("x-should-retry")
@@ -74,7 +96,14 @@ def worth_retrying(error: anthropic.APIError) -> bool:
     return isinstance(error, anthropic.APIConnectionError)
 
 
-def reason(error: anthropic.APIError) -> str:
+def reason(error: BaseException) -> str:
+    # The reason for the Retries line. The layer gives a timeout and a
+    # lost connection the same class and no status, so both read as
+    # "no answer".
+    if isinstance(error, AnyLLMError):
+        if error.status_code is None:
+            return "no answer"
+        return str(error.status_code)
     if isinstance(error, anthropic.APIStatusError):
         return str(error.status_code)
     if isinstance(error, anthropic.APITimeoutError):
@@ -82,13 +111,19 @@ def reason(error: anthropic.APIError) -> str:
     return "no connection"
 
 
-def retry_after(error: anthropic.APIError) -> float | None:
+def retry_after(error: BaseException) -> float | None:
     # The seconds the API asks to wait, from its retry-after header.
     # Not every error carries one, and an error with no response at all
-    # has no headers: then there is nothing to obey.
-    if not isinstance(error, anthropic.APIStatusError):
+    # has no headers: then there is nothing to obey. A layer error keeps
+    # the provider SDK's own error, whose response has the headers.
+    source: BaseException | None = error
+    if isinstance(error, AnyLLMError):
+        source = error.original_exception
+    response = getattr(source, "response", None)
+    headers = getattr(response, "headers", None)
+    if headers is None:
         return None
-    value = error.response.headers.get("retry-after")
+    value = headers.get("retry-after")
     if value is None:
         return None
     try:
@@ -100,7 +135,7 @@ def retry_after(error: anthropic.APIError) -> float | None:
 def wait_before(
     retry: int,
     policy: RetryPolicy,
-    error: anthropic.APIError,
+    error: BaseException,
     draw: Callable[[], float] = random.random,
 ) -> float:
     # retry counts from 0. The API's own retry-after wins. Otherwise the
@@ -114,32 +149,54 @@ def wait_before(
     return draw() * longest
 
 
+def failed_with(state: RetryCallState) -> BaseException:
+    # The error of the try that just failed. tenacity calls wait and
+    # before_sleep only after a failure, so there always is one.
+    if state.outcome is None:
+        raise RuntimeError("no try has ended yet")
+    error = state.outcome.exception()
+    if error is None:
+        raise RuntimeError("the last try did not fail")
+    return error
+
+
 def with_retries(
     send: Callable[[], Message],
     policy: RetryPolicy,
     retries: list[Retry],
     sleep: Callable[[float], None] = time.sleep,
-    clock: Callable[[], float] = time.monotonic,
     draw: Callable[[], float] = random.random,
 ) -> Message:
     # Calls send() until it returns, and appends each failed try that is
-    # tried again to retries. It stops and raises the last error when the
-    # error is not worth another try, when every try is used, or when the
-    # wait would end past the deadline.
-    start = clock()
-    retried = 0
-    while True:
-        try:
-            return send()
-        except anthropic.APIError as error:
-            if not worth_retrying(error) or retried + 1 >= policy.tries:
-                raise
-            wait = wait_before(retried, policy, error, draw)
-            if clock() - start + wait > policy.deadline:
-                raise
-            retries.append(Retry(reason(error), wait))
-            sleep(wait)
-            retried += 1
+    # tried again to retries. The loop is tenacity's (lesson 13.5); the
+    # policy's answers are AskKit's: which failures (worth_retrying), how
+    # long to wait (wait_before), and when to stop: every try used, or a
+    # wait that would end at the deadline or past it. reraise=True raises
+    # the provider's own error after the last try, as lesson 10.4's loop
+    # did, not tenacity's RetryError, so every except that catches an
+    # API error still catches it. sleep and draw are there for the tests,
+    # which wait no time and draw the same share every time.
+    def wait(state: RetryCallState) -> float:
+        return wait_before(
+            state.attempt_number - 1, policy, failed_with(state), draw
+        )
+
+    def note(state: RetryCallState) -> None:
+        error = failed_with(state)
+        retries.append(Retry(reason(error), state.upcoming_sleep))
+
+    retrying = Retrying(
+        retry=retry_if_exception(worth_retrying),
+        wait=wait,
+        stop=(
+            stop_after_attempt(policy.tries)
+            | stop_before_delay(policy.deadline)
+        ),
+        before_sleep=note,
+        sleep=sleep,
+        reraise=True,
+    )
+    return retrying(send)
 
 
 def slowest_seconds(max_tokens: int) -> float:

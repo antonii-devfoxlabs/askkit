@@ -9,7 +9,6 @@ from openai import DefaultAsyncHttpxClient
 
 from askkit.config import OPENAI_KEY_NAME
 from askkit.models import LIFECYCLES
-from askkit.retry import RETRY_STATUSES
 
 
 @dataclass(frozen=True)
@@ -36,10 +35,12 @@ LAYER_PROVIDERS: dict[str, LayerProvider] = {
 # read from models.py.
 LAYER_MODELS: tuple[str, ...] = ("gemini-3.5-flash-lite", "gpt-6-luna")
 
-# Each provider's SDK decides its own retries when none is set: two at
-# OpenAI, none at Google (lesson 13.1). The layer passes the number on,
-# so every provider gets the same two.
-LAYER_RETRIES = 2
+# No retries under the layer. Each provider's SDK has its own when none
+# is set, two at OpenAI and none at Google (lesson 13.1), and the layer
+# passes a number on. askkit answer retries every model of its chain
+# with one policy of its own (lesson 13.5), so a provider SDK that
+# retried too would multiply its tries.
+LAYER_RETRIES = 0
 
 
 def layer_provider(model: str) -> LayerProvider:
@@ -115,27 +116,11 @@ def ask_layer(
     return response
 
 
-def layer_falls_back(error: AnyLLMError) -> bool:
-    # The rule falls_back applies to Claude, in the layer's terms: too
-    # busy, too much too fast, the provider's side failed, or no answer
-    # at all, which the layer reports with no status.
-    status = error.status_code
-    return status is None or status in RETRY_STATUSES or status >= 500
-
-
-def layer_failure(error: AnyLLMError) -> str:
-    # The reason for the Retries line. The layer gives a timeout and a
-    # lost connection the same class and no status, so both read as
-    # "no answer".
-    if error.status_code is None:
-        return "no answer"
-    return str(error.status_code)
-
-
-def layer_error(error: AnyLLMError) -> str:
+def layer_error(error: AnyLLMError, tries: str) -> str:
     # error.provider_name is the layer's name for the provider that
     # failed, such as "gemini"; the message names the provider as
-    # models.py does.
+    # models.py does. tries: how many tries AskKit made, such as "after 5
+    # tries", for the failures it retries.
     provider, key = "the provider", "its key"
     for name, layer in LAYER_PROVIDERS.items():
         if layer.name == error.provider_name:
@@ -144,9 +129,11 @@ def layer_error(error: AnyLLMError) -> str:
         return f"{provider} rejected the key; check {key} in .env"
     status = error.status_code
     if status is None:
-        return f"no answer from {provider}; check your connection"
+        return f"no answer from {provider} {tries}; check your connection"
     if status == 429:
-        return f"{provider} says too many requests (429); wait and retry"
+        return (
+            f"{provider} says too many requests (429) {tries}; wait and retry"
+        )
     if status >= 500:
-        return f"{provider}'s servers failed ({status}) after its retries"
+        return f"{provider}'s servers failed ({status}) {tries}"
     return f"{provider} rejected the request ({status})"

@@ -698,8 +698,11 @@ timeout or no connection is sent again, up to `--tries` requests in all
 (5 by default), and no retry starts more than two minutes after the
 first send. Before each retry AskKit waits a random time between nothing
 and a limit that doubles from one second up to thirty ("full jitter"),
-or exactly as long as the API's `retry-after` header asks. The SDK's own
-retries are off for these calls, so one try is one request. Each request
+or exactly as long as the API's `retry-after` header asks. The loop is
+[tenacity](https://github.com/jd/tenacity)'s, given AskKit's rules; it
+retries every model of the chain the same way, Claude through
+Anthropic's SDK and other providers through the layer (below), with the
+SDK's and the layer's own retries off, so one try is one request. Each request
 may wait `--timeout` seconds (60 by default) for its answer; a
 `--max-tokens` that could take longer at the SDK's slowest pace (128,000
 tokens an hour) is refused before any call. A run that retried prints a
@@ -755,9 +758,10 @@ uv run askkit answer evals/ask/main --out flash.json -m gemini-3.5-flash-lite
 
 Another model joins with a row in `LAYER_MODELS` (`src/askkit/layer.py`),
 `LIFECYCLES` (`models.py`) and `PRICES` and `CACHE_PRICES` (`prices.py`);
-a new provider also needs a row in `LAYER_PROVIDERS`. AskKit gives every
-provider the same two retries (`LAYER_RETRIES`), since Google's SDK makes
-none unless told to, and reads OpenAI's `x-request-id` header under the
+a new provider also needs a row in `LAYER_PROVIDERS`. The layer's
+provider SDKs make no retries of their own (`LAYER_RETRIES` is 0):
+`answer`'s policy owns them, the same five tries at every provider. AskKit
+reads OpenAI's `x-request-id` header under the
 layer, since the layer's answer carries no request ID. Claude models do
 not go through the layer, which leaves out what AskKit uses of
 Anthropic's SDK: the request ID, the retry count (`retries_taken`), the
@@ -1327,6 +1331,25 @@ Outputs of All Cells**, then save); a test fails on any notebook saved
 with outputs. What a notebook settles moves into `src/askkit/` with a
 test, as the thinking count of `ask` did.
 
+## Who retries what
+
+Every kind of failure has one owner, so no retry runs inside another and
+multiplies the requests:
+
+| What failed | Who tries again | What else stays out |
+| --- | --- | --- |
+| A request, in `ask`, `chat`, `extract`, `classify`, `read`, `inbox` | Anthropic's SDK: 2 retries | AskKit has no loop around these calls |
+| A request, in a run of `answer` | AskKit's policy in `retry.py` (tenacity): 5 tries, 2 minutes | The SDK's and the layer's retries are off |
+| A connection that never opened | The owner above, as one more failed try | `httpx2`'s own transport retries stay at 0 |
+| A model that stays down | The `--fallback` chain, once the policy gives up | The same rule (`worth_retrying`) decides both |
+| An answer that fails its check | `extract`'s ask-again loop (`--retries 1`) | A transport retry would get the same answer |
+| A tool call, such as a fetch | The model, from the error result | `fetch_page` never retries |
+| A run that stopped | You, with `inbox --checkpoint` | Nothing is sorted twice |
+
+The SDK retries a 408, 409, 429, any status from 500 up, a timeout and no
+connection; `answer`'s policy adds a deadline and a longer backoff,
+since a run has nobody waiting at the terminal.
+
 ## Structured-output libraries
 
 Instructor and Pydantic AI write the loop of `extract` for you: they
@@ -1413,6 +1436,13 @@ Without it, a library pays a second call for `"Refund"`.
   flagged email to a person unsorted; `batch --delete` removes a
   collected batch at Anthropic; and the JSON of `extract` and `read` is
   labelled as written by a model.
+- `m13`, end of Module 13 (Popular Libraries, Step One): the call log
+  counts the retries the SDK made; `answer` asks Google's and OpenAI's
+  models through one provider-agnostic layer, any-llm, so switching
+  provider is `-m gemini-3.5-flash-lite`; an invoice's rows are a nested
+  Pydantic model checked by validators; `Ticket` and `Classification`
+  repair their own capitals; and `answer`'s retries run on tenacity, one
+  owner for every model of the chain.
 
 ## Layout
 
@@ -1478,14 +1508,15 @@ Without it, a library pays a second call for `"Refund"`.
   - `src/askkit/fallback.py`: when a question moves on to the next
     model of a chain.
   - `src/askkit/layer.py`: the models of other providers, asked
-    through one provider-agnostic library, any-llm, with the same
-    retries at each and OpenAI's request ID read under it.
+    through one provider-agnostic library, any-llm, with no retries
+    under it and OpenAI's request ID read under it.
   - `src/askkit/models.py`: the default model, and the day each model
     AskKit calls retires.
   - `src/askkit/response_cache.py`: the answers `read` and `classify`
     keep, by a hash of the whole request, for 30 days.
-  - `src/askkit/retry.py`: which failed calls are sent again, how long
-    AskKit waits before each retry, and the timeout of `askkit answer`.
+  - `src/askkit/retry.py`: which failed calls are sent again, at every
+    provider, how long AskKit waits before each retry, the tenacity loop
+    of `askkit answer`, and its timeout.
   - `src/askkit/costmodel.py`: a cost model of the app's features, and
     what each one costs a month.
   - `src/askkit/calllog.py`: the log of every call, and a day added up.

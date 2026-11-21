@@ -110,7 +110,6 @@ def run(
             policy,
             retries,
             sleep=fake.sleep,
-            clock=fake.clock,
             draw=lambda: 0.5,
         )
     except anthropic.APIError as error:
@@ -266,9 +265,7 @@ def answer_with(
         send: Callable[[], Message], policy: RetryPolicy, retries: list[Retry]
     ) -> Message:
         fake = FakeTime()
-        return with_retries(
-            send, policy, retries, fake.sleep, fake.clock, lambda: 0.5
-        )
+        return with_retries(send, policy, retries, fake.sleep, lambda: 0.5)
 
     monkeypatch.setattr("askkit.cli.Anthropic", make)
     monkeypatch.setattr("askkit.cli.with_retries", no_waiting)

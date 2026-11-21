@@ -11,6 +11,7 @@ from anthropic.types import Message
 from test_layer import (
     FLASH_LITE,
     StandIn,
+    error_reply,
     flash_lite_body,
     luna_chat_body,
     use_stand_in,
@@ -458,3 +459,38 @@ def test_answer_needs_google_s_key_before_any_call(
         "askkit: GEMINI_API_KEY is not set (gemini-3.5-flash-lite in the"
         " chain runs at Google); put your Google key after the = in .env"
     )
+
+
+@pytest.mark.parametrize(
+    ("model", "provider"),
+    [(LUNA, "OpenAI"), (FLASH_LITE, "Google")],
+)
+def test_another_provider_gets_askkit_s_tries_not_its_sdk_s(
+    ask_set: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    model: str,
+    provider: str,
+) -> None:
+    # One owner of a run's retries (lesson 13.5): a model reached through
+    # the layer is tried as often as a Claude model, with the same policy,
+    # and its provider SDK sends each try once. Before, the layer's SDK
+    # owned these: three requests at either provider, no deadline, and a
+    # message that could not say how many tries were made.
+    stand_in = StandIn([error_reply(503)])
+    use_stand_in(monkeypatch, stand_in)
+
+    def no_waiting(
+        send: Callable[[], Message], policy: RetryPolicy, retries: list[Retry]
+    ) -> Message:
+        return with_retries(
+            send, policy, retries, lambda seconds: None, lambda: 0.0
+        )
+
+    monkeypatch.setattr("askkit.cli.with_retries", no_waiting)
+    with pytest.raises(SystemExit) as stopped:
+        main(["answer", str(ask_set), "--out", "a.json", "-m", model])
+    first = ask_set_cases(ask_set)[0]
+    assert stopped.value.code == (
+        f"askkit: {first}: {provider}'s servers failed (503) after 5 tries"
+    )
+    assert len(stand_in.requests) == ANSWER_POLICY.tries

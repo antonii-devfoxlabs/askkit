@@ -3,13 +3,13 @@ from typing import Any
 
 import httpx
 import httpx2
+import openai
 import pytest
 from any_llm import AnyLLM
 from any_llm.exceptions import AnyLLMError
 from google.genai import types
 
 from askkit.cost import usage_cost
-from askkit.fallback import failure, falls_back
 from askkit.layer import (
     LAYER_MODELS,
     LAYER_PROVIDERS,
@@ -21,6 +21,7 @@ from askkit.layer import (
 )
 from askkit.models import LIFECYCLES
 from askkit.prices import CACHE_PRICES, PRICES
+from askkit.retry import reason, retry_after, worth_retrying
 
 LUNA = "gpt-6-luna"
 OPENAI_ID = "req_AskKitLayerOpenAI"
@@ -221,18 +222,20 @@ def test_cut_off_and_declined_answers_keep_their_meaning(
     assert stops == ["max_tokens", "refusal", "refusal"]
 
 
-def test_google_gets_the_same_retries_as_openai(
+def test_no_provider_sdk_retries_under_askkit(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # Google's SDK makes no retries unless told to (lesson 13.1), and the
-    # layer keeps that default when it is given no number. layer_client
-    # gives it LAYER_RETRIES, so two 503s are tried again at both.
-    for model, body in ((LUNA, luna_chat_body()), (FLASH_LITE, None)):
-        answer = flash_lite_body() if body is None else body
-        replies = [error_reply(503), error_reply(503), (200, answer)]
-        message, stand_in = asked(model, replies, monkeypatch)
-        assert message.stop_reason == "end_turn"
-        assert len(stand_in.requests) == LAYER_RETRIES + 1
+    # Each provider SDK has retries of its own (two at OpenAI, none at
+    # Google unless told, lesson 13.1), and the layer passes a number on.
+    # askkit answer owns the retries of every model in its chain (lesson
+    # 13.5), so under the layer a 503 is raised at once, at both
+    # providers: one request each, not three.
+    assert LAYER_RETRIES == 0
+    for model in (LUNA, FLASH_LITE):
+        replies = [error_reply(503), error_reply(503)]
+        with pytest.raises(AnyLLMError) as raised:
+            asked(model, replies, monkeypatch)
+        assert raised.value.status_code == 503
 
 
 def layer_failure_of(status: int, monkeypatch: Any) -> AnyLLMError:
@@ -241,19 +244,19 @@ def layer_failure_of(status: int, monkeypatch: Any) -> AnyLLMError:
     return raised.value
 
 
-def test_what_falls_back_through_the_layer(
+def test_what_is_retried_and_falls_back_through_the_layer(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     busy = layer_failure_of(503, monkeypatch)
     limited = layer_failure_of(429, monkeypatch)
     rejected = layer_failure_of(401, monkeypatch)
-    assert falls_back(busy)
-    assert falls_back(limited)
-    assert not falls_back(rejected)
-    assert failure(busy) == "503"
+    assert worth_retrying(busy)
+    assert worth_retrying(limited)
+    assert not worth_retrying(rejected)
+    assert reason(busy) == "503"
 
 
-def test_no_answer_falls_back_and_reads_as_no_answer() -> None:
+def test_no_answer_is_retried_and_reads_as_no_answer() -> None:
     llm = AnyLLM.create(
         "openai",
         api_key="a-test-key-Ef56",
@@ -264,19 +267,36 @@ def test_no_answer_falls_back_and_reads_as_no_answer() -> None:
     with pytest.raises(AnyLLMError) as raised:
         ask_layer(Layer(llm, []), "Who pays?", LUNA, 1000, "x", 5.0)
     assert raised.value.status_code is None
-    assert falls_back(raised.value)
-    assert failure(raised.value) == "no answer"
+    assert worth_retrying(raised.value)
+    assert reason(raised.value) == "no answer"
 
 
 def test_layer_errors_name_the_provider_and_its_key(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    assert layer_error(layer_failure_of(401, monkeypatch)) == (
+    assert layer_error(layer_failure_of(401, monkeypatch), "") == (
         "OpenAI rejected the key; check OPENAI_API_KEY in .env"
     )
-    assert layer_error(layer_failure_of(400, monkeypatch)) == (
+    assert layer_error(layer_failure_of(400, monkeypatch), "") == (
         "OpenAI rejected the request (400)"
     )
-    assert layer_error(layer_failure_of(503, monkeypatch)) == (
-        "OpenAI's servers failed (503) after its retries"
+    busy = layer_failure_of(503, monkeypatch)
+    assert layer_error(busy, "after 5 tries") == (
+        "OpenAI's servers failed (503) after 5 tries"
     )
+
+
+def test_a_layer_error_s_retry_after_comes_from_its_sdk_s_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The layer keeps the provider SDK's own error, and its response
+    # holds the headers, so AskKit's policy obeys a provider's wait as it
+    # obeys Anthropic's. The stand-in sends no retry-after; the test gives
+    # the SDK's error one.
+    with pytest.raises(AnyLLMError) as raised:
+        asked(LUNA, [error_reply(429)], monkeypatch)
+    assert retry_after(raised.value) is None
+    original = raised.value.original_exception
+    assert isinstance(original, openai.APIStatusError)
+    original.response.headers["retry-after"] = "7"
+    assert retry_after(raised.value) == 7.0

@@ -273,16 +273,22 @@ def send_to(
     tried: list[Retry],
     tries_made: list[int],
 ) -> Message:
-    # One question to one model of askkit answer's chain. A model of
-    # another provider goes through the layer (lesson 13.2), whose
-    # provider SDK owns its tries. A Claude model goes through AskKit's
-    # retry policy: each retry is added to tried, and the number of tries
-    # this model made to tries_made, so a message names the last model's
-    # tries, not all.
+    # One question to one model of askkit answer's chain, through AskKit's
+    # retry policy, the one owner of the run's retries (lesson 13.5),
+    # whichever provider the model is at: a Claude model through
+    # Anthropic's SDK, a model of another provider through the layer
+    # (lesson 13.2), both with their SDK's own retries off. Each retry is
+    # added to tried, and the number of tries this model made to
+    # tries_made, so a message names the last model's tries, not all.
     sent: list[MessageParam] = [{"role": "user", "content": question}]
-    start = perf_counter()
+    # One question's call is retried, never the run: the answers before
+    # it are not asked for, or paid for, again. partial(ask, ...) is ask
+    # with its arguments filled in, a call with_retries can make as often
+    # as it needs.
+    call = partial(ask, client, question, model, max_tokens, ASK_SYSTEM)
     if model in LAYER_MODELS:
-        response = ask_layer(
+        call = partial(
+            ask_layer,
             layer_clients[model],
             question,
             model,
@@ -290,22 +296,7 @@ def send_to(
             ASK_SYSTEM,
             timeout,
         )
-        # tried holds the retries made on the models before this one.
-        log_call(
-            response,
-            model,
-            perf_counter() - start,
-            ASK_SYSTEM,
-            sent,
-            request_id_of(response),
-            retries=len(tried),
-        )
-        return response
-    # One question's call is retried, never the run: the answers before
-    # it are not asked for, or paid for, again. partial(ask, ...) is ask
-    # with its arguments filled in, a call with_retries can make as often
-    # as it needs.
-    call = partial(ask, client, question, model, max_tokens, ASK_SYSTEM)
+    start = perf_counter()
     this_model: list[Retry] = []
     try:
         response = with_retries(call, policy, this_model)
@@ -1512,7 +1503,8 @@ def main(arguments: list[str] | None = None) -> None:
                     f"askkit: {item.name}: {error_message(error, tries)}"
                 )
             except AnyLLMError as error:
-                sys.exit(f"askkit: {item.name}: {layer_error(error)}")
+                tries = after_tries(tries_made[-1])
+                sys.exit(f"askkit: {item.name}: {layer_error(error, tries)}")
             except ValueError as error:
                 sys.exit(f"askkit: {item.name}: {error}")
             retries.extend(tried)
