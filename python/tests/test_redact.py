@@ -54,6 +54,15 @@ def test_a_card_is_named_a_card_not_a_phone() -> None:
     assert redacted("4242 4242 4242 4242") == "[CARD]"
 
 
+def test_a_15_digit_card_is_taken_as_a_phone_unless_written_with_dashes() -> (
+    None
+):
+    # The limit the README names: the card pattern takes 16 digits only.
+    assert redacted("Amex 3782 822463 10005.") == "Amex [PHONE]."
+    assert redacted("Amex 378282246310005") == "Amex [PHONE]"
+    assert redacted("Amex 3782-822463-10005") == "Amex 3782-822463-10005"
+
+
 def test_order_numbers_and_the_full_stop_after_an_address_stay() -> None:
     assert redacted("Order 4417, from ana@example.com.") == (
         "Order 4417, from [EMAIL]."

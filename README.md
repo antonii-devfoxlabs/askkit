@@ -617,13 +617,15 @@ calls file holds no words, so it needs none of this.
 
 An email goes to the model the same way, in the sorting call of
 `classify`, `inbox` and `batch` and in the ticket call of `extract` and
-its eval: a queue or a ticket never depends on a card, an address or a
-phone, so they do not leave your machine. `ask` and `chat` send what
+its eval: a queue or a ticket never depends on a card, an email address
+or a phone, so they do not leave your machine. `ask` and `chat` send what
 you typed as you wrote it, since an answer may need every part of it.
 
 A pattern finds what follows a pattern. Names, street addresses, a
-phone written with dashes or brackets and a 15-digit card pass, so a
-redacted log is smaller, not anonymous: the order numbers in it still
+phone written with dashes or brackets and a 15-digit card written with
+dashes pass (with spaces or in one run, the phone pattern takes a
+15-digit card, as `[PHONE]`), so a redacted log is smaller, not
+anonymous: the order numbers in it still
 lead to a customer. The content file stays off by default and is
 removed after 7 days.
 

@@ -42,8 +42,8 @@ def ticket_messages(
     # The email alone, or, to ask again, the email, the failed answer and
     # its faults, so the model knows what to change. A retry ends on the
     # user turn: an assistant turn last is a prefill, which the API refuses.
-    # A ticket holds no card, address or phone, so they are taken out of
-    # the email before it is sent.
+    # A ticket holds no card, email address or phone, so they are taken
+    # out of the email before it is sent.
     messages: list[MessageParam] = [
         {"role": "user", "content": redacted(email)}
     ]
