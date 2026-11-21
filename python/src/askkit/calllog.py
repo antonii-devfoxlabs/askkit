@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict
 
 from askkit.cost import usage_cost
 from askkit.prices import SEARCH_PRICE
+from askkit.redact import redacted
 from askkit.server_tools import searches
 
 # Where AskKit writes down its calls: one file of numbers a day, and,
@@ -19,7 +20,8 @@ LOG_FOLDER = Path(".askkit-log")
 
 # The numbers hold no one's words, so they are kept. What was sent can
 # hold what a customer wrote: it is kept for a week, long enough to
-# look into a bad answer, and removed after.
+# look into a bad answer, with its card numbers, email addresses and
+# phone numbers taken out, and removed after.
 CONTENT_MAX_AGE = timedelta(days=7)
 
 
@@ -181,8 +183,11 @@ def write_call(call: LoggedCall, prompt: str, answer: str) -> None:
             # The same text as the calls file writes, to match them up.
             "at": call.model_dump(mode="json")["at"],
             "request_id": call.request_id,
-            "prompt": prompt,
-            "answer": answer,
+            # Card numbers, email addresses and phone numbers are taken
+            # out before the words are written: a week is long enough to
+            # look into a bad answer, and none of them explains one.
+            "prompt": redacted(prompt),
+            "answer": redacted(answer),
         }
         append_line(
             day_file(current.folder, "content", day), json.dumps(kept)

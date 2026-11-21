@@ -606,6 +606,27 @@ uv run askkit day 2026-11-20
 
 The eval calls the model through its own functions and logs nothing.
 
+## Personal data taken out
+
+Before the content file keeps a prompt or an answer, AskKit takes out
+the personal data a pattern can find: every card number becomes
+`[CARD]`, every email address `[EMAIL]` and every phone number
+`[PHONE]` (`redacted` in `python/src/askkit/redact.py`; the card is
+looked for first, since its 16 digits would also pass for a phone). The
+calls file holds no words, so it needs none of this.
+
+An email goes to the model the same way, in the sorting call of
+`classify`, `inbox` and `batch` and in the ticket call of `extract` and
+its eval: a queue or a ticket never depends on a card, an address or a
+phone, so they do not leave your machine. `ask` and `chat` send what
+you typed as you wrote it, since an answer may need every part of it.
+
+A pattern finds what follows a pattern. Names, street addresses, a
+phone written with dashes or brackets and a 15-digit card pass, so a
+redacted log is smaller, not anonymous: the order numbers in it still
+lead to a customer. The content file stays off by default and is
+removed after 7 days.
+
 ## Sending a ticket to a larger model
 
 Claude Sonnet 5.5 costs twenty times Claude Haiku 5.5 a token, so
@@ -898,7 +919,8 @@ it, such as `\u001b`, and keeps line breaks and tabs. Everything AskKit
 prints from a model or a site goes through it: the answer as it
 streams, search queries, cited addresses, tool results, tickets,
 queues and invoices as JSON, transcripts, and the answers `grade`
-shows. Files AskKit writes keep the text exactly as it came.
+shows. Files AskKit writes are not escaped: whatever shows a file
+later escapes it for its own screen.
 
 ## The models AskKit calls, and when each retires
 
@@ -1209,6 +1231,9 @@ test, as the thinking count of `ask` did.
     sent as `askkit inbox` sends it, and when an attack won.
   - `src/askkit/terminal.py`: text a model or a site wrote, made safe to
     print: every character a terminal would obey is shown as its escape.
+  - `src/askkit/redact.py`: card numbers, email addresses and phone
+    numbers replaced by placeholders, before the log keeps the words and
+    before a sorting call sends an email.
   - `src/askkit/permissions.py`: which tools AskKit may run for you
     (allow, ask first, or deny), and the check every request passes
     before it runs.

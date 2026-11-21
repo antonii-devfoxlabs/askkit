@@ -152,7 +152,11 @@ def test_log_content_keeps_what_was_sent_and_what_came_back(
     main(["--log-content", "ask", QUESTION])
     [kept] = content_lines()
     assert kept["request_id"] == REQUEST_ID
-    assert kept["prompt"] == f"system: {ASK_SYSTEM}\nuser: {QUESTION}"
+    # The address in the question is redacted before it is written.
+    assert kept["prompt"] == (
+        f"system: {ASK_SYSTEM}\n"
+        "user: Order 4417 came with a broken mug, from [EMAIL]."
+    )
     # The thinking block is named; its text is never the log's.
     assert kept["answer"] == "[thinking]\nOrder 4417: a replacement mug."
 

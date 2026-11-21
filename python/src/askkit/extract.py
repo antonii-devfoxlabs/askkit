@@ -6,6 +6,7 @@ from anthropic.types import Message, MessageParam
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from askkit.prompts import render
+from askkit.redact import redacted
 
 # The three wishes the warehouse acts on. One list, read by Ticket and by
 # repair_ticket, so the two cannot disagree on what is allowed.
@@ -41,7 +42,11 @@ def ticket_messages(
     # The email alone, or, to ask again, the email, the failed answer and
     # its faults, so the model knows what to change. A retry ends on the
     # user turn: an assistant turn last is a prefill, which the API refuses.
-    messages: list[MessageParam] = [{"role": "user", "content": email}]
+    # A ticket holds no card, address or phone, so they are taken out of
+    # the email before it is sent.
+    messages: list[MessageParam] = [
+        {"role": "user", "content": redacted(email)}
+    ]
     if answer is not None and faults is not None:
         messages.append({"role": "assistant", "content": answer})
         messages.append(

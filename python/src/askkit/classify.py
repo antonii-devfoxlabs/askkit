@@ -6,6 +6,7 @@ from anthropic.types import MessageParam
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from askkit.extract import ticket_faults
+from askkit.redact import redacted
 from askkit.untrusted import marked
 
 # The queues of the shop's support inbox, one per team. "other" is the
@@ -35,8 +36,11 @@ EMAIL_SOURCE = "customer email"
 def sorting_messages(email: str) -> list[MessageParam]:
     # The one message of every sorting call, from classify, inbox and
     # batch alike: the cleaned email, marked as text a stranger wrote, so
-    # a closing tag or a "new rule" typed into it stays inside it.
-    return [{"role": "user", "content": marked(EMAIL_SOURCE, email)}]
+    # a closing tag or a "new rule" typed into it stays inside it. Its
+    # card numbers, email addresses and phone numbers are taken out
+    # first: a queue never depends on them, so they need not leave.
+    content = marked(EMAIL_SOURCE, redacted(email))
+    return [{"role": "user", "content": content}]
 
 
 def repair_queue(text: str) -> tuple[str, str] | None:

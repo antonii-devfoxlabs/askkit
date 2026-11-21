@@ -11,6 +11,7 @@ from anthropic import Anthropic
 from askkit.checks import run_case
 from askkit.clean import clean_email
 from askkit.golden import Case, email_text, load_cases
+from askkit.redact import redacted
 
 PYTHON = Path(__file__).parent.parent
 MAIN = PYTHON / "evals" / "extract" / "main"
@@ -75,8 +76,12 @@ def test_the_model_reads_the_email_extract_sends() -> None:
     run_case(client, MAIN, case, "claude-haiku-5-5", 1000)
     email, left_out = clean_email(email_text(MAIN, case))
     assert left_out > 0
-    assert sent[0]["messages"] == [{"role": "user", "content": email}]
+    # Without its phone number too, as extract sends it.
+    assert sent[0]["messages"] == [
+        {"role": "user", "content": redacted(email)}
+    ]
     assert "7302" not in sent[0]["messages"][0]["content"]
+    assert "0161 496 0731" not in sent[0]["messages"][0]["content"]
 
 
 def test_a_wrong_answer_names_its_faults() -> None:
