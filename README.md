@@ -345,12 +345,13 @@ uses (`settled_fields` and `stream_json` in
 the whole answer, once the stream has ended, and only after the checks
 below. Ctrl-C while it streams cancels it, and no ticket is printed.
 
-It prints the ticket, then the same lines as `ask`, with a `Time:` line
-for each call. It reads the stop reason first: an answer cut off at `--max-tokens` (1000 by default) or
-declined may not match the schema, so it is not read, and `extract`
-says why and exits with exit code 1; neither is asked for again, since
-the same room or the same email stops the same way. A finished answer
-is checked against `Ticket` again in AskKit's own code, because the API
+It prints the ticket, labelled as written by a model (see "Labelled as
+written by a model"), then the same lines as `ask`, with a `Time:` line
+for each call. It reads the stop reason first: an answer cut off at
+`--max-tokens` (1000 by default) or declined may not match the schema,
+so it is not read, and `extract` says why and exits with exit code 1;
+neither is asked for again, since the same room or the same email
+stops the same way. A finished answer is checked against `Ticket` again in AskKit's own code, because the API
 holds the shape but not, for example, the capitals of an allowed value
 or the length of `problem` (at most 40 characters). What fails takes
 one of three ways:
@@ -446,7 +447,8 @@ cd python
 uv run askkit read samples/invoice.pdf
 ```
 
-It streams as `extract` does, prints the invoice as JSON, then the same
+It streams as `extract` does, prints the invoice as JSON with its label,
+then the same
 lines as `ask`. A file whose first bytes are not a PDF's (`%PDF-`) is
 refused before a call. After `Invoice` has passed, two rules check the
 fields against each other: the subtotal and the tax add up to the total,
@@ -997,6 +999,58 @@ law requires. Anthropic's Claude Fable 5.2 needs an organization with
 The sources: Anthropic's "API and data retention" page and its
 commercial terms, OpenAI's "Data controls in the OpenAI platform" page.
 
+## Labelled as written by a model
+
+The JSON that `extract` and `read` print goes on to people who did not
+run AskKit: a ticket to the warehouse team, an invoice's fields to the
+books. So each one carries a label, inside the JSON, after the fields,
+where it goes wherever the JSON is copied (`ai_label` and
+`labelled_json` in `python/src/askkit/label.py`):
+
+```json
+{
+  "order": 4417,
+  "problem": "mug broken",
+  "wish": "replacement",
+  "ai_label": {
+    "written_by": "claude-haiku-5-5",
+    "via": "askkit extract",
+    "written": "2026-11-21T09:30:00Z",
+    "checked_by_code": [
+      "every field has its type and an allowed value",
+      "order, when given, is a number in the email"
+    ],
+    "read_by_a_person": false
+  }
+}
+```
+
+- `written_by` is the model the API says answered (`response.model`),
+  not the one asked for first: a ticket that `--escalate-to` sent to a
+  larger model names the larger one.
+- `written` is when the model wrote it, in UTC; for an invoice `read`
+  took from its cache, when the answer was kept, not when it was shown.
+- `checked_by_code` names each check that passed, in its own words,
+  and nothing else: `extract` adds "order is one of the shop's orders"
+  with `--orders`. The fields no check reads, such as `problem` and
+  `wish`, only the model read.
+- `read_by_a_person` is always `false`: no person has read the JSON when
+  AskKit prints it. A tool that lets a person edit it should set it and
+  name the editor, and keep `written_by`.
+
+The lines under the JSON (`Model:`, `Cost:`, …) are for whoever ran the
+command and stay in the terminal. A tool that saves only the fields it
+knows drops `ai_label`; it needs the key added to what it keeps.
+
+Claude's own text watermark (Anthropic's "Text watermark" page and its
+Help Center article "How Claude marks AI-generated content", checked on
+21 November 2026; this may change) is no substitute: it cannot be seen,
+its detection is in private preview, and a ticket's few exact words
+leave it little to mark. Under the EU AI Act, Article 50, in
+application since 2 August 2026, providers mark generated text in a
+machine-readable way and deployers disclose some AI-written text; the
+label is AskKit's own, not legal advice on what the Act asks of you.
+
 ## The models AskKit calls, and when each retires
 
 Every model ID AskKit calls is a pinned snapshot, and the one every
@@ -1267,6 +1321,20 @@ test, as the thinking count of `ask` did.
   stops or warns before a call; `read` and `classify` keep the answers
   they paid for; every call is logged with its model, tokens, latency
   and cost, and `day` adds up what a day cost.
+- `m11`, end of Module 11 (Async and Concurrency for LLM Calls): `inbox`
+  sorts a CSV of emails with many calls waiting at once under a limit,
+  or as one Message Batch at half the price collected by `batch`; it
+  prints its progress, goes on past an email whose call failed, and
+  with `--checkpoint` resumes after a crash without sorting an email
+  twice.
+- `m12`, end of Module 12 (Safety Basics): fetched pages and emails go
+  to the model marked as untrusted, with injection attacks in their
+  own eval; what a model writes back is escaped before a terminal shows
+  it; card numbers, email addresses and phone numbers are taken out of
+  the call log and the sorting and ticket calls; `--moderate` sends a
+  flagged email to a person unsorted; `batch --delete` removes a
+  collected batch at Anthropic; and the JSON of `extract` and `read` is
+  labelled as written by a model.
 
 ## Layout
 
@@ -1311,6 +1379,9 @@ test, as the thinking count of `ask` did.
     before a sorting call sends an email.
   - `src/askkit/moderation.py`: the moderation check of `--moderate`,
     at OpenAI's moderation endpoint, and the categories it flagged.
+  - `src/askkit/label.py`: the label in the JSON of `extract` and
+    `read`: the model that wrote it, when, and what AskKit's code
+    checked.
   - `src/askkit/permissions.py`: which tools AskKit may run for you
     (allow, ask first, or deny), and the check every request passes
     before it runs.

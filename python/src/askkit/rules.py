@@ -3,6 +3,11 @@ from pathlib import Path
 
 from askkit.extract import Ticket
 
+# What each rule below checked, in the words of a ticket's label
+# (label.py): the label names every check that ran, and only those.
+EMAIL_CHECK = "order, when given, is a number in the email"
+ORDERS_CHECK = "order is one of the shop's orders"
+
 
 def numbers_in(text: str) -> list[str]:
     # Every run of digits in the text, whole: "order 4417, 2 mugs" gives

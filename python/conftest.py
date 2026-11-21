@@ -1,6 +1,7 @@
 # Here, at the top of python/, not in tests/: evals/ has a conftest of
 # its own, and mypy refuses two modules both named conftest.
 
+from datetime import UTC, datetime
 from itertools import count
 from pathlib import Path
 
@@ -22,6 +23,14 @@ def steady_clock(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     cli_readings = count(start=0.0, step=0.42)
     monkeypatch.setattr("askkit.cli.perf_counter", lambda: next(cli_readings))
+
+
+@pytest.fixture
+def labelled_now(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The CLI's time of day, fixed, for a test that reads the time a
+    # label says its JSON was written (askkit/label.py).
+    moment = datetime(2026, 11, 21, 9, 30, tzinfo=UTC)
+    monkeypatch.setattr("askkit.cli.now", lambda: moment)
 
 
 @pytest.fixture(autouse=True)

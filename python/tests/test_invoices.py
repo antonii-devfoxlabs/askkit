@@ -6,14 +6,17 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 from test_classify import use_fake_client, with_answer
+from test_label import printed_json
 
 from askkit.cli import main
 from askkit.invoices import (
+    INVOICE_CHECKS,
     INVOICE_SCHEMA,
     Invoice,
     invoice_error,
     invoice_faults,
 )
+from askkit.label import LABEL_KEY
 from askkit.prompts import render
 
 INVOICE = Path(__file__).parent.parent / "samples" / "invoice.pdf"
@@ -107,14 +110,22 @@ def test_read_sends_the_pdf_alone_with_the_schema(
 
 def test_read_prints_the_invoice_and_the_call(
     keyed: None,
+    labelled_now: None,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     use_fake_client(monkeypatch, [], with_answer(json.dumps(FIELDS)))
     main(["read", str(INVOICE)])
-    lines = capsys.readouterr().out.splitlines()
-    assert json.loads("\n".join(lines[:10])) == FIELDS
-    assert lines[10:] == [
+    invoice, lines = printed_json(capsys.readouterr().out)
+    assert invoice.pop(LABEL_KEY) == {
+        "written_by": "claude-haiku-5-5",
+        "via": "askkit read",
+        "written": "2026-11-21T09:30:00Z",
+        "checked_by_code": INVOICE_CHECKS,
+        "read_by_a_person": False,
+    }
+    assert invoice == FIELDS
+    assert lines == [
         "",
         "Model:         claude-haiku-5-5",
         "Tokens:        214 in, 12 out",
@@ -122,7 +133,8 @@ def test_read_prints_the_invoice_and_the_call(
         "Stop reason:   end_turn",
         "Time:          first token 0.42 s, total 0.84 s",
     ]
-    assert date.fromisoformat(json.loads("\n".join(lines[:10]))["issued"])
+    assert isinstance(invoice["issued"], str)
+    assert date.fromisoformat(invoice["issued"])
 
 
 def test_sums_that_disagree_go_to_a_person(

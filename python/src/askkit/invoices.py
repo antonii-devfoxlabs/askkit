@@ -26,6 +26,14 @@ class Invoice(BaseModel):
 
 INVOICE_SCHEMA: dict[str, Any] = transform_schema(Invoice)
 
+# What Invoice and invoice_faults checked, for an invoice's label
+# (label.py). An invoice is printed only when all three hold.
+INVOICE_CHECKS = [
+    "every field has its type",
+    "subtotal and tax add up to the total",
+    "due date, when given, is not before the issue date",
+]
+
 
 def cents(amount: float) -> int:
     # A float stores most decimals only nearly, so amounts are compared

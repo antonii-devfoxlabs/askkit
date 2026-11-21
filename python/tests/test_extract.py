@@ -7,10 +7,12 @@ import pytest
 from anthropic import Anthropic, transform_schema
 from pydantic import ValidationError
 from test_ask import Interrupted, cancelling_client, replied
+from test_label import printed_json
 
 from askkit.ask import CANCELLED
 from askkit.cli import main
 from askkit.extract import (
+    TICKET_CHECK,
     TICKET_SCHEMA,
     WISHES,
     Ticket,
@@ -22,12 +24,24 @@ from askkit.extract import (
     ticket_faults,
     ticket_messages,
 )
+from askkit.label import LABEL_KEY
 from askkit.prompts import render
+from askkit.rules import EMAIL_CHECK, ORDERS_CHECK
 
 EMAIL = (
     "Hello, order 4417 came yesterday and the mug inside was broken."
     " I'd like a replacement, not a refund. Thanks, Maria"
 )
+
+# The ticket of the lamp emails, which give no order and no wish.
+LAMP_TICKET = {
+    "order": None,
+    "problem": "lamp flickers",
+    "wish": "not stated",
+}
+
+# Every ticket of this file is labelled as written at one fixed moment.
+pytestmark = pytest.mark.usefixtures("labelled_now")
 
 # A response shaped like the Messages API's to a call with a JSON schema:
 # the JSON is the text block, after the model's thinking.
@@ -212,12 +226,20 @@ def test_extract_prints_the_ticket_and_the_call(
     sent: list[dict[str, Any]] = []
     use_fake_client(monkeypatch, sent)
     main(["extract", str(email_file)])
-    assert capsys.readouterr().out.splitlines() == [
-        "{",
-        '  "order": 4417,',
-        '  "problem": "mug broken",',
-        '  "wish": "replacement"',
-        "}",
+    ticket, lines = printed_json(capsys.readouterr().out)
+    assert ticket == {
+        "order": 4417,
+        "problem": "mug broken",
+        "wish": "replacement",
+        LABEL_KEY: {
+            "written_by": "claude-haiku-5-5",
+            "via": "askkit extract",
+            "written": "2026-11-21T09:30:00Z",
+            "checked_by_code": [TICKET_CHECK, EMAIL_CHECK],
+            "read_by_a_person": False,
+        },
+    }
+    assert lines == [
         "",
         "Model:         claude-haiku-5-5",
         "Tokens:        236 in, 31 out",
@@ -236,12 +258,11 @@ def test_extract_prints_null_for_no_order_number(
     text = '{"order":null,"problem":"shade wrong colour","wish":"not stated"}'
     use_fake_client(monkeypatch, [], with_answer(text, "end_turn"))
     main(["extract", str(email_file)])
-    assert capsys.readouterr().out.splitlines()[:5] == [
+    assert capsys.readouterr().out.splitlines()[:4] == [
         "{",
         '  "order": null,',
         '  "problem": "shade wrong colour",',
-        '  "wish": "not stated"',
-        "}",
+        '  "wish": "not stated",',
     ]
 
 
@@ -351,12 +372,10 @@ def test_a_ticket_with_a_way_out_says_what_to_ask_for(
     text = '{"order":null,"problem":"lamp flickers","wish":"not stated"}'
     use_fake_client(monkeypatch, [], with_answer(text, "end_turn"))
     main(["extract", str(email_file)])
-    assert capsys.readouterr().out.splitlines() == [
-        "{",
-        '  "order": null,',
-        '  "problem": "lamp flickers",',
-        '  "wish": "not stated"',
-        "}",
+    ticket, lines = printed_json(capsys.readouterr().out)
+    del ticket[LABEL_KEY]
+    assert ticket == LAMP_TICKET
+    assert lines == [
         "",
         "Model:         claude-haiku-5-5",
         "Tokens:        236 in, 31 out",
@@ -399,12 +418,10 @@ def test_a_wish_in_other_capitals_is_repaired(
     text = '{"order":null,"problem":"lamp flickers","wish":"not Stated"}'
     use_fake_client(monkeypatch, sent, with_answer(text, "end_turn"))
     main(["extract", str(email_file)])
-    assert capsys.readouterr().out.splitlines() == [
-        "{",
-        '  "order": null,',
-        '  "problem": "lamp flickers",',
-        '  "wish": "not stated"',
-        "}",
+    ticket, lines = printed_json(capsys.readouterr().out)
+    del ticket[LABEL_KEY]
+    assert ticket == LAMP_TICKET
+    assert lines == [
         "",
         "Model:         claude-haiku-5-5",
         "Tokens:        236 in, 31 out",
@@ -537,12 +554,10 @@ def test_a_broken_ticket_is_asked_for_again_with_its_faults(
         monkeypatch, sent, [with_answer(TOO_LONG, "end_turn"), second]
     )
     main(["extract", str(email_file)])
-    assert capsys.readouterr().out.splitlines() == [
-        "{",
-        '  "order": null,',
-        '  "problem": "lamp flickers",',
-        '  "wish": "not stated"',
-        "}",
+    ticket, lines = printed_json(capsys.readouterr().out)
+    del ticket[LABEL_KEY]
+    assert ticket == LAMP_TICKET
+    assert lines == [
         "",
         "Model:         claude-haiku-5-5",
         "Tokens:        548 in, 60 out",
@@ -656,12 +671,19 @@ def test_a_valid_but_wrong_order_is_asked_for_again(
         monkeypatch, sent, [with_answer(SWAPPED, "end_turn"), second]
     )
     main(["extract", str(maria), "--orders", "orders.json"])
-    assert capsys.readouterr().out.splitlines() == [
-        "{",
-        '  "order": 4417,',
-        '  "problem": "mug broken",',
-        '  "wish": "replacement"',
-        "}",
+    ticket, lines = printed_json(capsys.readouterr().out)
+    # --orders ran one more check, and the label names it.
+    assert ticket.pop(LABEL_KEY)["checked_by_code"] == [
+        TICKET_CHECK,
+        EMAIL_CHECK,
+        ORDERS_CHECK,
+    ]
+    assert ticket == {
+        "order": 4417,
+        "problem": "mug broken",
+        "wish": "replacement",
+    }
+    assert lines == [
         "",
         "Model:         claude-haiku-5-5",
         "Tokens:        548 in, 62 out",

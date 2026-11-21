@@ -91,6 +91,7 @@ from askkit.documents import (
 )
 from askkit.errors import error_message, error_name, stops_the_run
 from askkit.extract import (
+    TICKET_CHECK,
     TICKET_SCHEMA,
     check_ticket,
     not_stated,
@@ -131,11 +132,13 @@ from askkit.inbox import (
 )
 from askkit.inputs import image_input, pdf_input
 from askkit.invoices import (
+    INVOICE_CHECKS,
     INVOICE_SCHEMA,
     Invoice,
     invoice_error,
     invoice_faults,
 )
+from askkit.label import ai_label, labelled_json
 from askkit.limits import LIMITS
 from askkit.loop import (
     TOO_MANY_ROUNDS,
@@ -193,7 +196,13 @@ from askkit.rubric import (
     load_questions,
     load_rubric,
 )
-from askkit.rules import email_fault, load_orders, order_fault
+from askkit.rules import (
+    EMAIL_CHECK,
+    ORDERS_CHECK,
+    email_fault,
+    load_orders,
+    order_fault,
+)
 from askkit.runs import Results, diff_lines, load_results
 from askkit.server_tools import cited_urls, searches, web_search
 from askkit.structured import ask_json, json_request, stream_json
@@ -1682,7 +1691,14 @@ def main(arguments: list[str] | None = None) -> None:
             missing = not_stated(ticket)
             if missing:
                 notes.append(f"Not stated:    {', '.join(missing)}")
-            print(printable(ticket.model_dump_json(indent=2)))
+            # The model that wrote the ticket is the one that answered
+            # last, as the API names it: a retry may have gone to
+            # --escalate-to.
+            checked = [TICKET_CHECK, EMAIL_CHECK]
+            if orders is not None:
+                checked.append(ORDERS_CHECK)
+            label = ai_label(response.model, "extract", now(), checked)
+            print(printable(labelled_json(ticket.model_dump(), label)))
             print()
             print_calls(responses, options.model, models=models)
             print_times(timings)
@@ -1824,9 +1840,13 @@ def main(arguments: list[str] | None = None) -> None:
             sys.exit(
                 f"askkit: {'; '.join(problems)}; a person checks the invoice"
             )
+        # A kept answer was written when it was stored, not now.
+        written = now() if kept is None else kept.stored
         if kept is None:
-            keep_answer(CACHE_FOLDER, key, response, now())
-        print(printable(invoice.model_dump_json(indent=2)))
+            keep_answer(CACHE_FOLDER, key, response, written)
+        label = ai_label(response.model, "read", written, INVOICE_CHECKS)
+        fields = invoice.model_dump(mode="json")
+        print(printable(labelled_json(fields, label)))
         print()
         print_answered(response, options.model, invoice_timing, kept)
         return
