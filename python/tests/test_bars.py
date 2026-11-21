@@ -42,9 +42,11 @@ def test_a_cut_off_answer_is_never_sorted(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    # A queue name cut off at max_tokens can still read as a queue.
+    # The stop reason is read before the text: even an answer that reads
+    # as a whole queue is not trusted once it stopped at max_tokens.
     sent: list[dict[str, Any]] = []
-    answering(monkeypatch, sent, [with_answer('{"queue":"dam', "max_tokens")])
+    cut_off = with_answer('{"queue":"refund"}', "max_tokens")
+    answering(monkeypatch, sent, [cut_off])
     main(["inbox", str(one_email)])
     lines = capsys.readouterr().out.splitlines()
     assert lines[0].startswith("e0001   to a person: the answer was cut off")
@@ -56,11 +58,10 @@ def test_a_declined_answer_is_never_sorted(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    # A refused answer may hold a queue the model wrote before it stopped.
+    # A declined answer may still hold a queue it wrote before it stopped.
     sent: list[dict[str, Any]] = []
-    answering(
-        monkeypatch, sent, [with_answer('{"queue":"refund"}', "refusal")]
-    )
+    declined = with_answer('{"queue":"refund"}', "refusal")
+    answering(monkeypatch, sent, [declined])
     main(["inbox", str(one_email)])
     lines = capsys.readouterr().out.splitlines()
     assert lines[0].startswith("e0001   to a person: the model declined")
