@@ -938,8 +938,8 @@ refund. This is AskKit's content policy for the inbox:
 
 `--moderate` on `classify` and `inbox` (with or without `--batch`) runs
 the check, at OpenAI's moderation endpoint (`omni-moderation-latest`,
-free, checked on 21 November 2026): Anthropic's API has no moderation
-endpoint. It needs `OPENAI_API_KEY` in `python/.env`.
+free, checked on 21 November 2026; both may change): Anthropic's API
+has no moderation endpoint. It needs `OPENAI_API_KEY` in `python/.env`.
 
 ```bash
 cd python

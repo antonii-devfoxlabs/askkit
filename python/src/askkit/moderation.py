@@ -10,8 +10,8 @@ from askkit.redact import redacted
 MODERATION_MODEL = "omni-moderation-latest"
 
 # How many emails one moderation request carries. The API reference
-# names no limit (checked on 21 November 2026); small requests keep a
-# failed one cheap to send again.
+# names no limit (checked on 21 November 2026; it may set one); small
+# requests keep a failed one cheap to send again.
 PER_REQUEST = 20
 
 
@@ -33,8 +33,8 @@ def moderate(client: OpenAI, texts: list[str]) -> list[list[str]]:
     # texts; an empty list means nothing was flagged. Card numbers, email
     # addresses and phone numbers are taken out first (lesson 12.4): the
     # check needs what a text says, not how to reach the person who
-    # wrote it. An API error is not caught here: the caller sends no
-    # text on unchecked.
+    # wrote it. An API error is not caught here: the caller stops, so no
+    # unchecked text goes on to the model.
     flags: list[list[str]] = []
     for start in range(0, len(texts), PER_REQUEST):
         part = texts[start : start + PER_REQUEST]
