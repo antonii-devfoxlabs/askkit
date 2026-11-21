@@ -37,9 +37,9 @@ def moderate(client: OpenAI, texts: list[str]) -> list[list[str]]:
     # text on unchecked.
     flags: list[list[str]] = []
     for start in range(0, len(texts), PER_REQUEST):
-        part = [redacted(text) for text in texts[start : start + PER_REQUEST]]
+        part = texts[start : start + PER_REQUEST]
         response = client.moderations.create(
-            model=MODERATION_MODEL, input=part
+            model=MODERATION_MODEL, input=[redacted(text) for text in part]
         )
         flags.extend(
             flagged_categories(result) for result in response.results
