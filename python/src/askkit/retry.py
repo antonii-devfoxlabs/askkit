@@ -162,15 +162,10 @@ def with_retries(
     sleep: Callable[[float], None] = time.sleep,
     draw: Callable[[], float] = random.random,
 ) -> Message:
-    # Calls send() until it returns, and appends each failed try that is
-    # tried again to retries. The loop is tenacity's (lesson 13.5); the
-    # policy's answers are AskKit's: which failures (worth_retrying), how
-    # long to wait (wait_before), and when to stop: every try used, or a
-    # wait that would end at the deadline or past it. reraise=True raises
-    # the provider's own error after the last try, as lesson 10.4's loop
-    # did, not tenacity's RetryError, so every except that catches an
-    # API error still catches it. sleep and draw are there for the tests,
-    # which wait no time and draw the same share every time.
+    # The loop is tenacity's, the rules AskKit's (lesson 13.5). Without
+    # reraise=True, tenacity would raise its own RetryError after the
+    # last try, which no except for an API error catches. sleep and draw
+    # are for the tests, which wait no time and draw the same share.
     def wait(state: RetryCallState) -> float:
         return wait_before(
             state.attempt_number - 1, policy, failed_with(state), draw

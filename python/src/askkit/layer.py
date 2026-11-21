@@ -35,8 +35,8 @@ LAYER_PROVIDERS: dict[str, LayerProvider] = {
 # read from models.py.
 LAYER_MODELS: tuple[str, ...] = ("gemini-3.5-flash-lite", "gpt-6-luna")
 
-# No retries under the layer. Each provider's SDK has its own when none
-# is set, two at OpenAI and none at Google (lesson 13.1), and the layer
+# No retries under the layer. Each provider's SDK has a default of its
+# own, two at OpenAI and none at Google (lesson 13.1), and the layer
 # passes a number on. askkit answer retries every model of its chain
 # with one policy of its own (lesson 13.5), so a provider SDK that
 # retried too would multiply its tries.
