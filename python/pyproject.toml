@@ -38,11 +38,11 @@ markers = [
     "held_out: a case of the held-out part, run with -m held_out",
     "attacks: an injection attack of the eval set, run with -m attacks",
     "sorting: a main case of the sorting set, run with -m sorting",
-    "sorting_held_out: a held-out case of the sorting set, run with -m sorting_held_out",
+    "release: a yes/no bar of the course minimum, run alone with -m release",
 ]
 addopts = [
     "-m",
-    "not held_out and not attacks and not sorting and not sorting_held_out",
+    "not held_out and not attacks and not sorting",
 ]
 
 [dependency-groups]

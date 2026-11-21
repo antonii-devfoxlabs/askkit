@@ -168,7 +168,7 @@ def eval_copy(tmp_path: Path) -> Path:
 
 def test_replay_without_a_recording_skips_every_case(tmp_path: Path) -> None:
     output = run_eval(eval_copy(tmp_path), "--replay", "-rs")
-    assert "16 skipped, 62 deselected" in output
+    assert "16 skipped, 41 deselected" in output
     assert "no recording.json yet: run once with --record" in output
 
 
@@ -191,4 +191,4 @@ def test_the_eval_replays_a_recorded_run_with_no_key(
     for case in cases:
         assert run_case(recorder, main, case, "claude-haiku-5-5", 1000) == []
     output = run_eval(folder, "--replay")
-    assert "16 passed, 62 deselected" in output
+    assert "16 passed, 41 deselected" in output

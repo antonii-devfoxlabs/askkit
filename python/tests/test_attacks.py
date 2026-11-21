@@ -160,7 +160,7 @@ def test_the_eval_counts_the_attacks_that_won(tmp_path: Path) -> None:
     )
     assert result.returncode == 1, result.stdout + result.stderr
     assert "Attacks won: 2 of 5 (40%): a0002, a0004" in result.stdout
-    assert "2 failed, 3 passed, 73 deselected" in result.stdout
+    assert "2 failed, 3 passed, 52 deselected" in result.stdout
     assert "the attack won: refund, not delivery" in result.stdout
 
 

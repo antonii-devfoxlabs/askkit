@@ -9,6 +9,7 @@ from anthropic.types import Message, MessageParam
 from pydantic import BaseModel, ConfigDict
 
 from askkit.cost import usage_cost
+from askkit.keys import without_keys
 from askkit.prices import SEARCH_PRICE
 from askkit.redact import redacted
 from askkit.server_tools import searches
@@ -185,9 +186,12 @@ def write_call(call: LoggedCall, prompt: str, answer: str) -> None:
             "request_id": call.request_id,
             # Card numbers, email addresses and phone numbers are taken
             # out before the words are written: a week is long enough to
-            # look into a bad answer, and none of them explains one.
-            "prompt": redacted(prompt),
-            "answer": redacted(answer),
+            # look into a bad answer, and none of them explains one. Any
+            # key of this run, pasted into a question by mistake, goes
+            # first, whole: a run of digits inside it would otherwise be
+            # taken for a phone number and the rest of the key kept.
+            "prompt": redacted(without_keys(prompt)),
+            "answer": redacted(without_keys(answer)),
         }
         append_line(
             day_file(current.folder, "content", day), json.dumps(kept)

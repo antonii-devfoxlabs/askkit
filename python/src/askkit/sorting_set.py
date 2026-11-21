@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Literal, get_args
 
 from anthropic import Anthropic
+from anthropic.types import Usage
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from askkit.ask import answer_text, stop_warning
@@ -140,12 +141,13 @@ def split_set(set_folder: Path, per_kind: int, seed: int) -> list[str]:
     return drawn
 
 
-def queue_for(
+def sort_case(
     client: Anthropic, email: str, model: str, max_tokens: int
-) -> tuple[str, str | None]:
-    # The queue askkit inbox would give one email, and why it went to a
-    # person when it did. The request is the one inbox sends: the email
-    # cleaned and marked, the classify_email prompt in use, the schema.
+) -> tuple[str, str | None, Usage]:
+    # The queue askkit inbox would give one email, why it went to a
+    # person when it did, and the tokens the call used, which the release
+    # check prices. The request is the one inbox sends: the email cleaned
+    # and marked, the classify_email prompt in use, the schema.
     cleaned, _ = clean_email(email)
     response = client.messages.create(
         **json_request(
@@ -158,9 +160,17 @@ def queue_for(
     )
     warning = stop_warning(response, "sort this email into a queue")
     if warning is not None:
-        return TO_A_PERSON, warning
+        return TO_A_PERSON, warning, response.usage
     try:
         classification, _ = check_classification(answer_text(response))
     except ValidationError as error:
-        return TO_A_PERSON, classification_error(error)
-    return classification.queue, None
+        return TO_A_PERSON, classification_error(error), response.usage
+    return classification.queue, None, response.usage
+
+
+def queue_for(
+    client: Anthropic, email: str, model: str, max_tokens: int
+) -> tuple[str, str | None]:
+    # The same call, for an eval that scores the queue alone.
+    queue, reason, _ = sort_case(client, email, model, max_tokens)
+    return queue, reason

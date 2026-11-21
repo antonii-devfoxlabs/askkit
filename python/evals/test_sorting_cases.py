@@ -5,14 +5,13 @@ from anthropic import Anthropic
 
 from askkit.sorting_set import SortingCase, load_sorting_cases, queue_for
 
-# The sorting set of the final project, each email sent as askkit inbox
-# sends it, one billed call a case. Each part has a marker of its own,
-# deselected by default, so the extract set's runs stay as they were:
-# -m sorting runs the main part, -m sorting_held_out the held-out part,
-# once a version is ready.
+# The main part of the sorting set, each email sent as askkit inbox sends
+# it, one billed call a case, under a marker deselected by default, so
+# the extract set's runs stay as they were: -m sorting runs it. The
+# held-out part has no test here: a failing test names its case, and the
+# held-out part is scored, never read. askkit release scores it, once.
 SORTING = Path(__file__).parent / "classify"
 MAIN = load_sorting_cases(SORTING / "main")
-HELD_OUT = load_sorting_cases(SORTING / "held_out")
 MAX_TOKENS = 1000
 
 
@@ -32,14 +31,6 @@ def assert_sorted_right(
 @pytest.mark.sorting
 @pytest.mark.parametrize("item", MAIN, ids=case_name)
 def test_sorting(
-    client: Anthropic, model: str, item: tuple[SortingCase, str]
-) -> None:
-    assert_sorted_right(client, model, item)
-
-
-@pytest.mark.sorting_held_out
-@pytest.mark.parametrize("item", HELD_OUT, ids=case_name)
-def test_sorting_held_out(
     client: Anthropic, model: str, item: tuple[SortingCase, str]
 ) -> None:
     assert_sorted_right(client, model, item)

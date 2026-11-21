@@ -122,7 +122,7 @@ def test_the_eval_runs_every_main_case_and_holds_the_rest_back(
     tmp_path: Path,
 ) -> None:
     output = run_pytest("--collect-only", "-q", cwd=tmp_path)
-    assert "16/78 tests collected (62 deselected)" in output
+    assert "16/57 tests collected (41 deselected)" in output
     assert "test_main[maria]" in output
     assert "test_held_out" not in output
 
@@ -131,7 +131,7 @@ def test_the_held_out_part_runs_only_when_asked_for(tmp_path: Path) -> None:
     output = run_pytest(
         "--collect-only", "-q", "-m", "held_out", cwd=tmp_path
     )
-    assert "8/78 tests collected (70 deselected)" in output
+    assert "8/57 tests collected (49 deselected)" in output
     assert "test_main" not in output
 
 
@@ -139,5 +139,5 @@ def test_without_a_key_every_case_is_skipped_not_failed(
     tmp_path: Path,
 ) -> None:
     output = run_pytest("-rs", cwd=tmp_path)
-    assert "16 skipped, 62 deselected" in output
+    assert "16 skipped, 41 deselected" in output
     assert "ANTHROPIC_API_KEY is not set: the eval calls the model" in output

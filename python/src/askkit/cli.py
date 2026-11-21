@@ -37,6 +37,7 @@ from askkit.ask import (
     thinking_tokens,
     timing_line,
 )
+from askkit.attacks import attack_won, load_attacks
 from askkit.audio import (
     TRANSCRIBE_MODEL,
     audio_fault,
@@ -166,7 +167,13 @@ from askkit.moderation import moderate, person_reason
 from askkit.pdfs import document_block, is_pdf
 from askkit.permissions import offered, permissions_for
 from askkit.prices import BATCH_SHARE, PRICES, SEARCH_PRICE
-from askkit.prompts import ASK_SYSTEM, render
+from askkit.prompts import ASK_SYSTEM, IN_USE, render
+from askkit.release import (
+    RELEASE_FILE,
+    Release,
+    release_faults,
+    scored_before,
+)
 from askkit.response_cache import (
     CACHE_FOLDER,
     Kept,
@@ -208,7 +215,7 @@ from askkit.rules import (
 )
 from askkit.runs import Results, diff_lines, load_results
 from askkit.server_tools import cited_urls, searches, web_search
-from askkit.sorting_set import load_sorting_cases, split_set
+from askkit.sorting_set import load_sorting_cases, sort_case, split_set
 from askkit.structured import ask_json, json_request, stream_json
 from askkit.targets import (
     COURSE_MINIMUM_RIGHT,
@@ -521,6 +528,7 @@ def models_called(options: argparse.Namespace) -> list[str]:
         "classify",
         "inbox",
         "read",
+        "release",
     ):
         return [options.model]
     return []
@@ -1054,6 +1062,105 @@ def delete_batch(client: Anthropic, batch_id: str) -> None:
     print(f"Deleted:       {batch_id} at Anthropic")
 
 
+def run_release(options: argparse.Namespace) -> None:
+    # The held-out part, scored once, the attack eval and the bill, each
+    # measured by real calls and held to the targets. The bars a test
+    # proves (stops, retries, tools, keys) run in CI on every push; these
+    # need a key and cost money, so they run here, once a version is
+    # ready to ship.
+    folder: Path = options.folder
+    earlier = scored_before(folder)
+    if earlier is not None:
+        sys.exit(
+            f"askkit: {RELEASE_FILE} exists already: the held-out part is"
+            f" scored once, and was on {earlier.scored_on.isoformat()}"
+        )
+    try:
+        targets = load_targets(folder / "targets.json")
+        held_out = load_sorting_cases(folder / "held_out")
+        attacks = load_attacks(
+            folder.parent / "attacks" / "cases.json",
+            folder.parents[1] / "samples" / "attacks.csv",
+        )
+    except (OSError, ValueError) as error:
+        sys.exit(f"askkit: {error}")
+    total = len(held_out)
+    rules_right = (total - len(keyword_misses(held_out))) / total
+    plan_faults = below_minimum(targets, rules_right)
+    if plan_faults:
+        sys.exit(
+            "askkit: the targets are below the course minimum: "
+            + "; ".join(plan_faults)
+        )
+    model: str = options.model
+    client = Anthropic(api_key=require_api_key())
+    right = 0
+    bill = 0.0
+    won: list[str] = []
+    try:
+        for case, email in held_out:
+            queue, reason, usage = sort_case(client, email, model, 1000)
+            bill += usage_cost(model, usage)
+            if reason is None and queue == case.queue:
+                right += 1
+        for attack, email in attacks:
+            queue, _, _ = sort_case(client, email, model, 1000)
+            if attack_won(attack, queue):
+                won.append(attack.id)
+    except APIError as error:
+        sys.exit(f"askkit: {error_message(error)}; nothing was written")
+    # The held-out emails stand for a month of the inbox, so their
+    # average call prices the month.
+    per_email = bill / total
+    month_bill = per_email * targets.emails_a_month
+    faults = release_faults(
+        targets, right, total, won, month_bill, rules_right
+    )
+    release = Release(
+        scored_on=today(),
+        model=model,
+        prompt_version=IN_USE["classify_email"],
+        held_out_right=right,
+        held_out_total=total,
+        attacks_won=sorted(won),
+        attacks_total=len(attacks),
+        bill_per_email=per_email,
+        month_bill=month_bill,
+        month=month_cost(targets, right / total, month_bill),
+        rules_month=month_cost(targets, rules_right, 0),
+        faults=faults,
+    )
+    # Written whatever the result: once scored, the part is spent.
+    (folder / RELEASE_FILE).write_text(
+        release.model_dump_json(indent=2) + "\n", encoding="utf-8"
+    )
+    needed = cases_needed(targets.held_out_right, total)
+    print(f"Model:         {model}, classify_email v{release.prompt_version}")
+    print(
+        f"Held out:      {right} of {total} right ({right / total:.2f});"
+        f" {needed} needed"
+    )
+    misses = total - right
+    if misses:
+        print(f"Misses:        {misses}, not printed: scored, never read")
+    print(
+        f"Attacks won:   {len(won)} of {len(attacks)};"
+        f" {targets.attacks_won} allowed"
+    )
+    print(
+        f"Bill:          ${per_email:.6f} an email, ${month_bill:,.2f} a"
+        f" month; budget ${targets.month_budget:,.2f}"
+    )
+    print(
+        f"Month:         ${release.month:,.2f} with the errors,"
+        f" the rules' ${release.rules_month:,.2f}"
+    )
+    print(f"Written:       {folder / RELEASE_FILE}")
+    if faults:
+        sys.exit("askkit: not ready to ship: " + "; ".join(faults))
+    print("Release:       every measured bar met")
+
+
 def main(arguments: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="askkit")
     parser.add_argument(
@@ -1249,6 +1356,14 @@ def main(arguments: list[str] | None = None) -> None:
         "targets", help="check a sorting set's targets against the minimum"
     )
     targets_command.add_argument("folder", type=Path)
+    release_command = commands.add_parser(
+        "release",
+        help="score the held-out part once and check every measured bar",
+    )
+    release_command.add_argument("folder", type=Path)
+    release_command.add_argument(
+        "-m", "--model", choices=MODELS, default=DEFAULT_MODEL
+    )
     answer_command = commands.add_parser(
         "answer", help="answer every question of an ask set, to grade"
     )
@@ -1487,6 +1602,10 @@ def main(arguments: list[str] | None = None) -> None:
                 "askkit: the targets are below the course minimum: "
                 + "; ".join(target_faults)
             )
+        return
+
+    if options.command == "release":
+        run_release(options)
         return
 
     if options.command == "diff":

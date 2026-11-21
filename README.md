@@ -1,9 +1,106 @@
 # AskKit
 
-The project of AI Engineering, Level 1 (LLM Application Foundations), on
-devfoxlabs: a command-line app built on a large language model. Each
-module of the course adds one piece; the tag `m01`, `m02`, … holds the
-code as it stands at the end of that module.
+AskKit sorts a shop's support emails into its teams' queues (`damaged`,
+`refund`, `delivery`, `other`), and sends to a person every email it
+cannot sort with confidence. It is a command-line app built on a large
+language model, Claude, called through Anthropic's SDK, and it also
+answers questions, keeps a chat, turns an email into a support ticket
+and reads invoices.
+
+It is the project of AI Engineering, Level 1 (LLM Application
+Foundations), on devfoxlabs. Each module of the course added one piece;
+the tag `m01`, `m02`, … holds the code as it stood at the end of that
+module, and `m14` is the release.
+
+## Install
+
+You need [uv](https://docs.astral.sh/uv/) and an Anthropic API key.
+
+```bash
+cd python
+uv sync
+cp .env.example .env
+```
+
+Open `.env` and put your key after `ANTHROPIC_API_KEY=`. `.env` is in
+`.gitignore`, so the key never reaches the repository; `uv run askkit
+key` checks that AskKit finds it and prints only its first and last
+characters.
+
+## A two-minute demo
+
+```bash
+uv run askkit inbox samples/demo.csv
+```
+
+sorts five emails written for the demo: a cracked lid, a late order, a
+refund asked for in Portuguese, a thank-you with the shop's own email
+quoted under it, and a thank-you that tries to order the model into the
+refund queue. It prints one line per email, its id and its queue (or
+`to a person` and why), then how many went to each queue, the time the
+run took and what it cost: five calls to Claude Haiku 5.5, a small
+fraction of a cent. The last email should land in `other`: AskKit marks
+an email as a stranger's text, never as orders.
+
+## Is it good enough to ship?
+
+The job AskKit ships for is sorting the inbox, and the plan for judging
+it, written before any model ran on its held-out cases, is in
+`python/evals/classify/` (see "The final project's plan" below). Every
+bar of that plan is proved one of two ways.
+
+The yes/no bars are tests, run by CI on every push with no key:
+
+```bash
+uv run pytest -m release
+```
+
+| Bar | The test in `tests/test_bars.py` |
+| --- | --- |
+| A cut-off answer is never sorted | `test_a_cut_off_answer_is_never_sorted` |
+| A declined answer is never sorted | `test_a_declined_answer_is_never_sorted` |
+| Retries are bounded | `test_a_failing_request_is_tried_three_times_and_no_more` |
+| A tool you denied never runs | `test_a_denied_tool_never_runs_even_when_the_model_asks` |
+| A fetch reaches only your sites | `test_a_fetch_outside_the_allowed_sites_never_runs` |
+| No key in the call log | `test_the_key_never_reaches_the_call_log` |
+| No key in the SDK's debug log | `test_the_key_never_reaches_the_sdk_debug_log` |
+| No key in an error message | `test_a_rejected_key_is_never_printed` |
+
+The measured bars need real calls, so they run once, when a version is
+ready:
+
+```bash
+uv run askkit release evals/classify
+```
+
+sends the 21 held-out emails and the 5 attack emails as `askkit inbox`
+sends them, 26 calls, and checks the targets in `targets.json`: the
+held-out share right, the attacks that won, the bill for a month at the
+price of the run's own tokens, and the month with the errors against
+the keyword rules'. It prints how many held-out cases were missed, never
+which: the held-out part is scored, not read. It writes the result to
+`evals/classify/release.json` and refuses to score the part again while
+that file exists. A missed bar ends with exit code 1 and every fault.
+
+## What it does not do
+
+- It sorts with Claude only; `askkit answer` can ask Google's and
+  OpenAI's models, but the sorting call and its eval go through
+  Anthropic's SDK.
+- About one email in twenty may land in a wrong queue at the target
+  share; a person moves it. Names and street addresses stay in the
+  emails it sends and logs: redaction finds card numbers, email
+  addresses and phone numbers only.
+- A chat's history file and an `--out` file keep what you typed, as you
+  typed it.
+- Prices, limits and retirement dates are copied from each provider's
+  pages with the date they were checked; they change, so check them
+  before you rely on a bill.
+
+## Reference
+
+Everything below is the reference, one section per feature, in the
+order the course added them.
 
 ## What it does so far
 
@@ -1212,7 +1309,7 @@ uv run pytest evals
 
 runs the 16 main cases, one billed call each to Claude Haiku 5.5, and
 ends with the score as pytest counts it, such as `3 failed, 13 passed,
-62 deselected`; each failure names its case and its faults.
+41 deselected`; each failure names its case and its faults.
 
 - `uv run pytest evals -k clock` runs one case, `-k "clock or pans"`
   two.
@@ -1443,11 +1540,12 @@ uv run askkit targets evals/classify
 prints the plan and measures the rules' held-out score itself; targets
 below the minimum exit with exit code 1 and every way they fall short.
 
-`python/evals/test_sorting_cases.py` sends each case as `askkit inbox`
-sends its email, one billed call each. Each part has a marker of its
-own, deselected on every other run: `uv run pytest evals -m sorting`
-runs the 28 main cases, and `uv run pytest evals -m sorting_held_out`
-the 21 held-out cases, once a version is ready.
+`python/evals/test_sorting_cases.py` sends each main case as `askkit
+inbox` sends its email, one billed call each, under a marker deselected
+on every other run: `uv run pytest evals -m sorting` runs the 28 main
+cases, to read and tune on. The held-out part has no test: a failing
+test names its case, and that part is scored, never read. `askkit
+release` scores it, once (see "Is it good enough to ship?" above).
 
 ## Tags
 
@@ -1521,6 +1619,13 @@ the 21 held-out cases, once a version is ready.
   Pydantic model checked by validators; `Ticket` and `Classification`
   repair their own capitals; and `answer`'s retries run on tenacity, one
   owner for every model of the chain.
+- `m14`, end of Module 14 (Final Project) and of Level 1: the sorting
+  set and its plan (`split`, `baseline`, `targets`), the release: a
+  README that starts with what AskKit is for, how to install it and a
+  demo; `release`, which scores the held-out part once and checks the
+  attacks, the bill and the month against the targets; a test for
+  every yes/no bar of the course minimum (`pytest -m release`); and
+  every key AskKit holds taken out of the call log.
 
 ## Layout
 
@@ -1564,6 +1669,10 @@ the 21 held-out cases, once a version is ready.
   - `src/askkit/baseline.py`: the keyword rules the model must beat.
   - `src/askkit/targets.py`: the final project's targets and the
     course's minimum they must meet.
+  - `src/askkit/release.py`: the release check's record,
+    `release.json`, and the bars a release run missed.
+  - `src/askkit/keys.py`: every key AskKit holds, replaced by `[KEY]`
+    wherever it stands in a text the log keeps.
   - `src/askkit/terminal.py`: text a model or a site wrote, made safe to
     print: every character a terminal would obey is shown as its escape.
   - `src/askkit/redact.py`: card numbers, email addresses and phone
@@ -1612,9 +1721,9 @@ the 21 held-out cases, once a version is ready.
   - `src/askkit/batch.py`: an inbox sent as one Message Batch, and its
     answers priced and logged.
   - `samples/`: images, an invoice PDF, a voice message, a month of uses,
-    an inbox of 1,000 emails (with the script that writes it) and five
-    injection attacks in the inbox's columns, made for the course, with
-    invented data.
+    an inbox of 1,000 emails (with the script that writes it), five
+    injection attacks in the inbox's columns and the five emails of the
+    demo (`demo.csv`), made for the course, with invented data.
   - `notebooks/`: notebooks for exploring, saved without outputs.
   - `evals/`: the golden sets, a main and a held-out part each, the
     ask set's documents and rubric, the eval that runs the extract
@@ -1622,10 +1731,12 @@ the 21 held-out cases, once a version is ready.
     the model to score chosen on the command line, and the injection
     attacks with their right queues (`uv run pytest evals -m attacks`),
     and the sorting set of the final project with its targets
-    (`evals/classify/`).
+    (`evals/classify/`), where `askkit release` writes `release.json`.
   - `tests/`: pytest tests. They never call a model's API: the real SDK
     sends each call to a fake transport (`httpx2.MockTransport`) that
     answers with a response written in the shape of the API's.
+    `tests/test_bars.py` holds the release's yes/no bars
+    (`uv run pytest -m release`).
 
 ## Checks
 
