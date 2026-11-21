@@ -751,10 +751,11 @@ a new provider also needs a row in `LAYER_PROVIDERS`. AskKit gives every
 provider the same two retries (`LAYER_RETRIES`), since Google's SDK makes
 none unless told to, and reads OpenAI's `x-request-id` header under the
 layer, since the layer's answer carries no request ID. Claude models do
-not go through the layer: it drops what AskKit uses from Anthropic's SDK,
-such as the request ID, the `stop_sequence` stop reason, the spend cap's
-stable error code and the retry count, and server tools such as web
-search.
+not go through the layer, which leaves out what AskKit uses of
+Anthropic's SDK: the request ID, the retry count (`retries_taken`), the
+spend cap's own error class (the layer's errors call it a plain
+`RateLimitError`, its stable code kept only in `original_exception`),
+and helpers such as `with_raw_response` and middleware.
 
 ## Sorting a whole inbox
 

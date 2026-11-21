@@ -23,8 +23,9 @@ class LayerProvider:
 # The providers askkit answer reaches through one provider-agnostic
 # layer, any-llm, keyed by the provider column of models.py. Claude is
 # not here: AskKit calls it through Anthropic's own SDK, which keeps
-# what the layer drops (lesson 13.2). A model of another provider joins
-# with a row here and its rows in models.py and prices.py.
+# what the layer leaves out, such as the request ID, the retry count and
+# the spend cap's error class (lesson 13.2). A model of another provider
+# joins with a row here and its rows in models.py and prices.py.
 LAYER_PROVIDERS: dict[str, LayerProvider] = {
     "Google": LayerProvider("gemini", "GEMINI_API_KEY"),
     "OpenAI": LayerProvider("openai", OPENAI_KEY_NAME),
