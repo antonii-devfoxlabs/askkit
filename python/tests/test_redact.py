@@ -21,7 +21,7 @@ __all__ = ["run_here"]
 MARIA = (
     "Order 4417 came with a broken mug. Please refund it to my card"
     " 4242 4242 4242 4242, or call me on +44 7700 900123. My email is"
-    " maria.k@example.com.\nMaria"
+    " maria@example.com.\nMaria"
 )
 MARIA_REDACTED = (
     "Order 4417 came with a broken mug. Please refund it to my card"
@@ -85,7 +85,7 @@ def test_the_content_file_keeps_placeholders_not_the_numbers(
         text = path.read_text(encoding="utf-8")
         assert "4242" not in text
         assert "900123" not in text
-        assert "maria.k@example.com" not in text
+        assert "maria@example.com" not in text
 
 
 def test_an_answer_that_repeats_a_number_is_redacted_in_the_log(
