@@ -10,7 +10,7 @@ from openai import OpenAI
 from askkit.ask import MODELS
 from askkit.audio import TRANSCRIBE_MODEL
 from askkit.cli import main
-from askkit.fallback import OPENAI_MODELS
+from askkit.layer import LAYER_MODELS
 from askkit.models import (
     DEFAULT_MODEL,
     LIFECYCLES,
@@ -34,7 +34,7 @@ SONNET_45 = Lifecycle("Anthropic", date(2026, 11, 30), True, SONNET)
 
 def test_every_model_askkit_can_call_has_a_lifecycle() -> None:
     # A model with no row could be retired without AskKit ever saying.
-    called = {*MODELS, *OPENAI_MODELS, TRANSCRIBE_MODEL, DEFAULT_MODEL}
+    called = {*MODELS, *LAYER_MODELS, TRANSCRIBE_MODEL, DEFAULT_MODEL}
     assert called <= set(LIFECYCLES)
     assert {SMALL_MODEL, LARGE_MODEL} <= set(LIFECYCLES)
 
@@ -171,11 +171,12 @@ def test_models_prints_the_table(capsys: pytest.CaptureFixture[str]) -> None:
     main(["models"])
     out = capsys.readouterr().out
     assert out.splitlines() == [
-        "Model               Provider   Retires",
-        "claude-haiku-5-5    Anthropic  not before 2027-10-07",
-        "claude-sonnet-5-5   Anthropic  not before 2027-09-28",
-        "gpt-6-luna          OpenAI     no date announced",
-        "gpt-transcribe      OpenAI     no date announced",
+        "Model                  Provider   Retires",
+        "claude-haiku-5-5       Anthropic  not before 2027-10-07",
+        "claude-sonnet-5-5      Anthropic  not before 2027-09-28",
+        "gemini-3.5-flash-lite  Google     no date announced",
+        "gpt-6-luna             OpenAI     no date announced",
+        "gpt-transcribe         OpenAI     no date announced",
         "",
         "Default:       claude-haiku-5-5",
         "Checked:       2026-11-20, on each provider's deprecations page",
@@ -231,6 +232,9 @@ def test_models_live_reports_a_row_to_update(
     out = capsys.readouterr().out
     assert "Live:          claude-haiku-5-5, no date announced" in out
     assert "Not checked:   gpt-6-luna (OPENAI_API_KEY is not set)" in out
+    assert (
+        "Not checked:   gemini-3.5-flash-lite (Google's API gives no date)"
+    ) in out
     assert stopped.value.code == (
         "askkit: claude-sonnet-5-5: Anthropic says 2027-09-28, and"
         " models.py says not before 2027-09-28; update its row"

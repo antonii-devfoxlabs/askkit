@@ -5,6 +5,7 @@ description = "A command-line app built on a large language model."
 requires-python = ">=3.14"
 dependencies = [
     "anthropic>=2.8.0",
+    "any-llm-sdk[gemini,openai]>=1.53.1",
     "httpx2>=2.16.0",
     "openai>=3.57.0",
     "pillow>=13.0.0",

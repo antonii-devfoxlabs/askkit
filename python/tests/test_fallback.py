@@ -8,18 +8,21 @@ import httpx2
 import pytest
 from anthropic import Anthropic
 from anthropic.types import Message
-from openai import OpenAI
+from test_layer import (
+    FLASH_LITE,
+    StandIn,
+    flash_lite_body,
+    luna_chat_body,
+    use_stand_in,
+)
 
 from askkit.ask import ask
 from askkit.cli import main
-from askkit.cost import usage_cost
 from askkit.fallback import (
     COOL_DOWN,
     FirstAnswer,
     Handover,
-    ask_openai,
     fallbacks_line,
-    falls_back,
     first_answer,
 )
 from askkit.retry import ANSWER_POLICY, Retry, RetryPolicy, with_retries
@@ -70,52 +73,6 @@ def claude_body(
     return body
 
 
-def luna_body(
-    text: str = "<answer>We do.</answer>",
-    status: str = "completed",
-    reason: str | None = None,
-    refusal: str | None = None,
-) -> dict[str, Any]:
-    parts: list[dict[str, Any]] = [
-        {"type": "output_text", "text": text, "annotations": []}
-    ]
-    if refusal is not None:
-        parts = [{"type": "refusal", "refusal": refusal}]
-    details = None
-    if reason is not None:
-        details = {"reason": reason}
-    return {
-        "id": "resp_01AskKitFallback",
-        "object": "response",
-        "created_at": 1795000000,
-        "model": LUNA,
-        "status": status,
-        "incomplete_details": details,
-        "output": [
-            {
-                "type": "message",
-                "id": "msg_01Luna",
-                "role": "assistant",
-                "status": "completed",
-                "content": parts,
-            }
-        ],
-        "parallel_tool_calls": True,
-        "tool_choice": "auto",
-        "tools": [],
-        "usage": {
-            "input_tokens": 1200,
-            "input_tokens_details": {
-                "cached_tokens": 1024,
-                "cache_write_tokens": 0,
-            },
-            "output_tokens": 60,
-            "output_tokens_details": {"reasoning_tokens": 0},
-            "total_tokens": 1260,
-        },
-    }
-
-
 Step = tuple[int, dict[str, Any]]
 
 
@@ -131,21 +88,6 @@ def claude_client(steps: list[Step], sent: list[str]) -> Anthropic:
 
     return Anthropic(
         api_key="sk-ant-api03-a-test-key-Ab12",
-        max_retries=0,
-        http_client=httpx2.Client(transport=httpx2.MockTransport(reply)),
-    )
-
-
-def openai_client(
-    bodies: list[dict[str, Any]], sent: list[dict[str, Any]]
-) -> OpenAI:
-    def reply(request: httpx2.Request) -> httpx2.Response:
-        sent.append(json.loads(request.content))
-        body = bodies[min(len(sent), len(bodies)) - 1]
-        return httpx2.Response(200, json=body)
-
-    return OpenAI(
-        api_key="sk-proj-a-test-key-Cd34",
         max_retries=0,
         http_client=httpx2.Client(transport=httpx2.MockTransport(reply)),
     )
@@ -291,71 +233,6 @@ def test_reasoning_extraction_is_not_handed_on() -> None:
     assert sent == [HAIKU]
 
 
-def test_what_falls_back_at_openai() -> None:
-    request = httpx2.Request("POST", "https://api.openai.com/v1/responses")
-
-    def status_error(status: int) -> Exception:
-        response = httpx2.Response(status, request=request)
-        client = openai_client([], [])
-        return client._make_status_error("busy", body=None, response=response)
-
-    assert falls_back(status_error(503))  # type: ignore[arg-type]
-    assert falls_back(status_error(429))  # type: ignore[arg-type]
-    assert not falls_back(status_error(401))  # type: ignore[arg-type]
-
-
-def test_openai_s_answer_is_read_in_claude_s_shape() -> None:
-    sent: list[dict[str, Any]] = []
-    client = openai_client([luna_body()], sent)
-    message = ask_openai(client, "Who pays?", LUNA, 1000, "Be brief.")
-    assert message.stop_reason == "end_turn"
-    assert message.content[0].type == "text"
-    assert message.content[0].text == "<answer>We do.</answer>"
-    # OpenAI's 1,200 input tokens include the 1,024 read from its cache.
-    assert message.usage.input_tokens == 176
-    assert message.usage.cache_read_input_tokens == 1024
-    assert message.usage.cache_creation_input_tokens == 0
-    assert message.usage.output_tokens == 60
-    # The same question: the system prompt as instructions, no copy kept.
-    assert sent[0]["instructions"] == "Be brief."
-    assert sent[0]["input"] == "Who pays?"
-    assert sent[0]["max_output_tokens"] == 1000
-    assert sent[0]["store"] is False
-
-
-def test_openai_s_answer_is_priced_at_its_own_prices() -> None:
-    message = ask_openai(
-        openai_client([luna_body()], []), "Who pays?", LUNA, 1000, "x"
-    )
-    # 176 plain at $0.10, 1,024 read at $0.01, 60 out at $0.50 a million.
-    expected = (176 * 0.10 + 1024 * 0.01 + 60 * 0.50) / 1_000_000
-    assert usage_cost(LUNA, message.usage) == pytest.approx(expected)
-
-
-def test_openai_s_cut_off_and_declined_answers_keep_their_meaning() -> None:
-    cut = luna_body(status="incomplete", reason="max_output_tokens")
-    filtered = luna_body(status="incomplete", reason="content_filter")
-    declined = luna_body(refusal="I can't help with that.")
-    stops = []
-    for body in (cut, filtered, declined):
-        client = openai_client([body], [])
-        stops.append(ask_openai(client, "Q", LUNA, 1000, "x").stop_reason)
-    assert stops == ["max_tokens", "refusal", "refusal"]
-    message = ask_openai(openai_client([declined], []), "Q", LUNA, 1000, "x")
-    # Of a declined answer no part is kept.
-    assert message.content == []
-
-
-def test_an_openai_answer_with_no_reading_is_refused() -> None:
-    body = luna_body(status="failed")
-    client = openai_client([body], [])
-    with pytest.raises(ValueError) as raised:
-        ask_openai(client, "Q", LUNA, 1000, "x")
-    assert str(raised.value) == (
-        "gpt-6-luna stopped as failed, which AskKit cannot read as an answer"
-    )
-
-
 def test_the_fallbacks_line_names_each_question_and_why() -> None:
     def one(handovers: list[Handover]) -> FirstAnswer:
         response = Message.model_validate(claude_body(LUNA))
@@ -377,6 +254,7 @@ def ask_set(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-api03-a-test-key-Ab12")
     monkeypatch.setenv("OPENAI_API_KEY", "sk-proj-a-test-key-Cd34")
+    monkeypatch.setenv("GEMINI_API_KEY", "a-test-key-Gh78")
     part = tmp_path / "main"
     part.mkdir()
     cases = json.loads((MAIN / "cases.json").read_text(encoding="utf-8"))
@@ -393,13 +271,16 @@ def run_with(
     claude: list[Step],
     luna: list[dict[str, Any]],
     claude_sent: list[str],
-    luna_sent: list[dict[str, Any]],
+    luna_sent: list[tuple[str, dict[str, Any]]],
 ) -> None:
     def make_claude(**options: Any) -> Anthropic:
         return claude_client(claude, claude_sent)
 
-    def make_openai(**options: Any) -> OpenAI:
-        return openai_client(luna, luna_sent)
+    # Every model of another provider goes through the layer, whose
+    # provider SDK answers from the stand-in of test_layer.
+    stand_in = StandIn([(200, body) for body in luna] or [(200, {})])
+    stand_in.requests = luna_sent
+    use_stand_in(monkeypatch, stand_in)
 
     def no_waiting(
         send: Callable[[], Message], policy: RetryPolicy, retries: list[Retry]
@@ -409,7 +290,6 @@ def run_with(
         )
 
     monkeypatch.setattr("askkit.cli.Anthropic", make_claude)
-    monkeypatch.setattr("askkit.cli.OpenAI", make_openai)
     monkeypatch.setattr("askkit.cli.with_retries", no_waiting)
 
 
@@ -419,11 +299,11 @@ def test_answer_falls_back_to_openai_and_stays_there_while_haiku_cools(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     claude_sent: list[str] = []
-    luna_sent: list[dict[str, Any]] = []
+    luna_sent: list[tuple[str, dict[str, Any]]] = []
     run_with(
         monkeypatch,
         [(529, OVERLOADED)],
-        [luna_body()],
+        [luna_chat_body()],
         claude_sent,
         luna_sent,
     )
@@ -481,8 +361,8 @@ def test_answer_needs_the_openai_key_before_any_call(
     with pytest.raises(SystemExit) as stopped:
         main(["answer", str(ask_set), "--out", "a.json", "--fallback", LUNA])
     assert stopped.value.code == (
-        "askkit: OPENAI_API_KEY is not set (a fallback in the chain runs at"
-        " OpenAI); put your OpenAI key after the = in .env"
+        "askkit: OPENAI_API_KEY is not set (gpt-6-luna in the chain runs"
+        " at OpenAI); put your OpenAI key after the = in .env"
     )
     assert claude_sent == []
 
@@ -543,9 +423,38 @@ def test_answer_can_ask_the_fallback_model_first_to_grade_it(
     ask_set: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     claude_sent: list[str] = []
-    luna_sent: list[dict[str, Any]] = []
-    run_with(monkeypatch, [], [luna_body()], claude_sent, luna_sent)
+    luna_sent: list[tuple[str, dict[str, Any]]] = []
+    run_with(monkeypatch, [], [luna_chat_body()], claude_sent, luna_sent)
     main(["answer", str(ask_set), "--out", "luna.json", "-m", LUNA])
     answers = load_answers(Path("luna.json"))
     assert [answer.model for answer in answers] == [LUNA, LUNA]
     assert claude_sent == []
+
+
+def test_answer_switches_provider_with_one_setting(
+    ask_set: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The whole ask set at Google: one -m, no adapter of its own.
+    claude_sent: list[str] = []
+    google_sent: list[tuple[str, dict[str, Any]]] = []
+    run_with(monkeypatch, [], [flash_lite_body()], claude_sent, google_sent)
+    main(["answer", str(ask_set), "--out", "flash.json", "-m", FLASH_LITE])
+    answers = load_answers(Path("flash.json"))
+    assert [answer.model for answer in answers] == [FLASH_LITE, FLASH_LITE]
+    assert answers[0].text == "<answer>We do.</answer>"
+    assert len(google_sent) == 2
+    assert claude_sent == []
+
+
+def test_answer_needs_google_s_key_before_any_call(
+    ask_set: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("GEMINI_API_KEY", "")
+    claude_sent: list[str] = []
+    run_with(monkeypatch, [], [], claude_sent, [])
+    with pytest.raises(SystemExit) as stopped:
+        main(["answer", str(ask_set), "--out", "a.json", "-m", FLASH_LITE])
+    assert stopped.value.code == (
+        "askkit: GEMINI_API_KEY is not set (gemini-3.5-flash-lite in the"
+        " chain runs at Google); put your Google key after the = in .env"
+    )

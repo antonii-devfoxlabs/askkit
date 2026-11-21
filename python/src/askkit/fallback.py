@@ -3,22 +3,11 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 import anthropic
-import openai
-from anthropic.types import (
-    ContentBlock,
-    Message,
-    StopReason,
-    TextBlock,
-    Usage,
-)
-from openai import OpenAI
-from openai.types.responses import Response
+from anthropic.types import Message
+from any_llm.exceptions import AnyLLMError
 
-from askkit.retry import RETRY_STATUSES, worth_retrying
-
-# The models AskKit can fall back to at another provider: OpenAI's, sent
-# through its Responses API with OpenAI's own SDK.
-OPENAI_MODELS: tuple[str, ...] = ("gpt-6-luna",)
+from askkit.layer import layer_failure, layer_falls_back
+from askkit.retry import worth_retrying
 
 # Seconds a model that used up its tries is passed over in a run, so the
 # questions after it do not each wait up to two minutes for a model that
@@ -31,7 +20,9 @@ COOL_DOWN = 60.0
 # rather than retry the request" (checked on 2026-11-20).
 NO_FALLBACK_CATEGORIES = ("reasoning_extraction",)
 
-ProviderError = anthropic.APIError | openai.APIError
+# A Claude model fails with the SDK's errors; a model reached through the
+# layer (lesson 13.2) with the layer's own.
+ProviderError = anthropic.APIError | AnyLLMError
 
 
 @dataclass(frozen=True)
@@ -64,17 +55,16 @@ def falls_back(error: ProviderError) -> bool:
     # way on the next model, and falling back would only hide it.
     if isinstance(error, anthropic.APIError):
         return worth_retrying(error)
-    if isinstance(error, openai.APIStatusError):
-        status = error.status_code
-        return status in RETRY_STATUSES or status >= 500
-    return isinstance(error, openai.APIConnectionError)
+    return layer_falls_back(error)
 
 
 def failure(error: ProviderError) -> str:
     # The reason a model failed, in the words of the Retries line.
-    if isinstance(error, anthropic.APIStatusError | openai.APIStatusError):
+    if isinstance(error, AnyLLMError):
+        return layer_failure(error)
+    if isinstance(error, anthropic.APIStatusError):
         return str(error.status_code)
-    if isinstance(error, anthropic.APITimeoutError | openai.APITimeoutError):
+    if isinstance(error, anthropic.APITimeoutError):
         return "timeout"
     return "no connection"
 
@@ -116,7 +106,7 @@ def first_answer(
             continue
         try:
             response = send(model)
-        except (anthropic.APIError, openai.APIError) as error:
+        except (anthropic.APIError, AnyLLMError) as error:
             if position == last or not falls_back(error):
                 raise
             down_until[model] = clock() + cool_down
@@ -129,86 +119,6 @@ def first_answer(
         return FirstAnswer(response, model, handovers, declined)
     # Not reached: the last model either returns or raises.
     raise AssertionError("the chain is empty")
-
-
-def stop_reason_of(response: Response) -> StopReason:
-    # OpenAI's ways an answer ends, in Claude's words. A refusal is a
-    # part of the answer's message; a cut-off answer is "incomplete"
-    # with the reason max_output_tokens; content_filter means OpenAI's
-    # filter stopped the answer, which AskKit treats as declined.
-    for item in response.output:
-        if item.type == "message":
-            for part in item.content:
-                if part.type == "refusal":
-                    return "refusal"
-    if response.status == "completed":
-        return "end_turn"
-    details = response.incomplete_details
-    if response.status == "incomplete" and details is not None:
-        if details.reason == "max_output_tokens":
-            return "max_tokens"
-        if details.reason == "content_filter":
-            return "refusal"
-    raise ValueError(
-        f"{response.model} stopped as {response.status}, which AskKit"
-        " cannot read as an answer"
-    )
-
-
-def as_message(response: Response) -> Message:
-    # OpenAI's response in the shape of Claude's, so every check and
-    # every price in AskKit reads it as it reads Claude's. OpenAI's
-    # input_tokens counts the whole prompt, cache reads and writes
-    # included; Claude's counts only what was neither.
-    stop_reason = stop_reason_of(response)
-    usage = response.usage
-    if usage is None:
-        raise ValueError(
-            f"{response.model} sent no token counts, so AskKit cannot"
-            " price its answer"
-        )
-    read = usage.input_tokens_details.cached_tokens
-    written = usage.input_tokens_details.cache_write_tokens
-    content: list[ContentBlock] = []
-    # A declined answer keeps no text, as Claude's does.
-    if stop_reason != "refusal" and response.output_text:
-        content.append(TextBlock(type="text", text=response.output_text))
-    return Message(
-        id=response.id,
-        type="message",
-        role="assistant",
-        model=response.model,
-        content=content,
-        stop_reason=stop_reason,
-        stop_sequence=None,
-        usage=Usage(
-            input_tokens=usage.input_tokens - read - written,
-            cache_read_input_tokens=read,
-            cache_creation_input_tokens=written,
-            output_tokens=usage.output_tokens,
-        ),
-    )
-
-
-def ask_openai(
-    client: OpenAI, question: str, model: str, max_tokens: int, system: str
-) -> Message:
-    # The same question as ask() sends Claude: the system prompt as
-    # instructions, the question as the input.
-    response = client.responses.create(
-        model=model,
-        instructions=system,
-        input=question,
-        max_output_tokens=max_tokens,
-        # OpenAI keeps every response for 30 days unless told not to;
-        # AskKit saves the answers it needs itself.
-        store=False,
-    )
-    message = as_message(response)
-    # The ID OpenAI gave the request, which its support asks for: the
-    # call log keeps it, as it keeps Claude's (lesson 10.8).
-    message._request_id = response._request_id
-    return message
 
 
 def fallbacks_line(answered: list[tuple[str, FirstAnswer]]) -> str | None:

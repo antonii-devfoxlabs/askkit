@@ -14,6 +14,8 @@ DEFAULT_MODEL = "claude-haiku-5-5"
 # deprecations page:
 # Anthropic: https://platform.claude.com/docs/en/about-claude/model-deprecations
 # OpenAI: https://developers.openai.com/api/docs/deprecations
+# Google (gemini-3.5-flash-lite, checked on 2026-11-21, "No shutdown
+# date announced"): https://ai.google.dev/gemini-api/docs/deprecations
 CHECKED = date(2026, 11, 20)
 
 
@@ -42,6 +44,7 @@ LIFECYCLES: dict[str, Lifecycle] = {
     "claude-sonnet-5-5": Lifecycle(
         "Anthropic", date(2027, 9, 28), False, None
     ),
+    "gemini-3.5-flash-lite": Lifecycle("Google", None, False, None),
     "gpt-6-luna": Lifecycle("OpenAI", None, False, None),
     "gpt-transcribe": Lifecycle("OpenAI", None, False, None),
 }
@@ -92,10 +95,14 @@ def retires_text(lifecycle: Lifecycle) -> str:
 
 
 def table_lines() -> list[str]:
-    lines = [f"{'Model':<20}{'Provider':<11}Retires"]
+    # The model column is as wide as its longest ID and two spaces, so a
+    # longer ID never runs into its provider.
+    width = max(len(model) for model in LIFECYCLES) + 2
+    lines = [f"{'Model':<{width}}{'Provider':<11}Retires"]
     for model, lifecycle in LIFECYCLES.items():
         lines.append(
-            f"{model:<20}{lifecycle.provider:<11}{retires_text(lifecycle)}"
+            f"{model:<{width}}{lifecycle.provider:<11}"
+            f"{retires_text(lifecycle)}"
         )
     return lines
 

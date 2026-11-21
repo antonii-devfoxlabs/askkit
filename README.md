@@ -717,14 +717,44 @@ since every model would reject it too. A declined answer goes on only to
 another Claude model (`--fallback claude-sonnet-5-5`), never to another
 provider, and not at all for the `reasoning_extraction` category. A model
 that used up its tries is passed over for 60 seconds, so the questions
-after it do not wait for it again. `gpt-6-luna` runs at OpenAI, through
-its Responses API, with `OPENAI_API_KEY` from `.env` and `store=False`;
-its answer is turned into the same shape as Claude's, so the same checks
-read it and it is priced at its own prices. Each saved answer names the
-model that wrote it, the question's line names a fallback model, and a
+after it do not wait for it again. Each saved answer names the model
+that wrote it, the question's line names a fallback model, and a
 `Fallbacks:` line says which questions moved and why. Before you rely on
 a fallback, answer the whole set with it first (`-m gpt-6-luna`) and
 grade it. `src/askkit/fallback.py` holds the chain.
+
+### Other providers through one layer
+
+A model of another provider goes through one provider-agnostic library,
+[any-llm](https://github.com/mozilla-ai/any-llm) (`any-llm-sdk`, with
+its `openai` and `gemini` extras), which calls each provider's own SDK.
+Its `messages()` takes the question in Claude's shape and gives the
+answer back as the `anthropic` SDK's own `Message`, so every check and
+price in AskKit reads it unchanged. Two such models can be asked today,
+each with its provider's key in `.env`:
+
+| Model | Provider | Key |
+| --- | --- | --- |
+| `gpt-6-luna` | OpenAI, Chat Completions | `OPENAI_API_KEY` |
+| `gemini-3.5-flash-lite` | Google, Gemini API | `GEMINI_API_KEY` |
+
+Switching the whole ask set to another provider is one setting:
+
+```bash
+cd python
+uv run askkit answer evals/ask/main --out flash.json -m gemini-3.5-flash-lite
+```
+
+Another model joins with a row in `LAYER_MODELS` (`src/askkit/layer.py`),
+`LIFECYCLES` (`models.py`) and `PRICES` and `CACHE_PRICES` (`prices.py`);
+a new provider also needs a row in `LAYER_PROVIDERS`. AskKit gives every
+provider the same two retries (`LAYER_RETRIES`), since Google's SDK makes
+none unless told to, and reads OpenAI's `x-request-id` header under the
+layer, since the layer's answer carries no request ID. Claude models do
+not go through the layer: it drops what AskKit uses from Anthropic's SDK,
+such as the request ID, the `stop_sequence` stop reason, the spend cap's
+stable error code and the retry count, and server tools such as web
+search.
 
 ## Sorting a whole inbox
 
@@ -1001,7 +1031,8 @@ them again before you rely on this table:
 | `inbox --batch`, then `batch` | Anthropic, Message Batches | 29 days, or until `batch --delete` | No |
 | `classify` and `inbox` with `--moderate` | OpenAI, moderation | Nothing | No |
 | `transcribe` | OpenAI, transcriptions | Nothing | No |
-| `--fallback gpt-6-luna` | OpenAI, Responses API | Up to 30 days in its abuse logs; no stored response (`store=False`) | No |
+| `answer` with `gpt-6-luna` | OpenAI, Chat Completions | Up to 30 days in its abuse logs; no stored completion (`store` is false unless set) | No |
+| `answer` with `gemini-3.5-flash-lite` | Google, Gemini API | Paid: for a "limited" time | Paid: no; unpaid (a project with no billing): yes, and people may read it |
 | `--log-content` | This machine, `.askkit-log/` | 7 days, redacted | No one |
 
 Two exceptions hold everywhere: a provider may keep what its safety
@@ -1009,7 +1040,9 @@ systems flag for longer (Anthropic says up to 2 years), and what the
 law requires. Anthropic's Claude Fable 5.2 needs an organization with
 30-day retention on, so it does not run under zero data retention.
 The sources: Anthropic's "API and data retention" page and its
-commercial terms, OpenAI's "Data controls in the OpenAI platform" page.
+commercial terms, OpenAI's "Data controls in the OpenAI platform" page
+and its Chat Completions reference, and Google's Gemini API Additional
+Terms. Switching `answer` to another provider switches these terms too.
 
 ## Labelled as written by a model
 
@@ -1084,6 +1117,8 @@ stops before its first call, the last model of a `--fallback` chain
 included. `askkit models --live` also asks each
 provider's models endpoint (Anthropic's `lifecycle` and `retires_at`,
 OpenAI's `shutdown_date`) and exits with 1 when a row no longer matches.
+Google's models API gives no retirement date, so a Google row is printed
+as `Not checked` and read on Google's deprecations page by hand.
 Before you move `DEFAULT_MODEL` to the replacement, run the eval on it.
 
 ## Prompts
@@ -1410,7 +1445,10 @@ test, as the thinking count of `ask` did.
   - `src/askkit/routing.py`: the small and the large model, and when a
     ticket goes to the large one.
   - `src/askkit/fallback.py`: when a question moves on to the next
-    model of a chain, and OpenAI's answer in Claude's shape.
+    model of a chain.
+  - `src/askkit/layer.py`: the models of other providers, asked
+    through one provider-agnostic library, any-llm, with the same
+    retries at each and OpenAI's request ID read under it.
   - `src/askkit/models.py`: the default model, and the day each model
     AskKit calls retires.
   - `src/askkit/response_cache.py`: the answers `read` and `classify`

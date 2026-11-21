@@ -18,6 +18,7 @@ from anthropic import (
     Timeout,
 )
 from anthropic.types import Message, MessageParam, ToolUnionParam
+from any_llm.exceptions import AnyLLMError
 from openai import OpenAI
 from openai.types.audio import Transcription
 from pydantic import ValidationError
@@ -99,13 +100,7 @@ from askkit.extract import (
     ticket_faults,
     ticket_messages,
 )
-from askkit.fallback import (
-    OPENAI_MODELS,
-    FirstAnswer,
-    ask_openai,
-    fallbacks_line,
-    first_answer,
-)
+from askkit.fallback import FirstAnswer, fallbacks_line, first_answer
 from askkit.golden import KINDS, Case, kind_counts, load_cases
 from askkit.history import (
     SavedMessage,
@@ -139,6 +134,14 @@ from askkit.invoices import (
     invoice_faults,
 )
 from askkit.label import ai_label, labelled_json
+from askkit.layer import (
+    LAYER_MODELS,
+    Layer,
+    ask_layer,
+    layer_client,
+    layer_error,
+    layer_provider,
+)
 from askkit.limits import LIMITS
 from askkit.loop import (
     TOO_MANY_ROUNDS,
@@ -263,34 +266,39 @@ def send_to(
     model: str,
     *,
     client: Anthropic,
-    openai_client: OpenAI | None,
+    layer_clients: dict[str, Layer],
     question: str,
     max_tokens: int,
+    timeout: float,
     policy: RetryPolicy,
     tried: list[Retry],
     tries_made: list[int],
 ) -> Message:
-    # One question to one model of askkit answer's chain. An OpenAI model
-    # gets the same question through OpenAI's SDK, whose own retries own
-    # its tries. A Claude model goes through AskKit's retry policy: each
-    # retry is added to tried, and the number of tries this model made to
-    # tries_made, so a message names the last model's tries, not all.
+    # One question to one model of askkit answer's chain. A model of
+    # another provider goes through the layer (lesson 13.2), whose
+    # provider SDK owns its tries. A Claude model goes through AskKit's
+    # retry policy: each retry is added to tried, and the number of tries
+    # this model made to tries_made, so a message names the last model's
+    # tries, not all.
     sent: list[MessageParam] = [{"role": "user", "content": question}]
     start = perf_counter()
-    if model in OPENAI_MODELS and openai_client is not None:
-        response = ask_openai(
-            openai_client, question, model, max_tokens, ASK_SYSTEM
+    if model in LAYER_MODELS:
+        response = ask_layer(
+            layer_clients[model],
+            question,
+            model,
+            max_tokens,
+            ASK_SYSTEM,
+            timeout,
         )
-        seconds = perf_counter() - start
-        request_id = request_id_of(response)
         # tried holds the retries made on the models before this one.
         log_call(
             response,
             model,
-            seconds,
+            perf_counter() - start,
             ASK_SYSTEM,
             sent,
-            request_id,
+            request_id_of(response),
             retries=len(tried),
         )
         return response
@@ -546,6 +554,11 @@ def live_changes() -> list[str]:
         try:
             if pinned.provider == "Anthropic":
                 live = claude_lifecycle(client, model)
+            elif pinned.provider == "Google":
+                # Google's models API names no retirement date, so its
+                # rows are read on its deprecations page by hand.
+                print(f"Not checked:   {model} (Google's API gives no date)")
+                continue
             elif openai_client is not None:
                 live = openai_lifecycle(openai_client, model)
             else:
@@ -1232,7 +1245,7 @@ def main(arguments: list[str] | None = None) -> None:
     answer_command.add_argument(
         "-m",
         "--model",
-        choices=[*MODELS, *OPENAI_MODELS],
+        choices=[*MODELS, *LAYER_MODELS],
         default=DEFAULT_MODEL,
     )
     answer_command.add_argument("--max-tokens", type=int, default=1000)
@@ -1247,7 +1260,7 @@ def main(arguments: list[str] | None = None) -> None:
         "--fallback",
         action="append",
         default=[],
-        choices=[*MODELS, *OPENAI_MODELS],
+        choices=[*MODELS, *LAYER_MODELS],
     )
     grade_command = commands.add_parser(
         "grade", help="grade saved answers by hand against a rubric"
@@ -1449,18 +1462,23 @@ def main(arguments: list[str] | None = None) -> None:
         client = Anthropic(
             api_key=require_api_key(), max_retries=0, timeout=timeout
         )
-        fallback_client: OpenAI | None = None
-        if any(model in OPENAI_MODELS for model in chain):
-            # Checked before any call, so a missing key costs nothing.
-            fallback_key = load_api_key(OPENAI_KEY_NAME)
-            if fallback_key is None:
+        # One layer client per model of another provider in the chain,
+        # each with its provider's key, checked before any call so a
+        # missing key costs nothing.
+        layer_clients: dict[str, Layer] = {}
+        for model in chain:
+            if model not in LAYER_MODELS:
+                continue
+            provider = layer_provider(model)
+            layer_key = load_api_key(provider.key)
+            if layer_key is None:
+                runs_at = LIFECYCLES[model].provider
                 sys.exit(
-                    f"askkit: {OPENAI_KEY_NAME} is not set (a fallback in"
-                    " the chain runs at OpenAI); put your OpenAI key after"
-                    " the = in .env"
+                    f"askkit: {provider.key} is not set ({model} in the"
+                    f" chain runs at {runs_at}); put your {runs_at} key"
+                    " after the = in .env"
                 )
-            # The SDK's own two retries own this provider's tries.
-            fallback_client = OpenAI(api_key=fallback_key, timeout=timeout)
+            layer_clients[model] = layer_client(model, layer_key)
         answers: list[Answer] = []
         calls: list[Message] = []
         priced_as: list[str] = []
@@ -1479,9 +1497,10 @@ def main(arguments: list[str] | None = None) -> None:
             send = partial(
                 send_to,
                 client=client,
-                openai_client=fallback_client,
+                layer_clients=layer_clients,
                 question=question,
                 max_tokens=options.max_tokens,
+                timeout=options.timeout,
                 policy=policy,
                 tried=tried,
                 tries_made=tries_made,
@@ -1493,8 +1512,8 @@ def main(arguments: list[str] | None = None) -> None:
                 sys.exit(
                     f"askkit: {item.name}: {error_message(error, tries)}"
                 )
-            except openai.APIError as error:
-                sys.exit(f"askkit: {item.name}: {openai_error(error)}")
+            except AnyLLMError as error:
+                sys.exit(f"askkit: {item.name}: {layer_error(error)}")
             except ValueError as error:
                 sys.exit(f"askkit: {item.name}: {error}")
             retries.extend(tried)

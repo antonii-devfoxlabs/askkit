@@ -32,9 +32,15 @@ LONG_PROMPT_PRICES: dict[str, dict[str, float]] = {
 # 10.5), from OpenAI's pricing page, checked on 2026-11-20: a write to its
 # 30-minute cache and a read; over 272,000 input tokens, the long-context
 # prices.
+# Gemini 3.5 Flash-Lite, the model askkit answer can switch to at Google
+# (lesson 13.2), from Google's pricing page, checked on 2026-11-21: a read
+# from its cache at $0.03. Its implicit cache is on by default and has
+# no write price (the caching page, the same day), so a write, which the
+# layer never reports, would be priced as plain input.
 CACHE_PRICES: dict[str, dict[str, float]] = {
     "claude-haiku-5-5": {"write": 0.125, "read": 0.01},
     "claude-sonnet-5-5": {"write": 2.50, "read": 0.10},
+    "gemini-3.5-flash-lite": {"write": 0.30, "read": 0.03},
     "gpt-6-luna": {"write": 0.125, "read": 0.01},
 }
 LONG_PROMPT_CACHE_PRICES: dict[str, dict[str, float]] = {
