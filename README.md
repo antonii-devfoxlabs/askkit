@@ -1013,30 +1013,31 @@ where it goes wherever the JSON is copied (`ai_label` and
   "problem": "mug broken",
   "wish": "replacement",
   "ai_label": {
-    "written_by": "claude-haiku-5-5",
+    "model": "claude-haiku-5-5",
     "via": "askkit extract",
     "written": "2026-11-21T09:30:00Z",
     "checked_by_code": [
-      "every field has its type and an allowed value",
-      "order, when given, is a number in the email"
+      "types and allowed values",
+      "order is in the email"
     ],
     "read_by_a_person": false
   }
 }
 ```
 
-- `written_by` is the model the API says answered (`response.model`),
+- `model` is the model the API says answered (`response.model`),
   not the one asked for first: a ticket that `--escalate-to` sent to a
   larger model names the larger one.
 - `written` is when the model wrote it, in UTC; for an invoice `read`
   took from its cache, when the answer was kept, not when it was shown.
 - `checked_by_code` names each check that passed, in its own words,
-  and nothing else: `extract` adds "order is one of the shop's orders"
-  with `--orders`. The fields no check reads, such as `problem` and
-  `wish`, only the model read.
+  and nothing else: `extract` adds "order is in the shop's orders"
+  with `--orders`, and a ticket with no order names neither rule about
+  the order, since they had nothing to test. The fields no check reads,
+  such as `problem` and `wish`, only the model read.
 - `read_by_a_person` is always `false`: no person has read the JSON when
   AskKit prints it. A tool that lets a person edit it should set it and
-  name the editor, and keep `written_by`.
+  name the editor, and keep `model`.
 
 The lines under the JSON (`Model:`, `Cost:`, …) are for whoever ran the
 command and stay in the terminal. A tool that saves only the fields it

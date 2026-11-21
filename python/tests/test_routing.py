@@ -124,7 +124,7 @@ def test_extract_escalates_a_failed_ticket_to_the_large_model(
     ticket, lines = printed_json(capsys.readouterr().out)
     # The ticket's label names the model that wrote it, the larger one,
     # not the one --model asked for first.
-    assert ticket[LABEL_KEY]["written_by"] == LARGE_MODEL
+    assert ticket[LABEL_KEY]["model"] == LARGE_MODEL
     # Each call at its own model's prices: 236 in and 31 out on Haiku
     # 5.5, $0.0000391, and 312 in and 29 out on Sonnet 5.5, $0.000914.
     assert lines[1:] == [

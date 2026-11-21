@@ -32,7 +32,7 @@ class Ticket(BaseModel):
 
 
 # What Ticket checked, for a ticket's label (label.py).
-TICKET_CHECK = "every field has its type and an allowed value"
+TICKET_CHECK = "types and allowed values"
 
 # The schema the API holds the answer to, made from Ticket by the SDK's
 # own helper, the one messages.parse() uses.

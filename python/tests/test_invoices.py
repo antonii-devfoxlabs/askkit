@@ -118,7 +118,7 @@ def test_read_prints_the_invoice_and_the_call(
     main(["read", str(INVOICE)])
     invoice, lines = printed_json(capsys.readouterr().out)
     assert invoice.pop(LABEL_KEY) == {
-        "written_by": "claude-haiku-5-5",
+        "model": "claude-haiku-5-5",
         "via": "askkit read",
         "written": "2026-11-21T09:30:00Z",
         "checked_by_code": INVOICE_CHECKS,

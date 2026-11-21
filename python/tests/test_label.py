@@ -21,7 +21,7 @@ def printed_json(out: str) -> tuple[dict[str, Any], list[str]]:
 def test_a_label_says_what_wrote_it_when_and_what_was_checked() -> None:
     label = ai_label("claude-haiku-5-5", "extract", WRITTEN, ["a check"])
     assert label == {
-        "written_by": "claude-haiku-5-5",
+        "model": "claude-haiku-5-5",
         "via": "askkit extract",
         "written": "2026-11-21T09:30:00Z",
         "checked_by_code": ["a check"],

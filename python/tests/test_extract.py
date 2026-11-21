@@ -232,7 +232,7 @@ def test_extract_prints_the_ticket_and_the_call(
         "problem": "mug broken",
         "wish": "replacement",
         LABEL_KEY: {
-            "written_by": "claude-haiku-5-5",
+            "model": "claude-haiku-5-5",
             "via": "askkit extract",
             "written": "2026-11-21T09:30:00Z",
             "checked_by_code": [TICKET_CHECK, EMAIL_CHECK],
@@ -258,12 +258,17 @@ def test_extract_prints_null_for_no_order_number(
     text = '{"order":null,"problem":"shade wrong colour","wish":"not stated"}'
     use_fake_client(monkeypatch, [], with_answer(text, "end_turn"))
     main(["extract", str(email_file)])
-    assert capsys.readouterr().out.splitlines()[:4] == [
+    out = capsys.readouterr().out
+    assert out.splitlines()[:4] == [
         "{",
         '  "order": null,',
         '  "problem": "shade wrong colour",',
         '  "wish": "not stated",',
     ]
+    # No order, so no rule about the order checked anything, and the
+    # label does not say one did.
+    ticket, _ = printed_json(out)
+    assert ticket[LABEL_KEY]["checked_by_code"] == [TICKET_CHECK]
 
 
 def test_a_cut_off_answer_is_not_parsed(

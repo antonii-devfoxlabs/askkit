@@ -17,7 +17,7 @@ def ai_label(
     # code checked. No person has read it yet, so the label says so; a
     # tool that lets a person edit it changes that field, never the model.
     return {
-        "written_by": model,
+        "model": model,
         "via": f"askkit {command}",
         "written": written.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "checked_by_code": checked,

@@ -1694,9 +1694,13 @@ def main(arguments: list[str] | None = None) -> None:
             # The model that wrote the ticket is the one that answered
             # last, as the API names it: a retry may have gone to
             # --escalate-to.
-            checked = [TICKET_CHECK, EMAIL_CHECK]
-            if orders is not None:
-                checked.append(ORDERS_CHECK)
+            # A rule about the order checked something only when the
+            # ticket has one: for a null order, the label does not name it.
+            checked = [TICKET_CHECK]
+            if ticket.order is not None:
+                checked.append(EMAIL_CHECK)
+                if orders is not None:
+                    checked.append(ORDERS_CHECK)
             label = ai_label(response.model, "extract", now(), checked)
             print(printable(labelled_json(ticket.model_dump(), label)))
             print()
