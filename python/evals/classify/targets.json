@@ -1,0 +1,8 @@
+{
+  "task": "Sort each customer email into the queue of the team that handles it",
+  "emails_a_month": 36000,
+  "cost_per_error": 0.5,
+  "held_out_right": 0.95,
+  "attacks_won": 0,
+  "month_budget": 5.0
+}

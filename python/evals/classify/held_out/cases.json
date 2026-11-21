@@ -1,0 +1,128 @@
+[
+  {
+    "id": "s01",
+    "queue": "damaged",
+    "kind": "plain",
+    "why": "Broken on arrival, a new one asked for"
+  },
+  {
+    "id": "s05",
+    "queue": "damaged",
+    "kind": "plain",
+    "why": "Broken on arrival, another asked for"
+  },
+  {
+    "id": "s06",
+    "queue": "delivery",
+    "kind": "plain",
+    "why": "Not arrived yet"
+  },
+  {
+    "id": "s09",
+    "queue": "delivery",
+    "kind": "other words",
+    "why": "Late, in words the rules do not know"
+  },
+  {
+    "id": "s10",
+    "queue": "refund",
+    "kind": "other words",
+    "why": "Sent back, money asked for without the word"
+  },
+  {
+    "id": "s13",
+    "queue": "other",
+    "kind": "other words",
+    "why": "A thank-you"
+  },
+  {
+    "id": "s15",
+    "queue": "damaged",
+    "kind": "misleading word",
+    "why": "Lesson 1.8's email: refund named, not wanted"
+  },
+  {
+    "id": "s17",
+    "queue": "damaged",
+    "kind": "misleading word",
+    "why": "Damaged, money back asked for"
+  },
+  {
+    "id": "s20",
+    "queue": "delivery",
+    "kind": "misleading word",
+    "why": "Refund named, not wanted: late"
+  },
+  {
+    "id": "s24",
+    "queue": "delivery",
+    "kind": "two problems",
+    "why": "One order refunded, another late"
+  },
+  {
+    "id": "s25",
+    "queue": "refund",
+    "kind": "two problems",
+    "why": "Late but fine, sent back"
+  },
+  {
+    "id": "s27",
+    "queue": "delivery",
+    "kind": "two problems",
+    "why": "Half the order missing"
+  },
+  {
+    "id": "s32",
+    "queue": "other",
+    "kind": "quoted",
+    "why": "A thank-you; the quote names a refund"
+  },
+  {
+    "id": "s34",
+    "queue": "delivery",
+    "kind": "quoted",
+    "why": "Still nothing; the quote names tracking"
+  },
+  {
+    "id": "s35",
+    "queue": "refund",
+    "kind": "quoted",
+    "why": "Sent back as asked"
+  },
+  {
+    "id": "s36",
+    "queue": "damaged",
+    "kind": "language",
+    "why": "Spanish: arrived broken"
+  },
+  {
+    "id": "s38",
+    "queue": "refund",
+    "kind": "language",
+    "why": "French: sent back"
+  },
+  {
+    "id": "s39",
+    "queue": "other",
+    "kind": "language",
+    "why": "Italian: gift cards"
+  },
+  {
+    "id": "s44",
+    "queue": "damaged",
+    "kind": "no order",
+    "why": "Cracked, the order email lost"
+  },
+  {
+    "id": "s45",
+    "queue": "delivery",
+    "kind": "no order",
+    "why": "Ordered, nothing heard"
+  },
+  {
+    "id": "s48",
+    "queue": "other",
+    "kind": "no order",
+    "why": "Unsubscribe"
+  }
+]

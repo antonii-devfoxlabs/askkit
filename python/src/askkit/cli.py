@@ -46,6 +46,7 @@ from askkit.audio import (
     transcribe,
     transcription_cost,
 )
+from askkit.baseline import keyword_misses, score_text
 from askkit.batch import (
     POLL_SECONDS,
     batch_seconds,
@@ -207,7 +208,15 @@ from askkit.rules import (
 )
 from askkit.runs import Results, diff_lines, load_results
 from askkit.server_tools import cited_urls, searches, web_search
+from askkit.sorting_set import load_sorting_cases, split_set
 from askkit.structured import ask_json, json_request, stream_json
+from askkit.targets import (
+    COURSE_MINIMUM_RIGHT,
+    below_minimum,
+    cases_needed,
+    load_targets,
+    month_cost,
+)
 from askkit.terminal import printable
 from askkit.tokens import count_tokens
 from askkit.tools import TOOLS
@@ -1225,6 +1234,20 @@ def main(arguments: list[str] | None = None) -> None:
         "cases", help="count a golden set's cases by kind"
     )
     cases_command.add_argument("folder", type=Path)
+    split_command = commands.add_parser(
+        "split", help="draw a sorting set's held-out part, once"
+    )
+    split_command.add_argument("folder", type=Path)
+    split_command.add_argument("--per-kind", type=int, required=True)
+    split_command.add_argument("--seed", type=int, required=True)
+    baseline_command = commands.add_parser(
+        "baseline", help="score the keyword rules on a sorting set"
+    )
+    baseline_command.add_argument("folder", type=Path)
+    targets_command = commands.add_parser(
+        "targets", help="check a sorting set's targets against the minimum"
+    )
+    targets_command.add_argument("folder", type=Path)
     answer_command = commands.add_parser(
         "answer", help="answer every question of an ask set, to grade"
     )
@@ -1392,6 +1415,80 @@ def main(arguments: list[str] | None = None) -> None:
         print(f"{'Total':<14}{len(main_cases):>5}{len(held_out):>10}")
         if empty:
             sys.exit("askkit: no case in one part for " + ", ".join(empty))
+        return
+
+    if options.command == "split":
+        try:
+            drawn = split_set(options.folder, options.per_kind, options.seed)
+            main_part = load_sorting_cases(options.folder / "main")
+        except (OSError, ValueError) as error:
+            sys.exit(f"askkit: {error}")
+        print(
+            f"Held out:      {len(drawn)} cases,"
+            f" {options.per_kind} of each kind"
+        )
+        print(f"Main:          {len(main_part)} cases")
+        return
+
+    if options.command == "baseline":
+        # No model call: the keyword rules, scored on both parts. The
+        # main part's misses are listed, to read and improve the rules
+        # on; the held-out part prints its score only, so its emails stay
+        # unread.
+        try:
+            main_part = load_sorting_cases(options.folder / "main")
+            held_out_part = load_sorting_cases(options.folder / "held_out")
+        except (OSError, ValueError) as error:
+            sys.exit(f"askkit: {error}")
+        misses = keyword_misses(main_part)
+        print(f"Main:          {score_text(main_part, misses)}")
+        wrong_label = "Wrong:"
+        for sorting_case, queue in misses:
+            print(
+                f"{wrong_label:<15}{sorting_case.id}  {queue},"
+                f" not {sorting_case.queue} ({sorting_case.kind})"
+            )
+            wrong_label = ""
+        held_out_misses = keyword_misses(held_out_part)
+        print(f"Held out:      {score_text(held_out_part, held_out_misses)}")
+        return
+
+    if options.command == "targets":
+        # No model call either: the targets, and the keyword rules'
+        # held-out score they must beat, measured here rather than
+        # copied into the file by hand.
+        try:
+            targets = load_targets(options.folder / "targets.json")
+            held_out_part = load_sorting_cases(options.folder / "held_out")
+        except (OSError, ValueError) as error:
+            sys.exit(f"askkit: {error}")
+        total = len(held_out_part)
+        rules_right = (total - len(keyword_misses(held_out_part))) / total
+        target = targets.held_out_right
+        print(f"Task:          {targets.task}")
+        print(
+            f"Target:        {cases_needed(target, total)} of {total}"
+            f" held-out cases right ({target:.2f})"
+        )
+        print(
+            f"Minimum:       {cases_needed(COURSE_MINIMUM_RIGHT, total)}"
+            f" of {total} ({COURSE_MINIMUM_RIGHT:.2f}), and more than the"
+            f" rules' {round(rules_right * total)} ({rules_right:.2f})"
+        )
+        print(f"Attacks won:   {targets.attacks_won}")
+        print(f"Bill:          at most ${targets.month_budget:,.2f} a month")
+        model_month = month_cost(targets, target, targets.month_budget)
+        rules_month = month_cost(targets, rules_right, 0)
+        print(
+            f"Month:         ${model_month:,.2f} with the errors,"
+            f" the rules' ${rules_month:,.2f}"
+        )
+        target_faults = below_minimum(targets, rules_right)
+        if target_faults:
+            sys.exit(
+                "askkit: the targets are below the course minimum: "
+                + "; ".join(target_faults)
+            )
         return
 
     if options.command == "diff":

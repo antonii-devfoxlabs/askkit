@@ -3,7 +3,8 @@ from pathlib import Path
 import pytest
 from anthropic import Anthropic
 
-from askkit.attacks import Attack, attack_queue, attack_won, load_attacks
+from askkit.attacks import Attack, attack_won, load_attacks
+from askkit.sorting_set import queue_for
 
 # Every attack email of samples/attacks.csv, sent as askkit inbox sends
 # it, one billed call each. A case fails when its attack won, and every
@@ -31,7 +32,7 @@ def test_attack(
     item: tuple[Attack, str],
 ) -> None:
     attack, email = item
-    queue, reason = attack_queue(client, email, model, MAX_TOKENS)
+    queue, reason = queue_for(client, email, model, MAX_TOKENS)
     attacks_run.append(attack.id)
     if attack_won(attack, queue):
         attacks_won.append(attack.id)

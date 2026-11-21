@@ -1,22 +1,10 @@
 import json
 from pathlib import Path
 
-from anthropic import Anthropic
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, ConfigDict
 
-from askkit.ask import answer_text, stop_warning
-from askkit.classify import (
-    CLASSIFICATION_SCHEMA,
-    QUEUES,
-    Queue,
-    check_classification,
-    classification_error,
-    sorting_messages,
-)
-from askkit.clean import clean_email
-from askkit.inbox import TO_A_PERSON, read_inbox
-from askkit.prompts import render
-from askkit.structured import json_request
+from askkit.classify import QUEUES, Queue
+from askkit.inbox import read_inbox
 
 
 # One attack of the eval set: the id of its email in the inbox file, the
@@ -53,32 +41,6 @@ def load_attacks(cases: Path, inbox: Path) -> list[tuple[Attack, str]]:
         if email_id not in seen:
             raise ValueError(f"{cases.name} has no attack for {email_id}")
     return attacks
-
-
-def attack_queue(
-    client: Anthropic, email: str, model: str, max_tokens: int
-) -> tuple[str, str | None]:
-    # The queue askkit inbox would give one email, and why it went to a
-    # person when it did. The request is the one inbox sends: the email
-    # cleaned and marked, the classify_email prompt in use, the schema.
-    cleaned, _ = clean_email(email)
-    response = client.messages.create(
-        **json_request(
-            model,
-            max_tokens,
-            render("classify_email", {}),
-            sorting_messages(cleaned),
-            CLASSIFICATION_SCHEMA,
-        )
-    )
-    warning = stop_warning(response, "sort this email into a queue")
-    if warning is not None:
-        return TO_A_PERSON, warning
-    try:
-        classification, _ = check_classification(answer_text(response))
-    except ValidationError as error:
-        return TO_A_PERSON, classification_error(error)
-    return classification.queue, None
 
 
 def attack_won(attack: Attack, queue: str) -> bool:

@@ -1,0 +1,170 @@
+[
+  {
+    "id": "s02",
+    "queue": "refund",
+    "kind": "plain",
+    "why": "Sent back, money asked for"
+  },
+  {
+    "id": "s03",
+    "queue": "delivery",
+    "kind": "plain",
+    "why": "A late order, asked about"
+  },
+  {
+    "id": "s04",
+    "queue": "other",
+    "kind": "plain",
+    "why": "A question about the shop, no order"
+  },
+  {
+    "id": "s07",
+    "queue": "refund",
+    "kind": "plain",
+    "why": "Arrived fine, no longer wanted"
+  },
+  {
+    "id": "s08",
+    "queue": "damaged",
+    "kind": "other words",
+    "why": "Damage with no damage word"
+  },
+  {
+    "id": "s11",
+    "queue": "damaged",
+    "kind": "other words",
+    "why": "Faulty, described"
+  },
+  {
+    "id": "s12",
+    "queue": "delivery",
+    "kind": "other words",
+    "why": "Nothing came, asked if sent"
+  },
+  {
+    "id": "s14",
+    "queue": "damaged",
+    "kind": "other words",
+    "why": "Not what was ordered"
+  },
+  {
+    "id": "s16",
+    "queue": "other",
+    "kind": "misleading word",
+    "why": "Delivery named, an address change"
+  },
+  {
+    "id": "s18",
+    "queue": "other",
+    "kind": "misleading word",
+    "why": "Refund named, a question before buying"
+  },
+  {
+    "id": "s19",
+    "queue": "refund",
+    "kind": "misleading word",
+    "why": "Tracking named, sent back for money"
+  },
+  {
+    "id": "s21",
+    "queue": "other",
+    "kind": "misleading word",
+    "why": "Damaged named, a question about an offer"
+  },
+  {
+    "id": "s22",
+    "queue": "damaged",
+    "kind": "two problems",
+    "why": "Late, then broken"
+  },
+  {
+    "id": "s23",
+    "queue": "damaged",
+    "kind": "two problems",
+    "why": "Late and broken, a refund asked for"
+  },
+  {
+    "id": "s26",
+    "queue": "damaged",
+    "kind": "two problems",
+    "why": "Broken, and an address change"
+  },
+  {
+    "id": "s28",
+    "queue": "other",
+    "kind": "two problems",
+    "why": "A thank-you and a question"
+  },
+  {
+    "id": "s29",
+    "queue": "damaged",
+    "kind": "quoted",
+    "why": "Cracked, the shop's mail quoted"
+  },
+  {
+    "id": "s30",
+    "queue": "refund",
+    "kind": "quoted",
+    "why": "Sent back, the shop's return mail quoted"
+  },
+  {
+    "id": "s31",
+    "queue": "delivery",
+    "kind": "quoted",
+    "why": "Not come, the shop's sent mail quoted"
+  },
+  {
+    "id": "s33",
+    "queue": "damaged",
+    "kind": "quoted",
+    "why": "The replacement broken too"
+  },
+  {
+    "id": "s37",
+    "queue": "delivery",
+    "kind": "language",
+    "why": "German: a week late"
+  },
+  {
+    "id": "s40",
+    "queue": "damaged",
+    "kind": "language",
+    "why": "Portuguese: arrived broken"
+  },
+  {
+    "id": "s41",
+    "queue": "delivery",
+    "kind": "language",
+    "why": "Spanish: not arrived"
+  },
+  {
+    "id": "s42",
+    "queue": "refund",
+    "kind": "language",
+    "why": "German: sent back"
+  },
+  {
+    "id": "s43",
+    "queue": "other",
+    "kind": "no order",
+    "why": "Shipping abroad"
+  },
+  {
+    "id": "s46",
+    "queue": "other",
+    "kind": "no order",
+    "why": "A question about a product"
+  },
+  {
+    "id": "s47",
+    "queue": "refund",
+    "kind": "no order",
+    "why": "Return for money, no number"
+  },
+  {
+    "id": "s49",
+    "queue": "damaged",
+    "kind": "no order",
+    "why": "Chipped in a crushed box"
+  }
+]

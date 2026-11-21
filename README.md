@@ -1212,7 +1212,7 @@ uv run pytest evals
 
 runs the 16 main cases, one billed call each to Claude Haiku 5.5, and
 ends with the score as pytest counts it, such as `3 failed, 13 passed,
-13 deselected`; each failure names its case and its faults.
+62 deselected`; each failure names its case and its faults.
 
 - `uv run pytest evals -k clock` runs one case, `-k "clock or pans"`
   two.
@@ -1371,6 +1371,83 @@ What AskKit takes from them is where a repair lives: inside the class,
 so any loop that checks the class repairs before it asks again.
 Without it, a library pays a second call for `"Refund"`.
 
+## The final project's plan
+
+Level 1 ends with one task AskKit is shipped for, planned before any
+model is scored on it: sorting the shop's support emails into the four
+queues of `askkit classify` and `askkit inbox`. The plan has four parts.
+
+**The job, framed** as lesson 1.8 frames one: an email in, one queue
+out; checked against the queue a person who read the email chose; an
+email in the wrong queue costs the shop about $0.50 (a minute of
+someone's time to move it, and a slower reply), and the shop gets about
+36,000 emails a month. Both figures are the shop's estimates, made up
+for the course.
+
+**The sorting set**, `python/evals/classify/`: 49 emails written for
+the course (invented names and order numbers), each with the queue a
+person chose after reading it, never a model's answer. Seven kinds of
+email, seven of each: `plain`, `other words` (no word the rules know),
+`misleading word` (a queue's word that does not decide it), `two
+problems`, `quoted` (the shop's earlier email quoted under it),
+`language` (not English) and `no order`. Each part is a folder with an
+`emails.csv` in the columns `askkit inbox` reads (`id,email`) and a
+`cases.json` with each case's `id`, `queue`, `kind` and `why`;
+`load_sorting_cases(folder)` in `python/src/askkit/sorting_set.py` reads
+one and stops with a `ValueError` on a case without its email, an email
+without its case or an id used twice.
+
+All 49 were written into `main/` first. Then, once, before anything
+ran on them:
+
+```bash
+cd python
+uv run askkit split evals/classify --per-kind 3 --seed 14
+```
+
+moved three cases of every kind, drawn by chance, into `held_out/`: 21
+held out, 28 left in `main/`, the part you read and tune on. The seed
+makes the draw the same on every machine, so it can be checked; `split`
+refuses to run again once `held_out/` exists. A test holds a fingerprint
+of `held_out/`, so every change to it is made on purpose.
+
+**The baseline**, `python/src/askkit/baseline.py`: lesson 1.8's keyword
+rules, the first keyword found deciding, read on the same cleaned email
+the model gets. Six keywords are 1.8's; the others were added after
+reading the rules' misses on the main part, so the model is measured
+against an honest try.
+
+```bash
+uv run askkit baseline evals/classify
+```
+
+scores the rules on both parts, with no call to a model: every miss of
+the main part, then the held-out part's score alone, so its emails stay
+unread. 1.8's six keywords got 11 of the 28 main cases right; the list
+as it stands gets 21 of 28, and 11 of the 21 held-out cases.
+
+**The targets**, `python/evals/classify/targets.json`, written before
+any model runs on the held-out part: the share of held-out cases right
+(0.95, 20 of 21), the attacks of the attack eval allowed to win (0), and
+a monthly budget for the bill ($5). They name no model, so any model of
+any provider is held to the same ones. The course's minimum, in
+`python/src/askkit/targets.py`, is at least 0.9 right on the held-out
+part and more than the keyword rules, no attack winning, and a month,
+the bill plus the errors, that costs less than the rules' month.
+
+```bash
+uv run askkit targets evals/classify
+```
+
+prints the plan and measures the rules' held-out score itself; targets
+below the minimum exit with exit code 1 and every way they fall short.
+
+`python/evals/test_sorting_cases.py` sends each case as `askkit inbox`
+sends its email, one billed call each. Each part has a marker of its
+own, deselected on every other run: `uv run pytest evals -m sorting`
+runs the 28 main cases, and `uv run pytest evals -m sorting_held_out`
+the 21 held-out cases, once a version is ready.
+
 ## Tags
 
 - `m01`, end of Module 1 (How LLMs Work, for Engineers): `estimate` and
@@ -1479,8 +1556,13 @@ Without it, a library pays a second call for `"Refund"`.
     of text within 10 seconds.
   - `src/askkit/untrusted.py`: text someone else wrote, marked as one
     JSON object with its source.
-  - `src/askkit/attacks.py`: the injection attacks of the eval, each
-    sent as `askkit inbox` sends it, and when an attack won.
+  - `src/askkit/attacks.py`: the injection attacks of the eval, and
+    when an attack won.
+  - `src/askkit/sorting_set.py`: the sorting set, its held-out part
+    drawn once, and one email sent as `askkit inbox` sends it.
+  - `src/askkit/baseline.py`: the keyword rules the model must beat.
+  - `src/askkit/targets.py`: the final project's targets and the
+    course's minimum they must meet.
   - `src/askkit/terminal.py`: text a model or a site wrote, made safe to
     print: every character a terminal would obey is shown as its escape.
   - `src/askkit/redact.py`: card numbers, email addresses and phone
@@ -1537,7 +1619,9 @@ Without it, a library pays a second call for `"Refund"`.
     ask set's documents and rubric, the eval that runs the extract
     set through the model (`uv run pytest evals`), with the version and
     the model to score chosen on the command line, and the injection
-    attacks with their right queues (`uv run pytest evals -m attacks`).
+    attacks with their right queues (`uv run pytest evals -m attacks`),
+    and the sorting set of the final project with its targets
+    (`evals/classify/`).
   - `tests/`: pytest tests. They never call a model's API: the real SDK
     sends each call to a fake transport (`httpx2.MockTransport`) that
     answers with a response written in the shape of the API's.

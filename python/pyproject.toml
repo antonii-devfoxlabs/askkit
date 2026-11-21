@@ -37,8 +37,13 @@ testpaths = ["tests"]
 markers = [
     "held_out: a case of the held-out part, run with -m held_out",
     "attacks: an injection attack of the eval set, run with -m attacks",
+    "sorting: a main case of the sorting set, run with -m sorting",
+    "sorting_held_out: a held-out case of the sorting set, run with -m sorting_held_out",
 ]
-addopts = ["-m", "not held_out and not attacks"]
+addopts = [
+    "-m",
+    "not held_out and not attacks and not sorting and not sorting_held_out",
+]
 
 [dependency-groups]
 dev = [

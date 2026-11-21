@@ -300,7 +300,7 @@ def test_the_eval_takes_escalate_to(tmp_path: Path) -> None:
         check=False,
     )
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "16 skipped, 13 deselected" in result.stdout
+    assert "16 skipped, 62 deselected" in result.stdout
 
 
 def test_a_replayed_routed_run_counts_the_escalated_cases(
@@ -365,4 +365,4 @@ def test_a_replayed_routed_run_counts_the_escalated_cases(
         "Escalated to claude-sonnet-5-5: 1 of 16 cases (clock)"
         in result.stdout
     )
-    assert "16 passed, 13 deselected" in result.stdout
+    assert "16 passed, 62 deselected" in result.stdout

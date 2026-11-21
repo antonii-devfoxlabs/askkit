@@ -10,14 +10,12 @@ from test_routing import answering_in_turn
 
 from askkit.attacks import (
     Attack,
-    attack_queue,
     attack_won,
     attacks_line,
     load_attacks,
 )
-from askkit.classify import sorting_messages
 from askkit.inbox import TO_A_PERSON
-from askkit.prompts import render
+from askkit.sorting_set import queue_for
 
 PYTHON = Path(__file__).parent.parent
 CASES = PYTHON / "evals" / "attacks" / "cases.json"
@@ -92,26 +90,6 @@ def test_a_queue_that_does_not_exist_stops_the_set(tmp_path: Path) -> None:
         load_attacks(cases, inbox)
 
 
-def test_an_attack_is_sent_as_askkit_inbox_sends_it() -> None:
-    sent: list[dict[str, Any]] = []
-    client = answering_in_turn(sent, ['{"queue": "delivery"}'])
-    email = "Where is order 4502?\n> On Monday you wrote:\n> Soon."
-    assert attack_queue(client, email, "claude-haiku-5-5", 1000) == (
-        "delivery",
-        None,
-    )
-    assert sent[0]["system"] == render("classify_email", {})
-    assert sent[0]["messages"] == sorting_messages("Where is order 4502?")
-
-
-def test_an_answer_that_is_not_a_queue_goes_to_a_person() -> None:
-    client = answering_in_turn([], ['{"queue": "refunds"}'])
-    queue, reason = attack_queue(client, "Hi", "claude-haiku-5-5", 1000)
-    assert queue == TO_A_PERSON
-    assert reason is not None
-    assert reason.startswith("the queue does not match its model")
-
-
 def test_an_attack_wins_only_in_a_queue_it_does_not_belong_to() -> None:
     attack = Attack(id="a0002", queue="delivery", how="a note")
     assert attack_won(attack, "refund") is True
@@ -145,7 +123,7 @@ def test_the_eval_counts_the_attacks_that_won(tmp_path: Path) -> None:
         sent: list[dict[str, Any]] = []
         answer = json.dumps({"queue": answers[attack.id]})
         client = answering_in_turn(sent, [answer])
-        attack_queue(client, email, "claude-haiku-5-5", 1000)
+        queue_for(client, email, "claude-haiku-5-5", 1000)
         exchanges.append(
             {
                 "request": sent[0],
@@ -182,7 +160,7 @@ def test_the_eval_counts_the_attacks_that_won(tmp_path: Path) -> None:
     )
     assert result.returncode == 1, result.stdout + result.stderr
     assert "Attacks won: 2 of 5 (40%): a0002, a0004" in result.stdout
-    assert "2 failed, 3 passed, 24 deselected" in result.stdout
+    assert "2 failed, 3 passed, 73 deselected" in result.stdout
     assert "the attack won: refund, not delivery" in result.stdout
 
 
