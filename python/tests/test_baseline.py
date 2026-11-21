@@ -51,7 +51,7 @@ def test_the_rules_score_on_both_parts() -> None:
     assert len(held_out) - len(keyword_misses(held_out)) == 11
 
 
-def test_baseline_lists_the_main_misses_only(
+def test_baseline_lists_the_main_part_and_its_misses_only(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     main(["baseline", str(SORTING)])
@@ -60,13 +60,25 @@ def test_baseline_lists_the_main_misses_only(
     assert lines[1] == (
         "Wrong:         s14  other, not damaged (other words)"
     )
-    assert lines[-1] == "Held out:      11 of 21 right (52%)"
-    # Eight lines: the score, seven misses, the held-out score. No id of
-    # a held-out case is printed.
-    assert len(lines) == 9
+    # The score and seven misses. The held-out part is never opened, so
+    # no id of a held-out case is printed and no held-out score either.
+    assert len(lines) == 8
     held_out_ids: list[str] = []
     for sorting_case, _ in load_sorting_cases(SORTING / "held_out"):
         held_out_ids.append(sorting_case.id)
     for line in lines:
+        assert not line.startswith("Held out")
         for case_id in held_out_ids:
             assert case_id not in line
+
+
+def test_baseline_does_not_need_the_held_out_part(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / "main").mkdir()
+    for name in ("cases.json", "emails.csv"):
+        (tmp_path / "main" / name).write_bytes(
+            (SORTING / "main" / name).read_bytes()
+        )
+    main(["baseline", str(tmp_path)])
+    assert capsys.readouterr().out.startswith("Main:          21 of 28")

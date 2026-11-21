@@ -1421,10 +1421,11 @@ against an honest try.
 uv run askkit baseline evals/classify
 ```
 
-scores the rules on both parts, with no call to a model: every miss of
-the main part, then the held-out part's score alone, so its emails stay
-unread. 1.8's six keywords got 11 of the 28 main cases right; the list
-as it stands gets 21 of 28, and 11 of the 21 held-out cases.
+scores the rules on the main part, with no call to a model, and lists
+every miss to read. It never opens the held-out part: `askkit targets`
+scores the rules there, once they are final. 1.8's six keywords got 11
+of the 28 main cases right; the list as it stands gets 21 of 28, and 11
+of the 21 held-out cases.
 
 **The targets**, `python/evals/classify/targets.json`, written before
 any model runs on the held-out part: the share of held-out cases right

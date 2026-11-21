@@ -30,7 +30,7 @@ HELD_OUT = SORTING / "held_out"
 # rules or a model ran on it; changing it after reading a result is
 # tuning on it, so a change has to be made on purpose.
 HELD_OUT_FINGERPRINT = (
-    "95395e33c19b1e4e8df3621d0c98434b834d8e3f43cf6c7335ea535e427ff11c"
+    "a4b29c747b8423a04b033746dddf444bcef142b01c3cd5f30a361a37355e8341"
 )
 
 

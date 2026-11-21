@@ -1241,7 +1241,8 @@ def main(arguments: list[str] | None = None) -> None:
     split_command.add_argument("--per-kind", type=int, required=True)
     split_command.add_argument("--seed", type=int, required=True)
     baseline_command = commands.add_parser(
-        "baseline", help="score the keyword rules on a sorting set"
+        "baseline",
+        help="score the keyword rules on a sorting set's main part",
     )
     baseline_command.add_argument("folder", type=Path)
     targets_command = commands.add_parser(
@@ -1431,13 +1432,12 @@ def main(arguments: list[str] | None = None) -> None:
         return
 
     if options.command == "baseline":
-        # No model call: the keyword rules, scored on both parts. The
-        # main part's misses are listed, to read and improve the rules
-        # on; the held-out part prints its score only, so its emails stay
-        # unread.
+        # No model call: the keyword rules on the main part, with every
+        # miss listed, to read and improve the rules on. The held-out
+        # part is not opened here: askkit targets scores the rules on it,
+        # once they are final.
         try:
             main_part = load_sorting_cases(options.folder / "main")
-            held_out_part = load_sorting_cases(options.folder / "held_out")
         except (OSError, ValueError) as error:
             sys.exit(f"askkit: {error}")
         misses = keyword_misses(main_part)
@@ -1449,8 +1449,6 @@ def main(arguments: list[str] | None = None) -> None:
                 f" not {sorting_case.queue} ({sorting_case.kind})"
             )
             wrong_label = ""
-        held_out_misses = keyword_misses(held_out_part)
-        print(f"Held out:      {score_text(held_out_part, held_out_misses)}")
         return
 
     if options.command == "targets":
