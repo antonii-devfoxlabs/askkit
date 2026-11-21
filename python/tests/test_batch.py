@@ -20,12 +20,17 @@ from askkit.batch import (
     status_text,
 )
 from askkit.calllog import day_calls
-from askkit.classify import CLASSIFICATION_SCHEMA
+from askkit.classify import (
+    CLASSIFICATION_SCHEMA,
+    EMAIL_SOURCE,
+    sorting_messages,
+)
 from askkit.clean import clean_email
 from askkit.cli import main
 from askkit.inbox import InboxEmail
 from askkit.prompts import render
 from askkit.structured import json_request
+from askkit.untrusted import marked
 
 BATCH_ID = "msgbatch_01AskKitTestBatch"
 RESULTS_URL = (
@@ -170,7 +175,7 @@ def test_a_batch_request_holds_what_askkit_inbox_sends_for_it(
         "claude-haiku-5-5",
         1000,
         render("classify_email", {}),
-        [{"role": "user", "content": cleaned}],
+        sorting_messages(cleaned),
         CLASSIFICATION_SCHEMA,
     )
     assert api.created[0]["requests"] == [
@@ -418,5 +423,8 @@ def test_an_email_request_cleans_the_quoted_part_away() -> None:
     assert request["custom_id"] == "e0003"
     messages = list(request["params"]["messages"])
     assert messages == [
-        {"role": "user", "content": "Thank you, the vase is lovely!"}
+        {
+            "role": "user",
+            "content": marked(EMAIL_SOURCE, "Thank you, the vase is lovely!"),
+        }
     ]

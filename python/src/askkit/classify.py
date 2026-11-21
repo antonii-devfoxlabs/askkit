@@ -2,9 +2,11 @@ import json
 from typing import Any, Literal, get_args
 
 from anthropic import transform_schema
+from anthropic.types import MessageParam
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from askkit.extract import ticket_faults
+from askkit.untrusted import marked
 
 # The queues of the shop's support inbox, one per team. "other" is the
 # queue for an email that meets none of the first three conditions:
@@ -24,6 +26,17 @@ class Classification(BaseModel):
 
 
 CLASSIFICATION_SCHEMA: dict[str, Any] = transform_schema(Classification)
+
+# What the JSON object around an email says it is: the classify_email
+# prompt tells the model what that means.
+EMAIL_SOURCE = "customer email"
+
+
+def sorting_messages(email: str) -> list[MessageParam]:
+    # The one message of every sorting call, from classify, inbox and
+    # batch alike: the cleaned email, marked as text a stranger wrote, so
+    # a closing tag or a "new rule" typed into it stays inside it.
+    return [{"role": "user", "content": marked(EMAIL_SOURCE, email)}]
 
 
 def repair_queue(text: str) -> tuple[str, str] | None:

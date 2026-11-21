@@ -294,7 +294,7 @@ def test_the_eval_takes_escalate_to(tmp_path: Path) -> None:
         check=False,
     )
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "16 skipped, 8 deselected" in result.stdout
+    assert "16 skipped, 13 deselected" in result.stdout
 
 
 def test_a_replayed_routed_run_counts_the_escalated_cases(
@@ -305,6 +305,7 @@ def test_a_replayed_routed_run_counts_the_escalated_cases(
     # clock, whose first answer is too long for the contract, is passed
     # by the larger model. The run ends by naming the share escalated.
     shutil.copytree(PYTHON / "evals", tmp_path / "evals")
+    shutil.copytree(PYTHON / "samples", tmp_path / "samples")
     shutil.copy(PYTHON / "pyproject.toml", tmp_path / "pyproject.toml")
     exchanges: list[dict[str, Any]] = []
     for case in load_cases(MAIN):
@@ -358,4 +359,4 @@ def test_a_replayed_routed_run_counts_the_escalated_cases(
         "Escalated to claude-sonnet-5-5: 1 of 16 cases (clock)"
         in result.stdout
     )
-    assert "16 passed, 8 deselected" in result.stdout
+    assert "16 passed, 13 deselected" in result.stdout

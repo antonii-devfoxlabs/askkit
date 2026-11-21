@@ -5,6 +5,7 @@ import httpx2
 import pytest
 from anthropic import Anthropic
 
+from askkit.attacks import attacks_line
 from askkit.config import KEY_NAME, load_api_key
 from askkit.prompts import IN_USE
 from askkit.recordings import recording, replaying
@@ -94,11 +95,37 @@ def escalated(request: pytest.FixtureRequest) -> dict[str, bool]:
     return cases
 
 
+# The attacks of a run that ran, and those that won, for the line under
+# the score.
+ATTACKS_RUN = pytest.StashKey[list[str]]()
+ATTACKS_WON = pytest.StashKey[list[str]]()
+
+
+@pytest.fixture(scope="session")
+def attacks_run(request: pytest.FixtureRequest) -> list[str]:
+    ran: list[str] = []
+    request.config.stash[ATTACKS_RUN] = ran
+    return ran
+
+
+@pytest.fixture(scope="session")
+def attacks_won(request: pytest.FixtureRequest) -> list[str]:
+    won: list[str] = []
+    request.config.stash[ATTACKS_WON] = won
+    return won
+
+
 def pytest_terminal_summary(
     terminalreporter: pytest.TerminalReporter, config: pytest.Config
 ) -> None:
-    # After the score: how many emails a routed run sent to the larger
-    # model, the share that decides what the routing costs.
+    # After the score: the share of attacks that won, the number a
+    # change of prompt or model is compared by.
+    ran = config.stash.get(ATTACKS_RUN, [])
+    if ran:
+        won = config.stash.get(ATTACKS_WON, [])
+        terminalreporter.write_line(attacks_line(won, len(ran)))
+    # How many emails a routed run sent to the larger model, the share
+    # that decides what the routing costs.
     target: str | None = config.getoption("--escalate-to")
     cases = config.stash.get(ESCALATED, {})
     if target is None or not cases:

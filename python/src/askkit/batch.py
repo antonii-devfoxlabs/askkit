@@ -9,7 +9,7 @@ from anthropic.types.messages import MessageBatch
 from anthropic.types.messages.batch_create_params import Request
 
 from askkit import calllog
-from askkit.classify import CLASSIFICATION_SCHEMA
+from askkit.classify import CLASSIFICATION_SCHEMA, sorting_messages
 from askkit.clean import clean_email
 from askkit.cost import usage_cost
 from askkit.inbox import InboxEmail
@@ -69,7 +69,7 @@ def email_request(
         model,
         max_tokens,
         system,
-        [{"role": "user", "content": cleaned}],
+        sorting_messages(cleaned),
         CLASSIFICATION_SCHEMA,
     )
     # json_request returns a plain dict, the one stream_json and ask_json

@@ -34,6 +34,16 @@ from askkit.cli import main
 from askkit.errors import error_name, stops_the_run
 from askkit.inbox import progress_step, progress_text
 
+
+def email_in(request: dict[str, Any]) -> str:
+    # The email a sorting request sends, from inside the JSON object that
+    # marks it as a stranger's text.
+    marked_email: str = json.loads(request["messages"][0]["content"])[
+        "content"
+    ]
+    return marked_email
+
+
 # Twelve emails, each a broken mug: enough for a tenth of the run to be
 # more than one email.
 TWELVE = [
@@ -205,7 +215,7 @@ def test_the_next_run_sends_only_the_emails_not_written_down(
     answering(monkeypatch, sent, [with_answer(queue) for queue in QUEUES[1:]])
     main(["inbox", str(inbox_file), "--checkpoint", "sorted.jsonl"])
     lines = capsys.readouterr().out.splitlines()
-    assert [request["messages"][0]["content"] for request in sent] == [
+    assert [email_in(request) for request in sent] == [
         EMAILS[1][1],
         "Thank you, the vase is lovely!",
     ]
@@ -266,9 +276,7 @@ def test_an_email_left_unsorted_is_sent_again_by_the_next_run(
     again: list[dict[str, Any]] = []
     answering(monkeypatch, again, [with_answer(QUEUES[1])])
     main(command)
-    assert [request["messages"][0]["content"] for request in again] == [
-        EMAILS[1][1]
-    ]
+    assert [email_in(request) for request in again] == [EMAILS[1][1]]
     assert capsys.readouterr().out.splitlines()[-1] == (
         "Checkpoint:    3 of 3 sorted, in sorted.jsonl"
     )
@@ -290,7 +298,7 @@ def test_after_a_crash_the_next_run_sends_only_the_rest(
     sent: list[str] = []
 
     async def answer(request: httpx2.Request) -> httpx2.Response:
-        sent.append(json.loads(request.content)["messages"][0]["content"])
+        sent.append(email_in(json.loads(request.content)))
         if len(sent) == 4:
             raise KeyboardInterrupt
         return replied(request, with_answer(DAMAGED))
@@ -320,7 +328,7 @@ def test_after_a_crash_the_next_run_sends_only_the_rest(
     again: list[dict[str, Any]] = []
     answering(monkeypatch, again, [with_answer(DAMAGED)] * 9)
     main(command)
-    assert [request["messages"][0]["content"] for request in again] == [
+    assert [email_in(request) for request in again] == [
         text for _, text in TWELVE[3:]
     ]
     assert capsys.readouterr().out.splitlines()[-1] == (

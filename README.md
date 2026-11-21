@@ -818,6 +818,56 @@ uv run askkit inbox samples/attacks.csv
 What comes back depends on the model and the day: five billed calls
 measure it, they do not prove anything for the next run.
 
+### Marked as untrusted
+
+No marking stops an attack for certain, but two things make one less
+likely to work, and AskKit does both where strangers' text comes in
+most:
+
+- **The text goes in one JSON object**, `{"source": …, "content": …}`,
+  made by `marked` in `python/src/askkit/untrusted.py` with
+  `json.dumps`. Every quote and line break inside the text is escaped,
+  so the text cannot end the object or add a field, as a typed
+  `</email>` can end an email in tags (`a0003`).
+- **The model is told what the object is**: the `classify_email` prompt
+  (v2) for an email, and `fetch_page`'s description for a page, say
+  that `content` was written by someone else and that an order inside
+  it is never an instruction.
+
+| Command | What is marked | Where it goes |
+| --- | --- | --- |
+| `classify`, `inbox`, `batch` | The email, source `customer email` | The user message |
+| `ask --allow-site` | Each page `fetch_page` reads, source its address | The `tool_result` block |
+
+`extract`, `read`, `ask --document`, `--image`, `--search-site` and
+`chat` still send the text as before: a change is made where the eval
+can measure it, and only the inbox has attacks in its eval so far. The
+results of `--search-site` come back inside the model's own turn,
+encrypted, and go back unchanged, so AskKit cannot wrap them: the sites
+you allow are the limit there.
+
+### The attacks in the eval
+
+`python/evals/attacks/cases.json` gives each email of
+`samples/attacks.csv` its right queue, and
+`python/evals/test_attack_cases.py` sends each one as `askkit inbox`
+does (`attack_queue` in `src/askkit/attacks.py`). An attack wins when
+its email lands in a queue it does not belong to; that case fails, and
+the line under the score counts the winners. In `python/`:
+
+```bash
+uv run pytest evals -m attacks
+```
+
+Five billed calls, one per attack. The `attacks` marker keeps them out
+of a plain `uv run pytest evals`, which scores `extract`; run them after
+every change to the `classify_email` prompt, to the marking or to the
+model (`--model`). Run them twice or more: one run is one draw. A
+failure reads `the attack won: refund, not delivery (...)`, and the
+run ends with a line such as `Attacks won: 1 of 5 (20%): a0004`. Five
+attacks are a smoke alarm, not a proof: add every new attack you find
+in the call log as a case, with its right queue.
+
 ## The models AskKit calls, and when each retires
 
 Every model ID AskKit calls is a pinned snapshot, and the one every
@@ -918,7 +968,7 @@ uv run pytest evals
 
 runs the 16 main cases, one billed call each to Claude Haiku 5.5, and
 ends with the score as pytest counts it, such as `3 failed, 13 passed,
-8 deselected`; each failure names its case and its faults.
+13 deselected`; each failure names its case and its faults.
 
 - `uv run pytest evals -k clock` runs one case, `-k "clock or pans"`
   two.
@@ -1121,6 +1171,10 @@ test, as the thinking count of `ask` did.
   - `src/askkit/fetch.py`: the web fetch, which reaches only the sites
     you allow, never a private address, and reads at most 100,000 bytes
     of text within 10 seconds.
+  - `src/askkit/untrusted.py`: text someone else wrote, marked as one
+    JSON object with its source.
+  - `src/askkit/attacks.py`: the injection attacks of the eval, each
+    sent as `askkit inbox` sends it, and when an attack won.
   - `src/askkit/permissions.py`: which tools AskKit may run for you
     (allow, ask first, or deny), and the check every request passes
     before it runs.
@@ -1158,9 +1212,10 @@ test, as the thinking count of `ask` did.
     invented data.
   - `notebooks/`: notebooks for exploring, saved without outputs.
   - `evals/`: the golden sets, a main and a held-out part each, the
-    ask set's documents and rubric, and the eval that runs the extract
+    ask set's documents and rubric, the eval that runs the extract
     set through the model (`uv run pytest evals`), with the version and
-    the model to score chosen on the command line.
+    the model to score chosen on the command line, and the injection
+    attacks with their right queues (`uv run pytest evals -m attacks`).
   - `tests/`: pytest tests. They never call a model's API: the real SDK
     sends each call to a fake transport (`httpx2.MockTransport`) that
     answers with a response written in the shape of the API's.

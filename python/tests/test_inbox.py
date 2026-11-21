@@ -30,6 +30,16 @@ from askkit.inbox import (
     whole_job_seconds,
 )
 
+
+def email_in(request: dict[str, Any]) -> str:
+    # The email a sorting request sends, from inside the JSON object that
+    # marks it as a stranger's text.
+    marked_email: str = json.loads(request["messages"][0]["content"])[
+        "content"
+    ]
+    return marked_email
+
+
 SAMPLE = Path(__file__).parent.parent / "samples" / "inbox.csv"
 ATTACKS = SAMPLE.parent / "attacks.csv"
 MORNING = datetime(2026, 11, 20, 9, 30, tzinfo=UTC)
@@ -279,7 +289,7 @@ def test_at_once_1_sorts_every_email_one_at_a_time(
     ]
     # One request per email, in the order of the file, the quoted
     # earlier email left out, as classify sends one.
-    assert [request["messages"][0]["content"] for request in sent] == [
+    assert [email_in(request) for request in sent] == [
         EMAILS[0][1],
         EMAILS[1][1],
         "Thank you, the vase is lovely!",
@@ -450,7 +460,7 @@ def test_no_more_calls_wait_than_the_places(
     main(["inbox", str(many), "--at-once", "4"])
     assert max(in_flight) == 4
     # Every email is sent, once.
-    contents = sorted(request["messages"][0]["content"] for request in sent)
+    contents = sorted(email_in(request) for request in sent)
     assert contents == sorted(email for _, email in rows)
 
 

@@ -10,13 +10,16 @@ from test_ask import replied
 
 from askkit.classify import (
     CLASSIFICATION_SCHEMA,
+    EMAIL_SOURCE,
     QUEUES,
     check_classification,
     classification_error,
     repair_queue,
+    sorting_messages,
 )
 from askkit.cli import main
 from askkit.prompts import render
+from askkit.untrusted import marked
 
 GIFT = (
     "Hello, do you sell gift cards? I would like to give one to a friend"
@@ -107,7 +110,7 @@ def test_classify_streams_the_schema_beside_the_email(
             "model": "claude-haiku-5-5",
             "max_tokens": 1000,
             "system": render("classify_email", {}),
-            "messages": [{"role": "user", "content": GIFT}],
+            "messages": sorting_messages(GIFT),
             "output_config": {
                 "format": {
                     "type": "json_schema",
@@ -165,7 +168,7 @@ def test_classify_prints_the_queue_and_the_call(
         "Stop reason:   end_turn",
         "Time:          first token 0.42 s, total 0.84 s",
     ]
-    assert sent[0]["messages"][0]["content"] == GIFT
+    assert sent[0]["messages"][0]["content"] == marked(EMAIL_SOURCE, GIFT)
 
 
 def test_classify_says_what_it_repaired(
@@ -194,7 +197,7 @@ def test_classify_reads_the_cleaned_email(
     sent: list[dict[str, Any]] = []
     use_fake_client(monkeypatch, sent)
     main(["classify", str(email_file)])
-    assert sent[0]["messages"][0]["content"] == GIFT
+    assert sent[0]["messages"][0]["content"] == marked(EMAIL_SOURCE, GIFT)
     out = capsys.readouterr().out.splitlines()
     assert out[-1] == "Left out:      2 quoted lines"
 

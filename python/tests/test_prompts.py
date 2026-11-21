@@ -19,6 +19,9 @@ RELEASED = {
     "classify_email.v1.txt": (
         "9fc584cd96a95a585ccddacc8a2453835979df96d90b8895525985f5cd3cf9ee"
     ),
+    "classify_email.v2.txt": (
+        "b71e0d97eb161dc86df9c899202f5f29dd5fd509f20ebc20eff2aa5a6557eccd"
+    ),
     "extract_ticket.v1.txt": (
         "9c52494b304b836c87ed89cf78160ae10d6128d372911b6bf21574eb7a3635f1"
     ),

@@ -75,6 +75,7 @@ from askkit.classify import (
     CLASSIFICATION_SCHEMA,
     check_classification,
     classification_error,
+    sorting_messages,
 )
 from askkit.clean import clean_email
 from askkit.compare import compare_models
@@ -578,7 +579,7 @@ async def sort_email(
         model,
         max_tokens,
         system,
-        [{"role": "user", "content": cleaned}],
+        sorting_messages(cleaned),
         CLASSIFICATION_SCHEMA,
     )
 
@@ -1609,9 +1610,7 @@ def main(arguments: list[str] | None = None) -> None:
             options.file.read_text(encoding="utf-8")
         )
         system = render("classify_email", {})
-        email_messages: list[MessageParam] = [
-            {"role": "user", "content": email}
-        ]
+        email_messages = sorting_messages(email)
         # The key is made from the request as it would be sent, so an
         # email, a template or a model that differs gets a key of its own.
         key = request_key(

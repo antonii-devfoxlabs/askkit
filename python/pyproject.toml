@@ -32,8 +32,11 @@ strict = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-markers = ["held_out: a case of the held-out part, run with -m held_out"]
-addopts = ["-m", "not held_out"]
+markers = [
+    "held_out: a case of the held-out part, run with -m held_out",
+    "attacks: an injection attack of the eval set, run with -m attacks",
+]
+addopts = ["-m", "not held_out and not attacks"]
 
 [dependency-groups]
 dev = [

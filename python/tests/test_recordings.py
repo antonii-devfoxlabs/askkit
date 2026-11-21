@@ -160,13 +160,15 @@ def run_eval(folder: Path, *arguments: str) -> str:
 def eval_copy(tmp_path: Path) -> Path:
     folder = tmp_path / "evals"
     shutil.copytree(PYTHON / "evals", folder)
+    # The attacks' emails are the inbox sample's, read from beside it.
+    shutil.copytree(PYTHON / "samples", tmp_path / "samples")
     (folder / "extract" / "recording.json").unlink(missing_ok=True)
     return folder
 
 
 def test_replay_without_a_recording_skips_every_case(tmp_path: Path) -> None:
     output = run_eval(eval_copy(tmp_path), "--replay", "-rs")
-    assert "16 skipped, 8 deselected" in output
+    assert "16 skipped, 13 deselected" in output
     assert "no recording.json yet: run once with --record" in output
 
 
@@ -189,4 +191,4 @@ def test_the_eval_replays_a_recorded_run_with_no_key(
     for case in cases:
         assert run_case(recorder, main, case, "claude-haiku-5-5", 1000) == []
     output = run_eval(folder, "--replay")
-    assert "16 passed, 8 deselected" in output
+    assert "16 passed, 13 deselected" in output

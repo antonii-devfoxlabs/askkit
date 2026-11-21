@@ -21,6 +21,7 @@ from askkit.fetch import (
     public_address,
 )
 from askkit.tools import CALCULATOR, CLOCK, run_tool
+from askkit.untrusted import marked
 
 SITES = ("docs.python.org",)
 PAGE_URL = "https://docs.python.org/3/library/secrets.html"
@@ -512,7 +513,9 @@ def test_run_tool_fetches_from_the_sites_it_is_given(
     lookup_gives(monkeypatch, [PUBLIC])
     site_answers(monkeypatch, page())
     request = call("fetch_page", {"url": PAGE_URL})
-    assert run_tool(request, SITES)["content"] == "<p>A page</p>"
+    assert run_tool(request, SITES)["content"] == marked(
+        PAGE_URL, "<p>A page</p>"
+    )
     assert run_tool(request)["content"] == NOT_ALLOWED
 
 
@@ -541,9 +544,10 @@ def test_askkit_ask_shows_a_fetched_page_as_its_size(
     use_answers(monkeypatch, sent, [asked, ANSWERED])
     main(["ask", "Read it", "--allow-site", "docs.python.org"])
     result = sent[1]["messages"][2]["content"][0]
-    assert result["content"] == "x" * 36_415
+    assert result["content"] == marked(PAGE_URL, "x" * 36_415)
+    # The size of what the model reads: the page and the JSON around it.
     lines = capsys.readouterr().out.splitlines()
-    assert lines[0] == "Tool:          fetch_page: 36,415 characters"
+    assert lines[0] == "Tool:          fetch_page: 36,490 characters"
 
 
 def test_askkit_ask_refuses_a_private_address(

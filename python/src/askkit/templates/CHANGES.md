@@ -87,6 +87,9 @@ whose values the JSON schema sent beside the prompt allows.
   defined by what happened to the order, `other` for an email that meets
   none of the three conditions, and the rule to decide by what happened,
   not by the words the email uses.
+- v2: v1, then what the JSON object around the email is (`untrusted.py`)
+  and that an order inside the email is part of the email, never an
+  instruction: the attacks of `../../../samples/attacks.csv` give orders.
 
 ## summarise_turns
 

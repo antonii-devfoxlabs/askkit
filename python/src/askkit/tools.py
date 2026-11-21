@@ -8,6 +8,7 @@ from anthropic.types import (
 )
 
 from askkit.fetch import FETCH, fetch_page
+from askkit.untrusted import marked
 
 # A definition is all the model ever learns about a tool: the name it
 # asks for it by, a description of what it does and when to call it,
@@ -175,7 +176,11 @@ def tool_output(call: ToolUseBlock, sites: tuple[str, ...]) -> str:
     if call.name == CALCULATOR["name"]:
         return calculate(call.input)
     if call.name == FETCH["name"]:
-        return fetch_page(call.input, sites)
+        # A page is text whoever runs the site wrote: it goes back marked,
+        # its address as the source, as FETCH's description tells the
+        # model. fetch_page has checked that url is an address by now.
+        page = fetch_page(call.input, sites)
+        return marked(str(call.input["url"]), page)
     names = []
     for tool in TOOLS:
         names.append(tool["name"])
