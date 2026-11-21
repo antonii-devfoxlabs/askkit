@@ -65,11 +65,6 @@ class Retry:
     wait: float
 
 
-# A Claude model fails with the SDK's errors; a model reached through the
-# layer (lesson 13.2) with the layer's own.
-ProviderError = anthropic.APIError | AnyLLMError
-
-
 def worth_retrying(error: BaseException) -> bool:
     # The one rule for which failures are worth another try, for every
     # provider: AskKit's retries and its fallbacks (lesson 10.5) both
