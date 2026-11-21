@@ -46,6 +46,29 @@ EMAILS = [
 ]
 QUEUES = ['{"queue":"damaged"}', '{"queue":"delivery"}', '{"queue":"other"}']
 
+# A request the API rejects for its own text (400), and one it rejects
+# for the key that every request carries (401).
+REJECTED = httpx2.Response(
+    400,
+    json={
+        "type": "error",
+        "error": {
+            "type": "invalid_request_error",
+            "message": "messages: text content blocks must be non-empty",
+        },
+    },
+)
+KEY_REJECTED = httpx2.Response(
+    401,
+    json={
+        "type": "error",
+        "error": {
+            "type": "authentication_error",
+            "message": "invalid x-api-key",
+        },
+    },
+)
+
 
 def write_inbox(path: Path, rows: list[tuple[str, str]]) -> Path:
     with path.open("w", encoding="utf-8", newline="") as file:
@@ -299,27 +322,30 @@ def test_an_answer_that_fails_its_check_goes_to_a_person_and_the_run_goes_on(
     assert lines[5] == "Queues:        damaged 1, other 1, to a person 1"
 
 
-def test_a_rejected_request_names_its_email(
-    inbox_file: Path, monkeypatch: pytest.MonkeyPatch
+def test_a_rejected_email_is_left_unsorted_and_the_run_goes_on(
+    inbox_file: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
-    rejected = httpx2.Response(
-        400,
-        json={
-            "type": "error",
-            "error": {
-                "type": "invalid_request_error",
-                "message": "messages: text content blocks must be non-empty",
-            },
-        },
-    )
+    # A 400 is about this email's request alone: the other emails are
+    # still sent, and the run names the one left unsorted.
     sent: list[dict[str, Any]] = []
-    answering(monkeypatch, sent, [with_answer(QUEUES[0]), rejected])
-    # One at a time, the run stops at the rejected email: the third is
-    # never sent.
-    with pytest.raises(SystemExit) as stopped:
-        main(["inbox", str(inbox_file), "--at-once", "1"])
-    assert str(stopped.value.code).startswith("askkit: e0002: ")
-    assert len(sent) == 2
+    answers: list[dict[str, Any] | httpx2.Response] = [
+        with_answer(QUEUES[0]),
+        REJECTED,
+        with_answer(QUEUES[2]),
+    ]
+    answering(monkeypatch, sent, answers)
+    main(["inbox", str(inbox_file), "--at-once", "1"])
+    lines = capsys.readouterr().out.splitlines()
+    assert len(sent) == 3
+    assert lines[:3] == [
+        "e0001   damaged",
+        "e0002   not sorted: 400 invalid_request_error",
+        "e0003   other",
+    ]
+    assert lines[5] == "Not sorted:    e0002 (400 invalid_request_error)"
+    assert lines[6] == "Queues:        damaged 1, other 1"
 
 
 def test_each_email_is_one_line_of_the_call_log(
@@ -452,59 +478,26 @@ def test_a_line_prints_the_moment_its_answer_comes(
     assert lines[5] == "Queues:        damaged 1, delivery 1, other 1"
 
 
-def test_a_rejected_request_sends_no_more_emails(
+def test_an_error_every_email_would_get_sends_no_more_emails(
     inbox_file: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # Two places: e0002 is rejected at once while e0001 still waits.
-    # e0003 would take e0002's place, but is never sent.
-    rejected = httpx2.Response(
-        400,
-        json={
-            "type": "error",
-            "error": {
-                "type": "invalid_request_error",
-                "message": "messages: text content blocks must be non-empty",
-            },
-        },
-    )
+    # Two places: e0002's key is rejected (401) at once while e0001
+    # still waits. Every email would get the same 401, so e0003, which
+    # would take e0002's place, is never sent.
     sent: list[dict[str, Any]] = []
     answering(
         monkeypatch,
         sent,
-        [with_answer(QUEUES[0]), rejected, with_answer(QUEUES[2])],
+        [with_answer(QUEUES[0]), KEY_REJECTED, with_answer(QUEUES[2])],
         waits=[0.1, 0.0, 0.0],
     )
     with pytest.raises(SystemExit) as stopped:
         main(["inbox", str(inbox_file), "--at-once", "2"])
-    assert str(stopped.value.code).startswith("askkit: e0002: ")
+    assert stopped.value.code == (
+        "askkit: e0002: the API key was rejected (401); put a working key"
+        " in .env"
+    )
     assert len(sent) == 2
-
-
-def test_a_rejected_request_among_many_names_its_own_email(
-    inbox_file: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    # The second email is rejected at once while the first still waits:
-    # the run names e0002, the email whose request was rejected.
-    rejected = httpx2.Response(
-        400,
-        json={
-            "type": "error",
-            "error": {
-                "type": "invalid_request_error",
-                "message": "messages: text content blocks must be non-empty",
-            },
-        },
-    )
-    sent: list[dict[str, Any]] = []
-    answering(
-        monkeypatch,
-        sent,
-        [with_answer(QUEUES[0]), rejected, with_answer(QUEUES[2])],
-        waits=[0.1, 0.0, 0.0],
-    )
-    with pytest.raises(SystemExit) as stopped:
-        main(["inbox", str(inbox_file)])
-    assert str(stopped.value.code).startswith("askkit: e0002: ")
 
 
 def test_at_once_must_be_a_number_of_emails(

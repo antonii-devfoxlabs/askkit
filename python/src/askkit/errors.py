@@ -60,3 +60,32 @@ def error_message(
     if isinstance(error, anthropic.APITimeoutError):
         return f"no answer in time {after}; try again"
     return f"could not reach the API {after};\ncheck your connection"
+
+
+def stops_the_run(error: anthropic.APIError) -> bool:
+    # An error every other request of a run would get as well: the key,
+    # its permissions, the model or the month's spending. The run stops,
+    # since no other email can get through. Any other error is about one
+    # request or one moment (a 400 for this email's text, a 529 after
+    # the SDK's retries): that email is left for the next run.
+    return isinstance(
+        error,
+        (
+            anthropic.AuthenticationError,
+            anthropic.PermissionDeniedError,
+            anthropic.NotFoundError,
+            anthropic.EnforcedSpendLimitReachedError,
+        ),
+    )
+
+
+def error_name(error: anthropic.APIError) -> str:
+    # A few words for one failed request among many, as a run lists it:
+    # the status code and the API's name for the error.
+    if isinstance(error, anthropic.APIStatusError):
+        if error.type is None:
+            return str(error.status_code)
+        return f"{error.status_code} {error.type}"
+    if isinstance(error, anthropic.APITimeoutError):
+        return "no answer in time"
+    return "could not reach the API"

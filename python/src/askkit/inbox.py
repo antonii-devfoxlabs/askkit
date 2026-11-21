@@ -138,3 +138,22 @@ def queue_counts(queues: list[str]) -> str:
         if count:
             parts.append(f"{queue} {count}")
     return ", ".join(parts)
+
+
+def progress_step(total: int) -> int:
+    # A progress line after each tenth of the emails: about ten lines for
+    # a long run, whatever its size.
+    return max(1, math.ceil(total / 10))
+
+
+def progress_text(
+    finished: int, total: int, not_sorted: int, seconds: float
+) -> str:
+    # finished: the emails answered or failed so far, of total, in
+    # seconds. The time left assumes the emails still to come take as
+    # long as those so far did.
+    left = seconds / finished * (total - finished)
+    text = f"{finished:,} of {total:,} done"
+    if not_sorted:
+        text += f", {not_sorted:,} not sorted"
+    return f"{text}, {duration_text(left)} left"

@@ -6,7 +6,7 @@ from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime
 from functools import partial
 from pathlib import Path
-from time import perf_counter, sleep
+from time import monotonic, perf_counter, sleep
 from typing import Any
 
 import openai
@@ -66,6 +66,11 @@ from askkit.calllog import (
     write_call,
 )
 from askkit.chat import STOP, chat
+from askkit.checkpoint import (
+    read_checkpoint,
+    record_sorted,
+    start_checkpoint,
+)
 from askkit.classify import (
     CLASSIFICATION_SCHEMA,
     check_classification,
@@ -83,7 +88,7 @@ from askkit.documents import (
     unchecked,
     with_documents,
 )
-from askkit.errors import error_message
+from askkit.errors import error_message, error_name, stops_the_run
 from askkit.extract import (
     TICKET_SCHEMA,
     check_ticket,
@@ -114,6 +119,8 @@ from askkit.inbox import (
     InboxEmail,
     duration_text,
     pace_text,
+    progress_step,
+    progress_text,
     queue_counts,
     rate_text,
     read_inbox,
@@ -579,12 +586,37 @@ async def sort_email(
 @dataclass
 class InboxRun:
     # What every email's coroutine of one run shares: the places, the
-    # first rejected request, and each answered call's seconds and the
-    # input tokens a rate limit counts for it.
+    # request that stopped the run, the emails left unsorted, each
+    # answered call's seconds and the input tokens a rate limit counts
+    # for it, the checkpoint each sorted email is written to, and what
+    # the progress lines count.
     limit: asyncio.Semaphore
-    rejected: list[tuple[InboxEmail, APIError]]
+    stopped_by: list[tuple[InboxEmail, APIError]]
+    not_sorted: list[tuple[InboxEmail, APIError]]
     seconds: list[float]
     counted_tokens: list[int]
+    checkpoint: Path | None
+    total: int
+    finished: int = 0
+    started: float = 0.0
+
+
+def report_progress(run: InboxRun) -> None:
+    # One more email answered or failed. After each tenth of the run, a
+    # progress line, on standard error: the queue lines on standard
+    # output stay the run's results, ready for a file or a program.
+    run.finished += 1
+    if run.finished == run.total:
+        return
+    if run.finished % progress_step(run.total) != 0:
+        return
+    text = progress_text(
+        run.finished,
+        run.total,
+        len(run.not_sorted),
+        monotonic() - run.started,
+    )
+    print(f"Progress:      {text}", file=sys.stderr)
 
 
 async def sort_one(
@@ -598,9 +630,9 @@ async def sort_one(
     # with waits until a place is free, and gives the place back when
     # the block ends, however it ends: the next email goes out then.
     async with run.limit:
-        if run.rejected:
-            # A request was rejected: the emails still waiting for a
-            # place are not sent.
+        if run.stopped_by:
+            # An error that every email would get stopped the run: the
+            # emails still waiting for a place are not sent.
             return None
         start = perf_counter()
         try:
@@ -608,7 +640,14 @@ async def sort_one(
                 client, email, options.model, options.max_tokens, system
             )
         except APIError as error:
-            run.rejected.append((email, error))
+            if stops_the_run(error):
+                run.stopped_by.append((email, error))
+                return None
+            # One email's failure: it stays out of the checkpoint, so
+            # the next run sends it again, and the others go on.
+            run.not_sorted.append((email, error))
+            print(f"{email.id:<8}not sorted: {error_name(error)}")
+            report_progress(run)
             return None
         run.seconds.append(perf_counter() - start)
     usage = response.usage
@@ -618,13 +657,18 @@ async def sort_one(
     queue, line = classify_line(
         email, response, "sort this email into a queue"
     )
+    if run.checkpoint is not None:
+        # Written before the line is printed: an email you see sorted
+        # is in the checkpoint.
+        record_sorted(run.checkpoint, email.id, queue)
     print(line)
+    report_progress(run)
     return response, queue
 
 
 async def sort_inbox(
     client: AsyncAnthropic,
-    chosen: list[InboxEmail],
+    to_send: list[InboxEmail],
     options: argparse.Namespace,
     system: str,
 ) -> tuple[list[Message], list[str], InboxRun]:
@@ -633,18 +677,27 @@ async def sort_inbox(
     # moment one answers, its place goes to the next email. A line
     # prints as its answer comes; gather still returns the answers in
     # the order of the file.
-    run = InboxRun(asyncio.Semaphore(options.at_once), [], [], [])
+    run = InboxRun(
+        asyncio.Semaphore(options.at_once),
+        [],
+        [],
+        [],
+        [],
+        options.checkpoint,
+        len(to_send),
+        started=monotonic(),
+    )
     try:
         results = await asyncio.gather(
             *[
                 sort_one(client, email, run, options, system)
-                for email in chosen
+                for email in to_send
             ]
         )
     finally:
         await client.close()
-    if run.rejected:
-        email, error = run.rejected[0]
+    if run.stopped_by:
+        email, error = run.stopped_by[0]
         sys.exit(f"askkit: {email.id}: {error_message(error)}")
     responses: list[Message] = []
     queues: list[str] = []
@@ -655,10 +708,30 @@ async def sort_inbox(
     return responses, queues, run
 
 
+def count_sorted(path: Path, emails: list[InboxEmail]) -> int:
+    # How many of these emails the checkpoint holds, read from the file
+    # itself: what a next run would find there.
+    done = read_checkpoint(path)
+    return sum(1 for email in emails if email.id in done)
+
+
+def checkpoint_text(path: Path, done: int, total: int) -> str:
+    # Where the checkpoint stands, and the one thing to do next.
+    left = total - done
+    if left == 0:
+        return f"{done:,} of {total:,} sorted, in {path}"
+    return (
+        f"{done:,} of {total:,} sorted, in {path};"
+        f" run the same command to send the {left:,} left"
+    )
+
+
 def run_inbox(options: argparse.Namespace) -> None:
     # Every email of the file, --at-once of them at a time, on the async
     # client: their waits overlap. The two clocks show how much of the
-    # time AskKit's own code ran, and how much it only waited.
+    # time AskKit's own code ran, and how much it only waited. With
+    # --checkpoint, each sorted email is written down as it is sorted,
+    # and the emails written down before are not sent again.
     try:
         emails = read_inbox(options.file)
     except OSError as error:
@@ -686,41 +759,81 @@ def run_inbox(options: argparse.Namespace) -> None:
             " is not streamed may take; a queue needs far fewer"
         )
     chosen = emails[: options.first]
+    done: dict[str, str] = {}
+    if options.checkpoint is not None:
+        # Checked before any call: a checkpoint that cannot be written
+        # would be found out only at the first answer.
+        if not options.checkpoint.parent.is_dir():
+            sys.exit(
+                f"askkit: no folder {options.checkpoint.parent} for the"
+                " checkpoint; make it first"
+            )
+        done = start_checkpoint(options.checkpoint)
+    to_send = [email for email in chosen if email.id not in done]
+    if done:
+        print(
+            f"Checkpoint:    {len(chosen) - len(to_send):,} of"
+            f" {len(chosen):,} already sorted; sending the other"
+            f" {len(to_send):,}"
+        )
+    if not to_send:
+        print("Emails:        none left to send")
+        return
     system = render("classify_email", {})
     if options.batch:
-        send_batch(chosen, len(emails), options, system)
+        send_batch(to_send, len(emails), options, system)
         return
     client = AsyncAnthropic(api_key=require_api_key())
     clocks = Clocks()
     try:
         responses, queues, run = asyncio.run(
-            sort_inbox(client, chosen, options, system)
+            sort_inbox(client, to_send, options, system)
         )
     except KeyboardInterrupt:
-        sys.exit("askkit: cancelled; the emails above are sorted")
+        if options.checkpoint is None:
+            sys.exit("askkit: cancelled; the emails above are sorted")
+        now = count_sorted(options.checkpoint, chosen)
+        sys.exit(
+            "askkit: cancelled; "
+            + checkpoint_text(options.checkpoint, now, len(chosen))
+        )
     times = clocks.read()
-    done = len(chosen)
-    pace = pace_text(options.at_once)
     print()
-    print(f"Emails:        {done:,} of {len(emails):,}, {pace}")
-    print(f"Queues:        {queue_counts(queues)}")
-    print_calls(responses, options.model, stop_reason=False)
+    sent = len(to_send)
+    pace = pace_text(options.at_once)
+    print(f"Emails:        {sent:,} of {len(emails):,}, {pace}")
+    if run.not_sorted:
+        names = [
+            f"{email.id} ({error_name(error)})"
+            for email, error in run.not_sorted
+        ]
+        print(f"Not sorted:    {', '.join(names)}")
+    if responses:
+        print(f"Queues:        {queue_counts(queues)}")
+        print_calls(responses, options.model, stop_reason=False)
     print(
         f"Time:          {times.wall:.2f} s, "
-        f"{times.wall / done:.2f} s an email"
+        f"{times.wall / sent:.2f} s an email"
     )
     print(
         f"Waiting:       {waiting_share(times):.1%} of it; AskKit's own"
         f" work took {times.cpu:.2f} s"
     )
-    rate = run_rate(run.seconds, run.counted_tokens, options.at_once)
-    print(f"Rate:          {rate_text(rate)}")
-    if done < len(emails):
+    if run.seconds:
+        rate = run_rate(run.seconds, run.counted_tokens, options.at_once)
+        print(f"Rate:          {rate_text(rate)}")
+    if len(chosen) < len(emails) and run.seconds:
         # The label is as wide as every other one: "All 1,000:" and
         # its spaces make 15 characters.
         label = f"All {len(emails):,}:"
         whole = whole_job_seconds(run.seconds, len(emails), options.at_once)
         print(f"{label:<15}{duration_text(whole)}, {pace}")
+    if options.checkpoint is not None:
+        now = count_sorted(options.checkpoint, chosen)
+        print(
+            "Checkpoint:    "
+            + checkpoint_text(options.checkpoint, now, len(chosen))
+        )
 
 
 def send_batch(
@@ -781,6 +894,10 @@ def run_batch(options: argparse.Namespace) -> None:
     answers: list[tuple[str, Message]] = []
     queues: list[str] = []
     not_sorted: list[str] = []
+    written = 0
+    done: dict[str, str] = {}
+    if options.checkpoint is not None:
+        done = start_checkpoint(options.checkpoint)
     for result in results:
         outcome = result.result
         if outcome.type == "succeeded":
@@ -791,6 +908,14 @@ def run_batch(options: argparse.Namespace) -> None:
                 "sort this email into a queue",
             )
             queues.append(queue)
+            if (
+                options.checkpoint is not None
+                and result.custom_id not in done
+            ):
+                # The same checkpoint askkit inbox --checkpoint reads: it
+                # then sends only the emails this batch did not sort.
+                record_sorted(options.checkpoint, result.custom_id, queue)
+                written += 1
             print(line)
             continue
         # errored, canceled or expired: no answer, and none billed.
@@ -818,6 +943,11 @@ def run_batch(options: argparse.Namespace) -> None:
             share=BATCH_SHARE,
         )
     print(f"Time:          {duration_text(batch_seconds(batch))}")
+    if options.checkpoint is not None:
+        print(
+            f"Checkpoint:    {written:,} written to {options.checkpoint},"
+            " for askkit inbox --checkpoint"
+        )
 
 
 def main(arguments: list[str] | None = None) -> None:
@@ -947,12 +1077,22 @@ def main(arguments: list[str] | None = None) -> None:
         action="store_true",
         help="send every email in one batch, at half the price",
     )
+    inbox_command.add_argument(
+        "--checkpoint",
+        type=Path,
+        help="write each sorted email to this file, and skip those in it",
+    )
     batch_command = commands.add_parser(
         "batch", help="collect the queues of a batch askkit inbox sent"
     )
     batch_command.add_argument("batch_id")
     batch_command.add_argument(
         "--wait", action="store_true", help="check every minute until it ends"
+    )
+    batch_command.add_argument(
+        "--checkpoint",
+        type=Path,
+        help="write each sorted email to this file, for askkit inbox",
     )
     read_command = commands.add_parser(
         "read", help="take the fields out of an invoice PDF, as JSON"

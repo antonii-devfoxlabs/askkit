@@ -719,9 +719,15 @@ the CPU clock, `process_time`), the rate a long run at this `--at-once`
 sends (requests and input tokens a minute, the units of the API's rate
 limits, to compare with your tier's), and how long the whole file would
 take. An answer that stopped early or fails its check goes to a person,
-and the run goes on; a rejected request stops it, sends no email still
-waiting for a place, and names its email. Every call is a line of the
-log, under the command `inbox`, with its own time.
+and the run goes on. A request that fails is about that email or that
+moment (a 400 for its text, a 529 or a timeout after the SDK's retries):
+the email is named `not sorted`, and the other emails go on. An error
+that every email would get (a rejected key, a missing permission or
+model, a spent monthly cap) stops the run, sends no email still waiting
+for a place, and names its email. Every call is a line of the log,
+under the command `inbox`, with its own time. After each tenth of the
+emails a `Progress:` line, on standard error, says how many are done
+and about how long the rest will take.
 
 ## Sending an inbox as one batch
 
@@ -750,6 +756,27 @@ the batch ends.
 Each answer is one line of the log, under the command `batch`, at the
 batch price, its seconds the batch's own; a batch collected twice is
 logged once (`.askkit-log/batches.txt` keeps the IDs already logged).
+
+## Resuming a stopped inbox
+
+A long run can stop halfway: Ctrl+C, a crash, a closed laptop, a batch
+with requests that expired. `--checkpoint FILE` writes each email down
+the moment its queue is known, one JSON line a sorted email
+(`{"id": "e0001", "queue": "damaged"}`), and skips the emails the file
+already holds:
+
+```bash
+cd python
+uv run askkit inbox samples/inbox.csv --checkpoint sorted.jsonl
+```
+
+Run the same command again after a stop and it sends only the emails the
+checkpoint does not hold: those whose answer was still on its way when
+the run stopped, and those left `not sorted`. A last line cut off by a
+crash is skipped, so its email is sent again. `askkit batch ID
+--checkpoint FILE` writes down what a batch sorted, so `askkit inbox
+--batch --checkpoint FILE` sends a new batch of only the rest. A run
+that finds every email in the checkpoint sends nothing.
 
 ## The models AskKit calls, and when each retires
 
@@ -1081,6 +1108,8 @@ test, as the thinking count of `ask` did.
   - `src/askkit/calllog.py`: the log of every call, and a day added up.
   - `src/askkit/inbox.py`: an inbox CSV file read, and the two clocks of
     a run of many emails.
+  - `src/askkit/checkpoint.py`: the checkpoint of a long inbox run, one
+    JSON line a sorted email, read before a run and written as it goes.
   - `src/askkit/batch.py`: an inbox sent as one Message Batch, and its
     answers priced and logged.
   - `samples/`: images, an invoice PDF, a voice message, a month of uses
