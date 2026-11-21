@@ -482,7 +482,7 @@ so only a WAV gets a cost. `python/samples/voicemail.wav` is an
 ## What an image, a PDF or a recording costs
 
 `askkit estimate` takes an image, a PDF or a voice message as well as
-text, tells which by the file's first bytes, and says what Claude would
+text, tells which by the file's first bytes, and says what the model would
 read from it and where it stops, without a call:
 
 ```bash
@@ -502,8 +502,9 @@ uv run askkit estimate samples/voicemail.wav
   pypdf), plus at most 1,568 tokens for each page's image. Over 600
   pages (100 when the model's window is under a million tokens), or over
   128 MB as base64, it is refused.
-- A recording is never sent to Claude: it costs its minutes at OpenAI
-  (only a WAV gives its length), and Claude reads the transcript.
+- A recording is never sent to the model as sound: it costs its minutes
+  at OpenAI (only a WAV gives its length), and the model named with `-m`
+  reads the transcript.
 
 Image and PDF tokens are counted for Claude only: every provider counts
 them its own way. A HEIC photo, which iPhones often save, is named as

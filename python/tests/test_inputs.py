@@ -152,10 +152,22 @@ def test_estimate_prices_a_recording_at_openai(
 ) -> None:
     main(["estimate", str(SAMPLES / "voicemail.wav")])
     assert capsys.readouterr().out.splitlines() == [
+        "Model:         claude-haiku-5-5",
         "Input:         WAV recording, 11.1 s",
         "Transcribe:    $0.000831 at OpenAI, gpt-transcribe",
-        "Claude reads:  the transcript; estimate it once it is written",
+        "Model reads:   the transcript; estimate it once it is written",
     ]
+
+
+def test_estimate_names_the_model_that_reads_a_transcript(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # The transcript goes to the model given with -m, whichever provider
+    # runs it: the estimate must not say Claude reads it.
+    main(["estimate", str(SAMPLES / "voicemail.wav"), "-m", "gpt-6-luna"])
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[0] == "Model:         gpt-6-luna"
+    assert not any("Claude" in line for line in lines)
 
 
 def test_estimate_gives_no_length_for_a_packed_recording(
@@ -165,9 +177,10 @@ def test_estimate_gives_no_length_for_a_packed_recording(
     message.write_bytes(b"ID3\x04\x00\x00\x00\x00\x00\x00")
     main(["estimate", str(message)])
     assert capsys.readouterr().out.splitlines() == [
+        "Model:         claude-haiku-5-5",
         "Input:         MP3 recording, length unknown",
         "Transcribe:    unknown: only a WAV gives its length",
-        "Claude reads:  the transcript; estimate it once it is written",
+        "Model reads:   the transcript; estimate it once it is written",
     ]
 
 

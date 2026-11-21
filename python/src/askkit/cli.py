@@ -961,11 +961,14 @@ def main(arguments: list[str] | None = None) -> None:
             " does not read; save it as JPEG"
         )
     if audio_format(data) is not None:
-        # Claude reads the transcript, never the sound, so the recording
-        # has a price at OpenAI and no tokens until it is written down.
+        # AskKit sends the model the transcript, never the sound, so the
+        # recording has a price at OpenAI and no tokens until it is written
+        # down. The transcript goes to the model given with -m, whichever
+        # provider runs it.
         fault = audio_fault(options.file, data)
         if fault is not None:
             sys.exit(f"askkit: {fault}")
+        print(f"Model:         {options.model}")
         recording = f"{audio_format(data)} recording"
         seconds = audio_seconds(data)
         if seconds is None:
@@ -975,7 +978,7 @@ def main(arguments: list[str] | None = None) -> None:
             cost = transcription_cost(seconds)
             print(f"Input:         {recording}, {seconds:.1f} s")
             print(f"Transcribe:    ${cost:.6f} at OpenAI, {TRANSCRIBE_MODEL}")
-        print("Claude reads:  the transcript; estimate it once it is written")
+        print("Model reads:   the transcript; estimate it once it is written")
         return
     if media_type_of(data) is not None or is_pdf(data):
         if not options.model.startswith("claude-"):
