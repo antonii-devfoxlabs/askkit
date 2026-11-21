@@ -1155,7 +1155,8 @@ def run_release(options: argparse.Namespace) -> None:
         f"Month:         ${release.month:,.2f} with the errors,"
         f" the rules' ${release.rules_month:,.2f}"
     )
-    print(f"Written:       {folder / RELEASE_FILE}")
+    # With / on every system, so the line reads the same on Windows.
+    print(f"Written:       {(folder / RELEASE_FILE).as_posix()}")
     if faults:
         sys.exit("askkit: not ready to ship: " + "; ".join(faults))
     print("Release:       every measured bar met")
