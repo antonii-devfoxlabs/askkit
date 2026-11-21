@@ -53,8 +53,7 @@ def summarise(
     system = render("summarise_turns", {})
     messages: list[MessageParam] = [{"role": "user", "content": request}]
     start = perf_counter()
-    # with_raw_response, for the retries the SDK made (retries_taken),
-    # as ask_json in structured.py.
+    # The raw response knows the retries the SDK made (retries_taken).
     raw = client.messages.with_raw_response.create(
         model=model,
         max_tokens=SUMMARY_MAX_TOKENS,

@@ -120,10 +120,7 @@ async def ask_json(
     # emails, so the answer comes whole. Each call is timed and logged
     # on its own, so the log shows its own wait, not the whole run's.
     start = perf_counter()
-    # with_raw_response: the same call, answered with the HTTP response
-    # around the Message. It holds what the Message does not, such as the
-    # retries the SDK made before this answer (retries_taken); parse()
-    # gives the Message create() would have returned.
+    # The raw response knows the retries the SDK made (retries_taken).
     raw = await client.messages.with_raw_response.create(
         **json_request(model, max_tokens, system, messages, schema)
     )
