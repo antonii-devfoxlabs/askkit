@@ -2,12 +2,9 @@ import json
 
 
 def marked(source: str, content: str) -> str:
-    # Text someone else wrote, as one JSON object that says where it came
-    # from. json.dumps escapes every quote, backslash and line break
-    # inside content, so nothing the writer types can end the object or
-    # add a field of its own: the object's border is not a tag anyone can
-    # type again. ensure_ascii=False keeps an accent as itself, as the
-    # email wrote it, not as the six characters \u00e9 in its place.
+    # Text someone else wrote, as one JSON object with its source.
+    # json.dumps escapes every quote and line break inside content, so
+    # the writer can neither end the object nor add a field to it.
     return json.dumps(
         {"source": source, "content": content}, ensure_ascii=False
     )
