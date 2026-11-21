@@ -62,13 +62,19 @@ def error_message(
     return f"could not reach the API {after};\ncheck your connection"
 
 
+# The start of the 400 Anthropic answers once the monthly spend limit
+# you set yourself (lesson 2.1) is reached: every request gets it.
+SPEND_LIMIT_MESSAGE = "You have reached your specified API usage limits"
+
+
 def stops_the_run(error: anthropic.APIError) -> bool:
     # An error every other request of a run would get as well: the key,
-    # its permissions, the model or the month's spending. The run stops,
-    # since no other email can get through. Any other error is about one
-    # request or one moment (a 400 for this email's text, a 529 after
-    # the SDK's retries): that email is left for the next run.
-    return isinstance(
+    # its permissions, the model, billing or the month's spending. The
+    # run stops, since no other email can get through. Any other error
+    # is about one request or one moment (a 400 for this email's text,
+    # a 529 after the SDK's retries): that email is left for the next
+    # run.
+    if isinstance(
         error,
         (
             anthropic.AuthenticationError,
@@ -76,7 +82,14 @@ def stops_the_run(error: anthropic.APIError) -> bool:
             anthropic.NotFoundError,
             anthropic.EnforcedSpendLimitReachedError,
         ),
-    )
+    ):
+        return True
+    if isinstance(error, anthropic.BadRequestError):
+        message = error.api_message or ""
+        return message.startswith(SPEND_LIMIT_MESSAGE)
+    if isinstance(error, anthropic.APIStatusError):
+        return error.status_code == 402
+    return False
 
 
 def error_name(error: anthropic.APIError) -> str:

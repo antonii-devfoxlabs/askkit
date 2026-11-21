@@ -156,6 +156,19 @@ def test_an_error_about_one_request_or_one_moment_does_not(
     assert error_name(error) == f"{status} {kind}"
 
 
+def test_billing_and_your_own_spend_limit_stop_the_run() -> None:
+    assert stops_the_run(status_error(402, "billing_error"))
+    request = httpx2.Request("POST", "https://api.anthropic.com/v1/messages")
+    message = "You have reached your specified API usage limits. You will"
+    body = {
+        "type": "error",
+        "error": {"type": "invalid_request_error", "message": message},
+    }
+    response = httpx2.Response(400, json=body, request=request)
+    limit = anthropic.BadRequestError("x", response=response, body=body)
+    assert stops_the_run(limit)
+
+
 def test_a_spent_monthly_cap_stops_the_run() -> None:
     error = status_error(429, "rate_limit_error")
     capped = anthropic.EnforcedSpendLimitReachedError(

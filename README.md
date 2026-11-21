@@ -723,7 +723,8 @@ and the run goes on. A request that fails is about that email or that
 moment (a 400 for its text, a 529 or a timeout after the SDK's retries):
 the email is named `not sorted`, and the other emails go on. An error
 that every email would get (a rejected key, a missing permission or
-model, a spent monthly cap) stops the run, sends no email still waiting
+model, a billing problem (402), the monthly spend limit you set
+yourself (a 400) or the monthly spend cap (a 429)) stops the run, sends no email still waiting
 for a place, and names its email. Every call is a line of the log,
 under the command `inbox`, with its own time. After each tenth of the
 emails a `Progress:` line, on standard error, says how many are done
