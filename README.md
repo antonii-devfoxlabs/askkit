@@ -1340,7 +1340,7 @@ you rely on this):
 | --- | --- | --- |
 | The schema held by the API (`output_config`) | Falls back to the schema in the system prompt, with a warning | Yes (`NativeOutput`) |
 | Calls on `claude-sonnet-5-5` | Forces the tool call, a 400 on that model, unless you pass `tool_choice` `auto` | Yes |
-| The system prompt as written | Yes | Adds about 185 words before it on a retry, unless `framing_announcement` is `never` |
+| The system prompt as written | Yes | With `NativeOutput`, adds about 185 words before it on a retry, unless `framing_announcement` is `never` |
 | Each `Message`, for the call log, the cache and the costs | The last one, and each one in a hook | Its own message types |
 | A retry on a larger model (`--escalate-to`) | No | No |
 
