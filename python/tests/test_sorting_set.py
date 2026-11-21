@@ -141,8 +141,11 @@ def test_split_moves_the_drawn_cases(tmp_path: Path) -> None:
 def test_a_second_split_is_refused(tmp_path: Path) -> None:
     write_part(tmp_path / "main", every_kind(4))
     split_set(tmp_path, 1, 14)
-    with pytest.raises(ValueError, match="drawn once"):
+    with pytest.raises(ValueError) as error:
         split_set(tmp_path, 1, 15)
+    assert str(error.value) == (
+        "held_out exists already: the held-out part is drawn once"
+    )
 
 
 def test_the_split_command_prints_both_parts(

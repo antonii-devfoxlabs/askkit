@@ -119,7 +119,7 @@ def split_set(set_folder: Path, per_kind: int, seed: int) -> list[str]:
     held_out_folder = set_folder / "held_out"
     if held_out_folder.exists():
         raise ValueError(
-            f"{held_out_folder} already exists: the held-out part is"
+            f"{held_out_folder.name} exists already: the held-out part is"
             " drawn once"
         )
     main_folder = set_folder / "main"
