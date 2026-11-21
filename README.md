@@ -924,6 +924,45 @@ queues and invoices as JSON, transcripts, and the answers `grade`
 shows. Files AskKit writes are not escaped: whatever shows a file
 later escapes it for its own screen.
 
+## Emails that go to a person unsorted
+
+Some emails should reach no queue at all: a threat against the people in
+the warehouse belongs to a manager, not to the refund team as one more
+refund. This is AskKit's content policy for the inbox:
+
+| What the moderation check flags | What AskKit does |
+| --- | --- |
+| Nothing | Sorts the email into its queue, as before |
+| Any category | Sends it to a person, with what was flagged; no sorting call |
+| Nothing, because the check failed | Stops before any sorting call |
+
+`--moderate` on `classify` and `inbox` (with or without `--batch`) runs
+the check, at OpenAI's moderation endpoint (`omni-moderation-latest`,
+free, checked on 21 November 2026): Anthropic's API has no moderation
+endpoint. It needs `OPENAI_API_KEY` in `python/.env`.
+
+```bash
+cd python
+uv run askkit inbox samples/moderation.csv --moderate
+```
+
+A flagged email prints as its id and `to a person: flagged`, then the
+categories the endpoint flagged, in OpenAI's names, goes into the
+checkpoint as `to a person`, and counts under `Flagged:` and in
+`Queues:`. `classify --moderate` exits with code 1 on a flagged email.
+The check reads the email after `clean_email` and `redacted`: it needs
+what the email says, not the customer's card or phone. An error from the
+endpoint stops the run before any sorting call is sent, so no email is
+sorted unchecked. `moderate` and `flagged_categories` are in
+`python/src/askkit/moderation.py`; `python/samples/moderation.csv` holds
+four emails written for the course, two of them a threat and an insult
+at a member of staff.
+
+The endpoint's `flagged` is OpenAI's own line, and OpenAI upgrades the
+model behind it, so the categories a run flags can change: what decides
+is the share of emails a person has to read, and the threats that slip
+through, measured on emails like these.
+
 ## The models AskKit calls, and when each retires
 
 Every model ID AskKit calls is a pinned snapshot, and the one every
@@ -1236,6 +1275,8 @@ test, as the thinking count of `ask` did.
   - `src/askkit/redact.py`: card numbers, email addresses and phone
     numbers replaced by placeholders, before the log keeps the words and
     before a sorting call sends an email.
+  - `src/askkit/moderation.py`: the moderation check of `--moderate`,
+    at OpenAI's moderation endpoint, and the categories it flagged.
   - `src/askkit/permissions.py`: which tools AskKit may run for you
     (allow, ask first, or deny), and the check every request passes
     before it runs.

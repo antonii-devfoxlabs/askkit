@@ -156,6 +156,7 @@ from askkit.models import (
     retires_text,
     table_lines,
 )
+from askkit.moderation import moderate, person_reason
 from askkit.pdfs import document_block, is_pdf
 from askkit.permissions import offered, permissions_for
 from askkit.prices import BATCH_SHARE, PRICES, SEARCH_PRICE
@@ -208,6 +209,18 @@ def require_api_key() -> str:
         sys.exit(
             f"askkit: {KEY_NAME} is not set; copy .env.example to .env"
             " and put your key after the ="
+        )
+    return key
+
+
+def require_openai_key(runs: str) -> str:
+    # The OpenAI key, for a step Anthropic's API does not offer, checked
+    # before any call. runs names that step in the message.
+    key = load_api_key(OPENAI_KEY_NAME)
+    if key is None:
+        sys.exit(
+            f"askkit: {OPENAI_KEY_NAME} is not set ({runs} runs at"
+            " OpenAI); put your OpenAI key after the = in .env"
         )
     return key
 
@@ -728,6 +741,39 @@ def checkpoint_text(path: Path, done: int, total: int) -> str:
     )
 
 
+def moderated(
+    emails: list[InboxEmail], checkpoint: Path | None
+) -> tuple[list[InboxEmail], list[InboxEmail]]:
+    # The emails the moderation check let through, and those it flagged.
+    # A flagged email goes to a person, with what was flagged, and is
+    # never sent to the model to be sorted: AskKit's content policy, in
+    # its README. An error stops the run here, before any sorting call:
+    # an email the check could not read is never sent on unchecked.
+    client = OpenAI(api_key=require_openai_key("--moderate"))
+    cleaned = [clean_email(email.email)[0] for email in emails]
+    try:
+        flags = moderate(client, cleaned)
+    except openai.APIError as error:
+        sys.exit(f"askkit: {openai_error(error)}")
+    passed: list[InboxEmail] = []
+    flagged: list[InboxEmail] = []
+    for email, categories in zip(emails, flags, strict=True):
+        if not categories:
+            passed.append(email)
+            continue
+        flagged.append(email)
+        if checkpoint is not None:
+            record_sorted(checkpoint, email.id, TO_A_PERSON)
+        print(f"{email.id:<8}{TO_A_PERSON}: {person_reason(categories)}")
+    return passed, flagged
+
+
+def flagged_text(flagged: list[InboxEmail]) -> str:
+    # The flagged emails of a run, by their ids, for the lines under it.
+    names = ", ".join(email.id for email in flagged)
+    return f"{len(flagged):,}, to a person: {names}"
+
+
 def run_inbox(options: argparse.Namespace) -> None:
     # Every email of the file, --at-once of them at a time, on the async
     # client: their waits overlap. The two clocks show how much of the
@@ -781,6 +827,13 @@ def run_inbox(options: argparse.Namespace) -> None:
     if not to_send:
         print("Emails:        none left to send")
         return
+    flagged: list[InboxEmail] = []
+    if options.moderate:
+        to_send, flagged = moderated(to_send, options.checkpoint)
+        if not to_send:
+            print()
+            print(f"Flagged:       {flagged_text(flagged)}")
+            return
     system = render("classify_email", {})
     if options.batch:
         send_batch(to_send, len(emails), options, system)
@@ -804,14 +857,18 @@ def run_inbox(options: argparse.Namespace) -> None:
     sent = len(to_send)
     pace = pace_text(options.at_once)
     print(f"Emails:        {sent:,} of {len(emails):,}, {pace}")
+    if flagged:
+        print(f"Flagged:       {flagged_text(flagged)}")
     if run.not_sorted:
         names = [
             f"{email.id} ({error_name(error)})"
             for email, error in run.not_sorted
         ]
         print(f"Not sorted:    {', '.join(names)}")
+    if responses or flagged:
+        every_queue = [TO_A_PERSON] * len(flagged) + queues
+        print(f"Queues:        {queue_counts(every_queue)}")
     if responses:
-        print(f"Queues:        {queue_counts(queues)}")
         print_calls(responses, options.model, stop_reason=False)
     print(
         f"Time:          {times.wall:.2f} s, "
@@ -1059,6 +1116,12 @@ def main(arguments: list[str] | None = None) -> None:
     )
     classify.add_argument("--max-tokens", type=int, default=1000)
     classify.add_argument("--fresh", action="store_true", help=FRESH_HELP)
+    classify.add_argument(
+        "--moderate",
+        action="store_true",
+        help="check the email with OpenAI's moderation endpoint first;"
+        " a flagged one goes to a person",
+    )
     inbox_command = commands.add_parser(
         "inbox", help="put every email of a CSV file in a queue"
     )
@@ -1083,6 +1146,12 @@ def main(arguments: list[str] | None = None) -> None:
         "--checkpoint",
         type=Path,
         help="write each sorted email to this file, and skip those in it",
+    )
+    inbox_command.add_argument(
+        "--moderate",
+        action="store_true",
+        help="check each email with OpenAI's moderation endpoint first;"
+        " a flagged email goes to a person",
     )
     batch_command = commands.add_parser(
         "batch", help="collect the queues of a batch askkit inbox sent"
@@ -1232,13 +1301,7 @@ def main(arguments: list[str] | None = None) -> None:
         fault = audio_fault(options.file, data)
         if fault is not None:
             sys.exit(f"askkit: {fault}")
-        openai_key = load_api_key(OPENAI_KEY_NAME)
-        if openai_key is None:
-            sys.exit(
-                f"askkit: {OPENAI_KEY_NAME} is not set (transcribe runs at"
-                " OpenAI); put your OpenAI key after the = in .env"
-            )
-        openai_client = OpenAI(api_key=openai_key)
+        openai_client = OpenAI(api_key=require_openai_key("transcribe"))
         start = perf_counter()
         try:
             transcript = transcribe(
@@ -1610,6 +1673,19 @@ def main(arguments: list[str] | None = None) -> None:
         email, left_out = clean_email(
             options.file.read_text(encoding="utf-8")
         )
+        if options.moderate:
+            # Before the kept answer is looked up too: the check is
+            # AskKit's content policy, and a kept answer does not pass it.
+            checker = OpenAI(api_key=require_openai_key("--moderate"))
+            try:
+                categories = moderate(checker, [email])[0]
+            except openai.APIError as error:
+                sys.exit(f"askkit: {openai_error(error)}")
+            if categories:
+                sys.exit(
+                    f"askkit: {TO_A_PERSON}: {person_reason(categories)};"
+                    " the email was not sent to the model"
+                )
         system = render("classify_email", {})
         email_messages = sorting_messages(email)
         # The key is made from the request as it would be sent, so an
