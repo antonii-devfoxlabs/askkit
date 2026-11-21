@@ -105,8 +105,8 @@ def prompt_text(system: str, messages: list[MessageParam]) -> str:
 
 def request_id_of(response: object) -> str | None:
     # The SDK sets _request_id (public, despite the underscore) on a
-    # response it received; a Message AskKit built itself, such as an
-    # OpenAI answer in Claude's shape, has none.
+    # response it received. ask_openai copies OpenAI's onto the answer it
+    # builds in Claude's shape; any other Message AskKit built has none.
     value = getattr(response, "_request_id", None)
     return value if isinstance(value, str) else None
 

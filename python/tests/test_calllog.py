@@ -7,9 +7,11 @@ import httpx2
 import pytest
 from anthropic import Anthropic
 from anthropic.types import DocumentBlockParam, Message
+from openai import OpenAI
 from test_ask import WRITTEN, replied
 from test_audio import VOICEMAIL, keyed, use_fake_openai
 from test_classify import with_answer
+from test_fallback import luna_body
 from test_invoices import FIELDS, INVOICE
 from test_retry import OVERLOADED, Step, answer_body, answer_with, ask_set
 
@@ -34,6 +36,7 @@ __all__ = ["ask_set", "keyed"]
 
 MORNING = datetime(2026, 11, 20, 9, 14, tzinfo=UTC)
 REQUEST_ID = "req_011CAskKitLogged"
+OPENAI_ID = "req_4f1c0e8a2b7d49c6a3e5f0b1d2c3e4f5"
 QUESTION = "Order 4417 came with a broken mug, from maria@example.com."
 
 
@@ -413,6 +416,56 @@ def test_a_question_that_falls_back_logs_the_retries_before_it(
     assert [call.retries for call in calls] == [0, 1]
     # 410 in and 52 out at Sonnet 5.5's $2 and $10 a million tokens.
     assert calls[1].cost == pytest.approx(0.00134)
+
+
+def test_a_question_that_falls_back_to_openai_keeps_its_retries_and_id(
+    ask_set: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Haiku is overloaded twice and GPT-6 Luna answers. Before the fix the
+    # OpenAI line had no request ID, since the answer in Claude's shape
+    # lost the one OpenAI sent, and no retries, since only a Claude
+    # model's line counted the retries made before it.
+    monkeypatch.setattr("askkit.calllog.clock", lambda: MORNING)
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-proj-a-test-key-Cd34")
+    steps: list[Step] = [
+        (200, answer_body(), {}),
+        (529, OVERLOADED, {}),
+        (529, OVERLOADED, {}),
+    ]
+    answer_with(steps, monkeypatch, [], [])
+
+    def reply(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(
+            200, json=luna_body(), headers={"x-request-id": OPENAI_ID}
+        )
+
+    def make_openai(**options: Any) -> OpenAI:
+        return OpenAI(
+            api_key="sk-proj-a-test-key-Cd34",
+            max_retries=0,
+            http_client=httpx2.Client(transport=httpx2.MockTransport(reply)),
+        )
+
+    monkeypatch.setattr("askkit.cli.OpenAI", make_openai)
+    main(
+        [
+            "answer",
+            str(ask_set),
+            "--tries",
+            "2",
+            "--fallback",
+            "gpt-6-luna",
+            "--out",
+            "answers.json",
+        ]
+    )
+    calls = logged()
+    assert [call.model for call in calls] == [
+        "claude-haiku-5-5",
+        "gpt-6-luna",
+    ]
+    assert [call.retries for call in calls] == [0, 1]
+    assert calls[1].request_id == OPENAI_ID
 
 
 def test_a_turn_the_sdk_returned_is_logged_by_its_blocks() -> None:

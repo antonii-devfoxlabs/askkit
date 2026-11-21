@@ -222,7 +222,16 @@ def send_to(
         )
         seconds = perf_counter() - start
         request_id = request_id_of(response)
-        log_call(response, model, seconds, ASK_SYSTEM, sent, request_id)
+        # tried holds the retries made on the models before this one.
+        log_call(
+            response,
+            model,
+            seconds,
+            ASK_SYSTEM,
+            sent,
+            request_id,
+            retries=len(tried),
+        )
         return response
     # One question's call is retried, never the run: the answers before
     # it are not asked for, or paid for, again. partial(ask, ...) is ask

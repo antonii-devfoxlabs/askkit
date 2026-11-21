@@ -204,7 +204,11 @@ def ask_openai(
         # AskKit saves the answers it needs itself.
         store=False,
     )
-    return as_message(response)
+    message = as_message(response)
+    # The ID OpenAI gave the request, which its support asks for: the
+    # call log keeps it, as it keeps Claude's (lesson 10.8).
+    message._request_id = response._request_id
+    return message
 
 
 def fallbacks_line(answered: list[tuple[str, FirstAnswer]]) -> str | None:
