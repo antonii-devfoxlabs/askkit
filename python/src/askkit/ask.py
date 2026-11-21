@@ -16,6 +16,7 @@ from anthropic.types import (
 from askkit.caching import CACHE, cached_system
 from askkit.calllog import log_call
 from askkit.prices import PRICES
+from askkit.sdk_retries import RetryCount
 from askkit.server_tools import server_line
 from askkit.terminal import printable
 
@@ -87,9 +88,10 @@ def stream_answer(
     mid_line = False
     # perf_counter: a clock for durations, which never goes back.
     sent = messages_for(question, history)
+    count = RetryCount()
     start = perf_counter()
     try:
-        with client.messages.stream(
+        with client.with_middleware(count).messages.stream(
             model=model,
             max_tokens=max_tokens,
             system=cached_system(system),
@@ -119,7 +121,15 @@ def stream_answer(
                         mid_line = False
             response = stream.get_final_message()
             total = perf_counter() - start
-            log_call(response, model, total, system, sent, stream.request_id)
+            log_call(
+                response,
+                model,
+                total,
+                system,
+                sent,
+                stream.request_id,
+                count.retries,
+            )
             return response, Timing(first_token, total)
     except KeyboardInterrupt:
         # Ctrl-C while the answer streams. Leaving the with block closed

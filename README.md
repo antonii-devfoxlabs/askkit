@@ -608,6 +608,18 @@ uv run askkit day 2026-11-20
 
 The eval calls the model through its own functions and logs nothing.
 
+The retries are the ones that were really sent. Anthropic's SDK sends a
+failed request again by itself (a 408, 409, 429, a status of 500 or
+more, a timeout or no connection, twice by default) and returns the
+answer as if it had been sent once. The SDK counts them itself, in
+`retries_taken`, and AskKit writes that count down: a call that is not
+streamed (`inbox`, a chat's summary) reads it from the raw response
+(`client.messages.with_raw_response.create`), and a streamed one (`ask`,
+`chat`, `read`, `classify`) from a `RetryCount`
+(`src/askkit/sdk_retries.py`), SDK middleware that runs on each try.
+`askkit answer` turns the SDK's retries off and counts its own (below).
+`askkit day` adds the retries up in its `Retries` column.
+
 ## Personal data taken out
 
 Before the content file keeps a prompt or an answer, AskKit takes out
@@ -1408,6 +1420,8 @@ test, as the thinking count of `ask` did.
   - `src/askkit/costmodel.py`: a cost model of the app's features, and
     what each one costs a month.
   - `src/askkit/calllog.py`: the log of every call, and a day added up.
+  - `src/askkit/sdk_retries.py`: the SDK middleware that counts the
+    retries the SDK made for a call, for its line in the log.
   - `src/askkit/inbox.py`: an inbox CSV file read, and the two clocks of
     a run of many emails.
   - `src/askkit/checkpoint.py`: the checkpoint of a long inbox run, one

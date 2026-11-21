@@ -8,6 +8,7 @@ from anthropic.types import Message, MessageParam
 
 from askkit.ask import Timing
 from askkit.calllog import log_call, request_id_of
+from askkit.sdk_retries import RetryCount
 
 
 def settled_fields(text: str) -> dict[str, Any]:
@@ -69,9 +70,10 @@ def stream_json(
     first_token: float | None = None
     text = ""
     shown: list[str] = []
+    count = RetryCount()
     start = perf_counter()
     try:
-        with client.messages.stream(
+        with client.with_middleware(count).messages.stream(
             **json_request(model, max_tokens, system, messages, schema)
         ) as stream:
             for piece in stream.text_stream:
@@ -96,6 +98,7 @@ def stream_json(
                 system,
                 messages,
                 stream.request_id,
+                count.retries,
             )
             return response, Timing(first_token, total)
     except KeyboardInterrupt:
@@ -117,9 +120,14 @@ async def ask_json(
     # emails, so the answer comes whole. Each call is timed and logged
     # on its own, so the log shows its own wait, not the whole run's.
     start = perf_counter()
-    response: Message = await client.messages.create(
+    # with_raw_response: the same call, answered with the HTTP response
+    # around the Message. It holds what the Message does not, such as the
+    # retries the SDK made before this answer (retries_taken); parse()
+    # gives the Message create() would have returned.
+    raw = await client.messages.with_raw_response.create(
         **json_request(model, max_tokens, system, messages, schema)
     )
+    response: Message = await raw.parse()
     log_call(
         response,
         model,
@@ -127,5 +135,6 @@ async def ask_json(
         system,
         messages,
         request_id_of(response),
+        raw.retries_taken,
     )
     return response
