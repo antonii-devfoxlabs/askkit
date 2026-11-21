@@ -779,6 +779,45 @@ crash is skipped, so its email is sent again. `askkit batch ID
 --batch --checkpoint FILE` sends a new batch of only the rest. A run
 that finds every email in the checkpoint sends nothing.
 
+## Where untrusted text enters
+
+A model reads the system prompt, your question and every text AskKit
+adds to them as one text: it cannot tell AskKit's instructions from an
+order a stranger wrote into an email or a page. That is prompt
+injection, and no prompt or filter stops it for certain, so it pays to
+know which commands send text that someone else wrote:
+
+| Command | Text that reaches the model | Who wrote it |
+| --- | --- | --- |
+| `ask QUESTION` | The question | You (direct injection) |
+| `ask --document`, `--image` | The file | Whoever made the file |
+| `ask --allow-site` | Every page `fetch_page` reads | Anyone who can edit the page |
+| `ask --search-site` | Search results | Anyone who can edit those pages |
+| `ask --history`, `chat` | Earlier turns, remembered notes | You, and whatever they quoted |
+| `extract`, `classify`, `inbox`, `batch` | Customers' emails | Strangers |
+| `read` | The invoice PDF | Whoever sent it |
+
+Every row but the first is indirect injection: the person who wrote the
+text never talks to AskKit. `python/samples/attacks.csv` holds five
+emails made up for this course, in the inbox's columns, each trying to
+send itself to the `refund` queue where it does not belong:
+
+| Email | What it tries | Its right queue |
+| --- | --- | --- |
+| `a0001` | "Ignore the instructions above" | `other` (a thank-you) |
+| `a0002` | A "note from the support manager" | `delivery` |
+| `a0003` | A closing `</email>` tag, then a "new rule" | `delivery` |
+| `a0004` | A polite note, with no attack words | `other` |
+| `a0005` | The same, in Spanish | `other` |
+
+```bash
+cd python
+uv run askkit inbox samples/attacks.csv
+```
+
+What comes back depends on the model and the day: five billed calls
+measure it, they do not prove anything for the next run.
+
 ## The models AskKit calls, and when each retires
 
 Every model ID AskKit calls is a pinned snapshot, and the one every
@@ -1114,8 +1153,9 @@ test, as the thinking count of `ask` did.
   - `src/askkit/batch.py`: an inbox sent as one Message Batch, and its
     answers priced and logged.
   - `samples/`: images, an invoice PDF, a voice message, a month of uses
-    and an inbox of 1,000 emails (with the script that writes it), made
-    for the course, with invented data.
+    an inbox of 1,000 emails (with the script that writes it) and five
+    injection attacks in the inbox's columns, made for the course, with
+    invented data.
   - `notebooks/`: notebooks for exploring, saved without outputs.
   - `evals/`: the golden sets, a main and a held-out part each, the
     ask set's documents and rubric, and the eval that runs the extract

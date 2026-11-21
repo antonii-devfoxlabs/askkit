@@ -31,6 +31,7 @@ from askkit.inbox import (
 )
 
 SAMPLE = Path(__file__).parent.parent / "samples" / "inbox.csv"
+ATTACKS = SAMPLE.parent / "attacks.csv"
 MORNING = datetime(2026, 11, 20, 9, 30, tzinfo=UTC)
 
 # Three emails as a CSV file holds them: the second has a comma and a
@@ -165,6 +166,21 @@ def test_the_sample_inbox_holds_a_thousand_emails_each_named_once() -> None:
     assert [email.id for email in emails] == [
         f"e{number:04}" for number in range(1, 1001)
     ]
+
+
+def test_the_attack_emails_read_as_an_inbox_each_named_once() -> None:
+    # askkit inbox sends them as it sends any inbox, so the attacks run
+    # through the same prompt as the shop's real mail.
+    emails = read_inbox(ATTACKS)
+    assert [email.id for email in emails] == [
+        f"a{number:04}" for number in range(1, 6)
+    ]
+
+
+def test_every_attack_email_asks_for_the_refund_queue() -> None:
+    # None of the five belongs in refund: each one only says it does.
+    for email in read_inbox(ATTACKS):
+        assert "refund" in email.email, email.id
 
 
 def test_the_sample_is_the_one_its_script_writes(tmp_path: Path) -> None:
