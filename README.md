@@ -435,12 +435,14 @@ person to sort the email.
 
 `askkit read FILE` takes the fields out of a supplier's invoice sent as a
 PDF: the seller, the invoice number, the dates it was issued and is due,
-the currency, the subtotal, the tax and the total. The whole PDF goes in
-the call as base64 text in a `document` block, alone in the user
-message; the API turns each page into an image and takes out its text,
-and the model reads both. The fields are `Invoice` in
-`python/src/askkit/invoices.py`, whose JSON schema is sent beside the
-template `read_invoice`:
+the currency, every row of the item table, the subtotal, the tax and the
+total. The whole PDF goes in the call as base64 text in a `document`
+block, alone in the user message; the API turns each page into an image
+and takes out its text, and the model reads both. The fields are
+`Invoice` in `python/src/askkit/invoices.py`, each row an `InvoiceLine`
+inside it; their JSON schema, with a description of every field, is sent
+beside the template `read_invoice`, which holds only the job and the
+rules for every field:
 
 ```bash
 cd python
@@ -450,9 +452,12 @@ uv run askkit read samples/invoice.pdf
 It streams as `extract` does, prints the invoice as JSON with its label,
 then the same
 lines as `ask`. A file whose first bytes are not a PDF's (`%PDF-`) is
-refused before a call. After `Invoice` has passed, two rules check the
-fields against each other: the subtotal and the tax add up to the total,
-in whole cents, and the due date is not before the issue date. When one
+refused before a call. `Invoice` checks more than the types, with
+Pydantic validators: every amount is in whole cents, each row's quantity
+times its unit price is its amount, the rows add up to the subtotal, the
+subtotal and the tax add up to the total, and the due date is not before
+the issue date. A row is checked before the invoice, so a wrong row is
+named alone (`lines.1: 24 x 12.8 is 307.20, not 370.20`). When a check
 fails, `read` prints no invoice and exits with exit code 1: a misread
 number and an invoice that is wrong itself look the same to the check,
 so a person reads the PDF. `python/samples/invoice.pdf` is a two-page
@@ -1412,8 +1417,9 @@ test, as the thinking count of `ask` did.
     first bytes; its pages' text, and the API's limits.
   - `src/askkit/inputs.py`: what `estimate` prints for an image or a
     PDF: what the file is and the tokens Claude reads from it.
-  - `src/askkit/invoices.py`: the fields of an invoice, and the rules
-    that check them against each other.
+  - `src/askkit/invoices.py`: the fields of an invoice and of each row,
+    with their descriptions, and the validators that check them against
+    each other.
   - `src/askkit/fetch.py`: the web fetch, which reaches only the sites
     you allow, never a private address, and reads at most 100,000 bytes
     of text within 10 seconds.

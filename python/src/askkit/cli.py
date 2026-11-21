@@ -131,7 +131,6 @@ from askkit.invoices import (
     INVOICE_SCHEMA,
     Invoice,
     invoice_error,
-    invoice_faults,
 )
 from askkit.label import ai_label, labelled_json
 from askkit.layer import (
@@ -1852,17 +1851,10 @@ def main(arguments: list[str] | None = None) -> None:
         try:
             invoice = Invoice.model_validate_json(answer_text(response))
         except ValidationError as error:
+            # Invoice checks the types, the rows, the sums and the dates
+            # in one step. Nothing is kept, so the next run asks again.
             print_answered(response, options.model, invoice_timing, kept)
             sys.exit(f"askkit: {invoice_error(error)}")
-        problems = invoice_faults(invoice)
-        if problems:
-            # A misread number or an invoice that is wrong itself: the
-            # check cannot tell which, so a person reads the PDF. Nothing
-            # is kept, so the next run asks again.
-            print_answered(response, options.model, invoice_timing, kept)
-            sys.exit(
-                f"askkit: {'; '.join(problems)}; a person checks the invoice"
-            )
         # A kept answer was written when it was stored, not now.
         written = now() if kept is None else kept.stored
         if kept is None:

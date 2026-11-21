@@ -61,6 +61,9 @@ RELEASED = {
     "read_invoice.v1.txt": (
         "e71a36521ee912dfc1e225bd506c60e9d9582a87ea3067b4b6d84e8c0c5c0f4c"
     ),
+    "read_invoice.v2.txt": (
+        "55f0cf403ff2bffae196cd712839e81728110b76231f215b273e8504560c60a3"
+    ),
 }
 
 

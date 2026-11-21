@@ -31,6 +31,15 @@ def settled_fields(text: str) -> dict[str, Any]:
     return settled
 
 
+def settled_value(value: Any) -> str:
+    # A field as the preview shows it. A list, such as an invoice's rows,
+    # is shown by its length: its JSON would fill a line per field with
+    # every row, and the rows are printed whole once they are checked.
+    if isinstance(value, list):
+        return f"(a list of {len(value)})"
+    return json.dumps(value)
+
+
 def json_request(
     model: str,
     max_tokens: int,
@@ -86,7 +95,7 @@ def stream_json(
                     if name not in shown:
                         shown.append(name)
                         print(
-                            f"{'Settled:':<15}{name} {json.dumps(value)}",
+                            f"{'Settled:':<15}{name} {settled_value(value)}",
                             file=sys.stderr,
                         )
             response = stream.get_final_message()

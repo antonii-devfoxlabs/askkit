@@ -1,11 +1,11 @@
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Self
 
 import httpx2
 import pytest
 from anthropic import Anthropic, transform_schema
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError, model_validator
 from test_ask import Interrupted, cancelling_client, replied
 from test_label import printed_json
 
@@ -18,6 +18,7 @@ from askkit.extract import (
     Ticket,
     check_ticket,
     extract_ticket,
+    fault_place,
     not_stated,
     repair_ticket,
     ticket_error,
@@ -903,3 +904,42 @@ def test_extract_cancelled_with_ctrl_c_prints_no_ticket(
     assert capsys.readouterr().out.splitlines() == [
         "Time:          first token 0.42 s, cancelled at 0.84 s"
     ]
+
+
+def test_a_place_inside_fields_is_joined_with_dots() -> None:
+    assert fault_place(("lines", 1, "amount")) == "lines.1.amount"
+    assert fault_place(("wish",)) == "wish"
+    assert fault_place(()) == "answer"
+
+
+def test_a_fault_inside_a_nested_model_names_its_whole_place() -> None:
+    # Before Invoice had rows, only the first part of a place was shown,
+    # so every row's fault read "lines" and no row could be told apart.
+    class Row(BaseModel):
+        amount: float
+
+    class Rows(BaseModel):
+        lines: list[Row]
+
+    with pytest.raises(ValidationError) as raised:
+        Rows.model_validate({"lines": [{"amount": 1}, {"amount": "x"}]})
+    assert ticket_faults(raised.value) == (
+        "lines.1.amount: Input should be a valid number, unable to parse"
+        " string as a number, not 'x'"
+    )
+
+
+def test_a_validators_own_words_are_shown_as_written() -> None:
+    # A ValueError from a validator: Pydantic's msg starts with "Value
+    # error, " and its input is the whole object, which said nothing the
+    # validator's words did not.
+    class Sum(BaseModel):
+        total: int
+
+        @model_validator(mode="after")
+        def positive(self) -> Self:
+            raise ValueError(f"{self.total} is not above 0")
+
+    with pytest.raises(ValidationError) as raised:
+        Sum.model_validate({"total": -3})
+    assert ticket_faults(raised.value) == "answer: -3 is not above 0"

@@ -8,7 +8,7 @@ from test_ask import Interrupted, cancelling_client, replied
 
 from askkit.ask import Timing
 from askkit.extract import TICKET_SCHEMA
-from askkit.structured import settled_fields, stream_json
+from askkit.structured import settled_fields, settled_value, stream_json
 
 # A ticket written with spaces, so the fake API sends it in several
 # pieces, one after each space, as a stream would.
@@ -155,3 +155,12 @@ def test_ctrl_c_returns_no_message_and_shows_only_settled_fields(
     assert capsys.readouterr().err.splitlines() == [
         "Settled:       order 4417"
     ]
+
+
+def test_a_list_is_previewed_by_its_length() -> None:
+    # An invoice's rows were printed as one line of JSON holding every
+    # row, longer than the terminal, before the invoice was checked.
+    rows = [{"item": "Teapot", "amount": 307.2}, {"item": "Mug"}]
+    assert settled_value(rows) == "(a list of 2)"
+    assert settled_value("mug broken") == '"mug broken"'
+    assert settled_value(4417) == "4417"

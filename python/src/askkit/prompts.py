@@ -19,7 +19,7 @@ IN_USE = {
     "fold_turns": 1,
     "earlier_turns": 1,
     "remembered": 1,
-    "read_invoice": 1,
+    "read_invoice": 2,
 }
 
 

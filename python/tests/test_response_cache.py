@@ -142,9 +142,11 @@ def test_read_twice_sends_one_request(
     assert len(sent) == 1
     # The same invoice both times, labelled as written when it was first
     # asked for; only the lines under it differ.
-    assert second[:22] == first[:22]
-    assert '    "written": "2026-11-20T09:14:00Z",' in second[:22]
-    assert second[22:] == [
+    # The invoice's JSON ends at the blank line above the call's lines.
+    end = first.index("")
+    assert second[:end] == first[:end]
+    assert '    "written": "2026-11-20T09:14:00Z",' in second[:end]
+    assert second[end + 1 :] == [
         "Model:         claude-haiku-5-5",
         "Answer:        kept on 2026-11-20 09:14 UTC; nothing was sent",
         "Cost:          $0.000000, $0.000027 saved",

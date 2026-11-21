@@ -126,8 +126,8 @@ in tags.
 
 ## read_invoice
 
-The system prompt of `askkit read`: what each field of an invoice means
-and how to write it. The PDF is the user message; the shape is the class
+The system prompt of `askkit read`: the job and how to write every
+field (v1 also said what each field means). The PDF is the user message; the shape is the class
 `Invoice` in `../invoices.py`, whose JSON schema is sent beside the
 prompt.
 
@@ -135,3 +135,8 @@ prompt.
   `subtotal`, `tax` and `total`, each copied as the invoice prints it and
   never worked out, dates as YYYY-MM-DD, `null` for no due date, `0` for
   no tax, and amounts as plain numbers.
+- v2: the job and the rules for every field only: copy as printed, never
+  work a value out even when a sum looks wrong, amounts as plain numbers,
+  dates as YYYY-MM-DD. What each field means moved into its description
+  in `Invoice`'s schema, beside the new `lines` (the item table, one
+  `InvoiceLine` per row), so the meaning travels with the field.

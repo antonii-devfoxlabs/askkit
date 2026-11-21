@@ -120,17 +120,32 @@ def check_ticket(text: str) -> tuple[Ticket, str | None]:
     return Ticket.model_validate_json(repaired_text), change
 
 
+def fault_place(loc: tuple[str | int, ...]) -> str:
+    # Where a fault is: its parts joined with dots, so the amount of the
+    # second row of an invoice is "lines.1.amount" (rows count from 0).
+    # An empty place means the whole answer, such as the JSON list [].
+    if len(loc) == 0:
+        return "answer"
+    parts: list[str] = []
+    for part in loc:
+        parts.append(str(part))
+    return ".".join(parts)
+
+
 def ticket_faults(error: ValidationError) -> str:
-    # One part per field that broke the contract, so the message says
-    # what came back as well as what Ticket allows. Ticket has no fields
-    # inside fields, so a fault's place ("loc") is one field name, or
-    # empty when the whole answer is not a ticket.
+    # One part per fault, so the message says what came back as well as
+    # what the model class allows. Any ValidationError reads the same
+    # way, a Ticket's, a Classification's or an Invoice's.
     faults: list[str] = []
     for fault in error.errors():
-        field = "answer"
-        if fault["loc"]:
-            field = str(fault["loc"][0])
-        line = f"{field}: {fault['msg']}"
+        place = fault_place(fault["loc"])
+        if fault["type"] == "value_error":
+            # A validator of ours raised ValueError: its own words name
+            # the values, so they are shown as written, without
+            # Pydantic's "Value error, " or the whole input after them.
+            faults.append(f"{place}: {fault['ctx']['error']}")
+            continue
+        line = f"{place}: {fault['msg']}"
         if fault["type"] != "missing":
             line += f", not {fault['input']!r}"
         faults.append(line)
