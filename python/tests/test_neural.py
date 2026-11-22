@@ -107,6 +107,7 @@ def test_trained_on_ten_replies_your_gets_lesson_1_3_shares() -> None:
     shares = [row[words.index(word)] for word in ["order", "refund"]]
     assert shares == pytest.approx([0.5, 0.3], abs=0.03)
     assert row[words.index("parcel")] == pytest.approx(0.1, abs=0.03)
+    assert row[words.index("mug")] == pytest.approx(0.1, abs=0.03)
 
 
 def test_the_trained_model_beats_the_table_on_held_out_replies() -> None:

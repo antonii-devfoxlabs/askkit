@@ -16,8 +16,8 @@ class Tables:
 def start_tables(
     size: int, width: int, generator: np.random.Generator
 ) -> Tables:
-    # Every number starts small and different from the others, so no two
-    # words start as twins that would get the same slopes for ever.
+    # Every number starts small and different, so the numbers of a row do
+    # not start as twins that would get the same slopes for ever.
     return Tables(
         embeddings=generator.uniform(-0.1, 0.1, (size, width)),
         outputs=generator.uniform(-0.1, 0.1, (width, size)),
