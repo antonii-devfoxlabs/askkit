@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 import json
+import math
 import sys
 from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime
@@ -9,6 +10,7 @@ from pathlib import Path
 from time import monotonic, perf_counter, sleep
 from typing import Any
 
+import numpy as np
 import openai
 from anthropic import (
     Anthropic,
@@ -55,6 +57,15 @@ from askkit.batch import (
     id_fault,
     log_batch,
     status_text,
+)
+from askkit.bigram import (
+    average_loss,
+    count_pairs,
+    probabilities,
+    read_replies,
+    sample_reply,
+    split_replies,
+    vocabulary,
 )
 from askkit.budget import DEFAULT_BUDGET, budget_fault
 from askkit.calllog import (
@@ -1411,6 +1422,13 @@ def main(arguments: list[str] | None = None) -> None:
     faults_command.add_argument(
         "--cases", type=Path, default=Path("evals/extract/main")
     )
+    bigram_command = commands.add_parser(
+        "bigram", help="count word pairs in a text and write replies"
+    )
+    bigram_command.add_argument("text", type=Path)
+    bigram_command.add_argument("--smoothing", type=float, default=0.01)
+    bigram_command.add_argument("--samples", type=int, default=5)
+    bigram_command.add_argument("--seed", type=int, default=4417)
     options = parser.parse_args(arguments)
     require_current(models_called(options), today())
     # Every call from here on is logged; what was sent only on request.
@@ -1636,6 +1654,47 @@ def main(arguments: list[str] | None = None) -> None:
             sys.exit(f"askkit: {error}")
         for line in lines:
             print(line)
+        return
+
+    if options.command == "bigram":
+        # No model call: a model of AskKit's own, counted on the laptop.
+        if options.smoothing < 0:
+            sys.exit(
+                "askkit: --smoothing is added to every count; give 0 or more"
+            )
+        try:
+            replies = read_replies(options.text)
+        except OSError as error:
+            sys.exit(f"askkit: {error}")
+        training, held_out_replies = split_replies(replies)
+        words = vocabulary(training)
+        counts = count_pairs(training, words)
+        table = probabilities(counts, options.smoothing)
+        size = len(words)
+        print(
+            f"Replies:       {len(training)} to learn from,"
+            f" {len(held_out_replies)} held out"
+        )
+        print(f"Vocabulary:    {size} words")
+        print(
+            f"Table:         {size} by {size} = {counts.size:,} cells,"
+            f" {(counts > 0).sum():,} not zero"
+        )
+        try:
+            loss = average_loss(table, held_out_replies, words)
+        except KeyError as error:
+            sys.exit(f"askkit: a held-out reply uses {error}, never learned")
+        guess = math.log(size)
+        print(
+            f"Held out:      {loss:.2f} a word (a blind guess: {guess:.2f})"
+        )
+        generator = np.random.default_rng(options.seed)
+        print(
+            f"Samples:       seed {options.seed},"
+            f" smoothing {options.smoothing}"
+        )
+        for _ in range(options.samples):
+            print(sample_reply(table, words, generator))
         return
 
     if options.command == "answer":

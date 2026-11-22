@@ -1,0 +1,203 @@
+your order has shipped .
+your order has shipped .
+your order has shipped .
+your order is late .
+your order is late .
+your refund has been sent .
+your refund has been sent .
+your refund is ready .
+your parcel is late .
+your mug has shipped .
+thank you for your message .
+thank you for waiting .
+thank you for your patience .
+thank you for letting us know .
+thank you for the photo of the broken mug .
+thank you for the photos .
+thanks for your order .
+thanks for letting us know about the lid .
+we are sorry your parcel is late .
+we are sorry the mug arrived broken .
+we are sorry the lid arrived cracked .
+we are sorry for the wait .
+we are sorry about the torn box .
+we are sorry your order is late .
+we are sorry your refund is late .
+we are so sorry about the broken mug .
+sorry for the delay .
+sorry for the wait .
+sorry about the cracked lid .
+sorry your parcel took so long .
+your order left our warehouse today .
+your order left our warehouse on monday .
+your order left our warehouse yesterday .
+your parcel left our warehouse on friday .
+your parcel is on its way .
+your order is on its way .
+your new mug is on its way .
+your replacement is on its way .
+your replacement has shipped .
+your replacement mug has shipped today .
+your replacement lid has shipped .
+your replacement will ship tomorrow .
+your order will ship tomorrow .
+your order will ship on monday .
+your order will arrive on monday .
+your order should arrive on monday .
+your parcel should arrive on friday .
+your parcel should arrive tomorrow .
+your parcel should arrive in two days .
+your order should arrive in three days .
+your mug should arrive in two days .
+your refund should reach your card in three days .
+your refund should reach your card in five days .
+your refund will reach your card in five days .
+your refund has reached your card .
+your refund has been approved .
+your refund was approved today .
+your refund was sent today .
+your refund was sent to your card .
+your refund was sent on monday .
+we have sent your refund .
+we have sent a new mug .
+we have sent a new lid .
+we have sent a replacement .
+we have sent a replacement mug today .
+we have sent you a tracking link .
+we have sent the tracking link to your email .
+we have refunded your order .
+we have refunded the broken mug .
+we have refunded the delivery fee .
+we have approved your refund .
+we have cancelled your order .
+we have cancelled your order and refunded your card .
+we have updated your address .
+we have updated your order .
+we have found your parcel .
+we have found your order .
+we will send a new mug today .
+we will send a new lid tomorrow .
+we will send a replacement today .
+we will send you a tracking link .
+we will send your refund today .
+we will refund the delivery fee .
+we will refund your order in full .
+we will check your order today .
+we will check with the courier .
+we will let you know when it ships .
+we will let you know when your parcel ships .
+we will email you when your order ships .
+we will email you when your refund is sent .
+we can send a new mug .
+we can send a replacement today .
+we can refund your order .
+we can refund the delivery fee .
+we can change your address before it ships .
+we can cancel your order before it ships .
+we cannot cancel your order after it ships .
+we cannot change the address after the parcel ships .
+please send us a photo of the broken mug .
+please send us a photo of the cracked lid .
+please send us a photo of the torn box .
+please send us your order number .
+please reply with your order number .
+please reply with a photo .
+please keep the broken mug .
+please keep the box .
+please check your email for the tracking link .
+please check the tracking link .
+please allow three days for the refund .
+please allow five days for the refund to reach your card .
+please let us know if the parcel does not arrive .
+please let us know if you need anything else .
+please let us know if your refund does not arrive .
+the courier has your parcel .
+the courier will deliver your parcel tomorrow .
+the courier will deliver it on monday .
+the courier left your parcel at the door .
+the courier left the parcel with a neighbour .
+the courier says your parcel is late .
+the courier says the parcel is on its way .
+the tracking link is in your email .
+the tracking link shows your parcel is on its way .
+the tracking link should work tomorrow .
+the new mug has shipped .
+the new lid has shipped .
+the new mug will arrive in two days .
+the replacement has shipped today .
+the replacement will arrive on friday .
+the refund has been sent .
+the refund is on its way .
+the refund should reach your card in three days .
+the delivery fee has been refunded .
+the broken mug does not need to come back .
+the cracked lid does not need to come back .
+the mug is back in stock .
+the lid is back in stock .
+the blue mug is back in stock .
+the blue mug is out of stock .
+the green mug is out of stock .
+the green mug will be back in stock on monday .
+the large mug is out of stock .
+your order has been cancelled .
+your order has been updated .
+your order has been delivered .
+your parcel has been delivered .
+your parcel was delivered today .
+your parcel was delivered to a neighbour .
+your parcel was left at the door .
+your address has been updated .
+your new address has been saved .
+your order number is in your email .
+your email has been updated .
+your card has not been charged .
+your card was charged once .
+your card was not charged twice .
+your mug arrived broken and we are sorry .
+your lid arrived cracked and we are sorry .
+your box arrived torn and we are sorry .
+your order is ready to ship .
+your order is ready .
+your refund is ready .
+your refund is on its way .
+your new mug is ready to ship .
+your parcel is with the courier .
+your parcel is at the depot .
+your parcel is still at the depot .
+your order is still in our warehouse .
+your order is still on its way .
+your order is not late yet .
+your parcel is not lost .
+your parcel is late but on its way .
+it should arrive tomorrow .
+it should arrive on monday .
+it should reach your card in three days .
+it has shipped .
+it has been sent .
+it left our warehouse today .
+it is on its way .
+it is out of stock .
+it is back in stock .
+it will ship tomorrow .
+it will arrive on friday .
+it was delivered today .
+is there anything else we can help with .
+is there anything else we can do .
+can we help with anything else .
+we are happy to help .
+we are here to help .
+we are glad the mug arrived .
+we are glad your parcel arrived .
+we are glad you like the mug .
+we hope you enjoy the new mug .
+we hope you enjoy your order .
+we hope the new lid fits .
+have a good day .
+have a good weekend .
+have a lovely day .
+your new address has been saved .
+sorry it took so long .
+your parcel took three days .
+your card has been saved .
+it will be back in stock on monday .
+your parcel was not lost .

@@ -7,6 +7,7 @@ dependencies = [
     "anthropic>=2.8.0",
     "any-llm-sdk[gemini,openai]>=1.53.1",
     "httpx2>=2.16.0",
+    "numpy>=2.5.5",
     "openai>=3.57.0",
     "pillow>=13.0.0",
     "pydantic>=2.14.3",

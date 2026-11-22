@@ -1547,6 +1547,26 @@ cases, to read and tune on. The held-out part has no test: a failing
 test names its case, and that part is scored, never read. `askkit
 release` scores it, once (see "Is it good enough to ship?" above).
 
+## A model of its own
+
+`askkit bigram` calls no API: it is a tiny language model AskKit builds
+itself, with NumPy (AI Engineering, Bonus A, part 3). It reads
+`python/samples/replies.txt`, 203 support replies written for the
+course, one a line, holds every tenth one out, counts every pair of
+neighbouring words of the rest into a 148 by 148 table, turns each row
+into probabilities, scores itself on the held-out replies and writes
+replies from the table:
+
+```bash
+uv run askkit bigram samples/replies.txt
+```
+
+It prints the table's size, the loss a word on the held-out replies
+beside a blind guess's, and five sampled replies. `--smoothing`
+(default 0.01) is added to every count, so a pair never seen does not
+make the loss infinite; `--samples` and `--seed` (default 4417) choose
+how many replies and which draws.
+
 ## Tags
 
 - `m01`, end of Module 1 (How LLMs Work, for Engineers): `estimate` and
@@ -1626,12 +1646,16 @@ release` scores it, once (see "Is it good enough to ship?" above).
   attacks, the bill and the month against the targets; a test for
   every yes/no bar of the course minimum (`pytest -m release`); and
   every key AskKit holds taken out of the call log.
+- `bonus-a3-1`, Bonus A, part 3, lesson 1 (a tiny language model in
+  NumPy): `bigram` counts word pairs into a table, samples replies from
+  it and scores itself on held-out replies.
 
 ## Layout
 
 - `python/`: the Python app, a uv project (Python 3.14).
   - `src/askkit/`: the package.
   - `src/askkit/templates/`: the prompts, one file per version.
+  - `src/askkit/bigram.py`: the bigram model of `askkit bigram`.
   - `src/askkit/history.py`: a conversation saved in a file of its own.
   - `src/askkit/chat.py`: the chat loop of `askkit chat`.
   - `src/askkit/budget.py`: the chat's budget of input tokens a turn.
