@@ -61,6 +61,7 @@ from askkit.batch import (
 from askkit.bigram import (
     average_loss,
     count_pairs,
+    pairs,
     probabilities,
     read_replies,
     sample_reply,
@@ -175,6 +176,7 @@ from askkit.models import (
     table_lines,
 )
 from askkit.moderation import moderate, person_reason
+from askkit.neural import start_tables, table_of, train_step
 from askkit.pdfs import document_block, is_pdf
 from askkit.permissions import offered, permissions_for
 from askkit.prices import BATCH_SHARE, PRICES, SEARCH_PRICE
@@ -1429,6 +1431,15 @@ def main(arguments: list[str] | None = None) -> None:
     bigram_command.add_argument("--smoothing", type=float, default=0.01)
     bigram_command.add_argument("--samples", type=int, default=5)
     bigram_command.add_argument("--seed", type=int, default=4417)
+    neural_command = commands.add_parser(
+        "neural", help="train a small neural model on a text, write replies"
+    )
+    neural_command.add_argument("text", type=Path)
+    neural_command.add_argument("--width", type=int, default=16)
+    neural_command.add_argument("--learning-rate", type=float, default=1.0)
+    neural_command.add_argument("--steps", type=int, default=2000)
+    neural_command.add_argument("--samples", type=int, default=5)
+    neural_command.add_argument("--seed", type=int, default=4417)
     options = parser.parse_args(arguments)
     require_current(models_called(options), today())
     # Every call from here on is logged; what was sent only on request.
@@ -1692,6 +1703,65 @@ def main(arguments: list[str] | None = None) -> None:
         print(
             f"Samples:       seed {options.seed},"
             f" smoothing {options.smoothing}"
+        )
+        for _ in range(options.samples):
+            print(sample_reply(table, words, generator))
+        return
+
+    if options.command == "neural":
+        # No model call: the bigram model's counts replaced by two tables
+        # of weights, trained by gradient descent on the laptop.
+        if options.width < 1 or options.steps < 0:
+            sys.exit(
+                "askkit: --width must be 1 or more and --steps 0 or more"
+            )
+        if options.learning_rate <= 0:
+            sys.exit("askkit: --learning-rate must be above 0")
+        try:
+            replies = read_replies(options.text)
+        except OSError as error:
+            sys.exit(f"askkit: {error}")
+        training, held_out_replies = split_replies(replies)
+        words = vocabulary(training)
+        size = len(words)
+        read_words, next_words = pairs(training, words)
+        generator = np.random.default_rng(options.seed)
+        tables = start_tables(size, options.width, generator)
+        weights = tables.embeddings.size + tables.outputs.size
+        print(
+            f"Replies:       {len(training)} to learn from,"
+            f" {len(held_out_replies)} held out"
+        )
+        print(f"Vocabulary:    {size} words")
+        print(
+            f"Weights:       {size} by {options.width}"
+            f" + {options.width} by {size} = {weights:,}"
+        )
+        try:
+            for step in range(options.steps + 1):
+                if step % 500 == 0 or step == options.steps:
+                    table = table_of(tables)
+                    learned = average_loss(table, training, words)
+                    held = average_loss(table, held_out_replies, words)
+                    print(
+                        f"Step {step:>6}:   training {learned:.2f},"
+                        f" held out {held:.2f}"
+                    )
+                if step < options.steps:
+                    train_step(
+                        tables, read_words, next_words, options.learning_rate
+                    )
+        except KeyError as error:
+            sys.exit(f"askkit: a held-out reply uses {error}, never learned")
+        counted = probabilities(count_pairs(training, words), 0.01)
+        print(
+            f"Held out:      {held:.2f} a word (the table: "
+            f"{average_loss(counted, held_out_replies, words):.2f},"
+            f" a blind guess: {math.log(size):.2f})"
+        )
+        print(
+            f"Samples:       seed {options.seed}, {options.steps} steps"
+            f" at learning rate {options.learning_rate}"
         )
         for _ in range(options.samples):
             print(sample_reply(table, words, generator))

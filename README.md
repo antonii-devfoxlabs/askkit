@@ -1567,6 +1567,23 @@ beside a blind guess's, and five sampled replies. `--smoothing`
 make the loss infinite; `--samples` and `--seed` (default 4417) choose
 how many replies and which draws.
 
+`askkit neural` trains a model on the same replies in place of the
+counts: an embedding table of 148 rows of 16 numbers and an output
+table of 16 rows of 148, 4,736 weights in all, started from small random
+numbers and trained by gradient descent, with the slopes found by
+backpropagation in NumPy:
+
+```bash
+uv run askkit neural samples/replies.txt
+```
+
+It prints the loss on the training and the held-out replies every 500
+steps, then the held-out loss beside the table's and a blind guess's,
+and five sampled replies. `--width` (default 16) is the numbers in each
+row, `--learning-rate` (default 1.0) and `--steps` (default 2000) set
+the training; `--samples` and `--seed` (default 4417, which also picks
+the starting numbers) as for `bigram`.
+
 ## Tags
 
 - `m01`, end of Module 1 (How LLMs Work, for Engineers): `estimate` and
@@ -1649,6 +1666,9 @@ how many replies and which draws.
 - `bonus-a3-1`, Bonus A, part 3, lesson 1 (a tiny language model in
   NumPy): `bigram` counts word pairs into a table, samples replies from
   it and scores itself on held-out replies.
+- `bonus-a3-2`, Bonus A, part 3, lesson 2 (training it): `neural`
+  trains an embedding table and an output table by gradient descent on
+  the same replies, scores them against the table and samples replies.
 
 ## Layout
 
@@ -1656,6 +1676,7 @@ how many replies and which draws.
   - `src/askkit/`: the package.
   - `src/askkit/templates/`: the prompts, one file per version.
   - `src/askkit/bigram.py`: the bigram model of `askkit bigram`.
+  - `src/askkit/neural.py`: the trained model of `askkit neural`.
   - `src/askkit/history.py`: a conversation saved in a file of its own.
   - `src/askkit/chat.py`: the chat loop of `askkit chat`.
   - `src/askkit/budget.py`: the chat's budget of input tokens a turn.
